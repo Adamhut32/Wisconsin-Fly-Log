@@ -1,0 +1,15 @@
+{
+  "name": "Wisconsin Fly Log",
+  "short_name": "Fly Log",
+  "description": "Fly fishing spots, catches and trips across Wisconsin's counties.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#E4DCC6",
+  "theme_color": "#FAF6EB",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

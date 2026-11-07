@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Wisconsin Fly Log</title>
+<meta name="description" content="Fly fishing spots, catches and trips across Wisconsin's counties.">
+<meta name="theme-color" content="#FAF6EB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1F1E19" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fly Log">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rokkitt:wght@500;700&family=Crimson+Pro:ital,wght@1,500;1,600&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-fish" viewBox="0 0 24 24"><path fill="currentColor" d="M2.5 12c2.2-3.6 5.6-5.5 9.6-5.5 3.3 0 5.8 1.4 7.6 3.4l2.8-2.2v8.6l-2.8-2.2c-1.8 2-4.3 3.4-7.6 3.4-4 0-7.4-1.9-9.6-5.5zm13.3-1.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5a6.8 6.8 0 0 0-6.8 6.8c0 5 6.8 12.2 6.8 12.2s6.8-7.2 6.8-12.2A6.8 6.8 0 0 0 12 2.5zm0 9.3a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path fill="currentColor" d="M14.6 5.4 16 6.8 10.8 12l5.2 5.2-1.4 1.4L8 12z"/></symbol>
+  <symbol id="i-gps" viewBox="0 0 24 24"><path fill="currentColor" d="M11 1h2v3.1A8 8 0 0 1 19.9 11H23v2h-3.1A8 8 0 0 1 13 19.9V23h-2v-3.1A8 8 0 0 1 4.1 13H1v-2h3.1A8 8 0 0 1 11 4.1zm1 5a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path fill="currentColor" d="M10 3a7 7 0 0 1 5.6 11.2l4.6 4.6-1.4 1.4-4.6-4.6A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path fill="currentColor" d="M3.3 2 22 20.7 20.7 22l-2.1-2.1H6.5A5 5 0 0 1 5.8 10 2 2 0 0 1 6 9.3L2 5.3zm4.3 9.4A3 3 0 0 0 6.5 18h10l-9-9zm3-5.8a7 7 0 0 1 8.2 5.5 4.3 4.3 0 0 1 2.4 7.5l-1.4-1.4A2.3 2.3 0 0 0 18.4 13h-1.5l-.2-1.4A5 5 0 0 0 12 7.5a5 5 0 0 0-1.9.4z"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><h1>Wisconsin Fly Log</h1><span class="sub">Spots, catches &amp; trips</span></div>
+    <span class="sync" id="sync" hidden></span>
+    <div class="tally" aria-live="polite">
+      <span class="t-spot"><b id="tSpots">0</b>spots</span>
+      <span class="t-fish"><b id="tFish">0</b>fish</span>
+      <span class="t-cty"><b id="tCounties">0</b>counties</span>
+    </div>
+  </header>
+  <div class="main">
+    <div class="mapwrap">
+      <div id="map" role="region" aria-label="Map of Wisconsin counties"></div>
+      <div class="crumb">
+        <div class="search"><svg><use href="#i-search"/></svg><input id="q" type="search" placeholder="Find a creek or lake" autocomplete="off" aria-label="Find a creek or lake"><ul id="qres" hidden></ul></div>
+        <button class="btn" id="backBtn" type="button" hidden><svg><use href="#i-back"/></svg>All of Wisconsin</button>
+      </div>
+      <div class="pickbar" id="pickbar" hidden><span>Tap the map to place it</span><button id="pickCancel" type="button">Cancel</button></div>
+      <div class="legend" id="legend">
+        <span><i style="background:var(--spot)"></i>Spot</span><span><i style="background:var(--fish)"></i>Catch</span>
+        <span class="fl"><i style="background:var(--friend)"></i>Friends</span>
+        <span class="tl"><i style="background:var(--t1)"></i>Class I</span><span class="tl"><i style="background:var(--t2)"></i>Class II</span><span class="tl"><i style="background:var(--t3)"></i>Class III</span>
+        <span class="al"><i class="sq" style="background:var(--pub)"></i>Public land</span>
+        <button class="lgbtn" id="accessToggle" type="button" aria-pressed="true">Public land on</button>
+      </div>
+      <div class="fab" id="fab">
+        <button class="btn spot" id="addSpotBtn" type="button"><svg><use href="#i-pin"/></svg>Add spot</button>
+        <button class="btn fish" id="addCatchBtn" type="button"><svg><use href="#i-fish"/></svg>Log a catch</button>
+      </div>
+    </div>
+    <aside class="log">
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button role="tab" data-tab="map" aria-selected="true" type="button">Log</button>
+        <button role="tab" data-tab="trips" aria-selected="false" type="button">Trips</button>
+        <button role="tab" data-tab="friends" aria-selected="false" type="button">Friends<span class="dot" id="reqDot" hidden></span></button>
+        <button role="tab" data-tab="stats" aria-selected="false" type="button">Stats</button>
+        <button role="tab" data-tab="me" aria-selected="false" type="button">Me</button>
+      </nav>
+      <div class="panel" id="log" aria-live="polite"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- sign in -->
+<div class="authwrap" id="auth" hidden>
+  <div class="authcard">
+    <div class="authhead">
+      <h1>Wisconsin Fly Log</h1>
+      <p>Map your water, log your fish, and see what your friends are catching.</p>
+    </div>
+    <div class="seg" role="group" aria-label="Sign in or create account">
+      <button type="button" class="ink" id="authInTab" aria-pressed="true">Sign in</button>
+      <button type="button" class="ink" id="authUpTab" aria-pressed="false">Create account</button>
+    </div>
+    <form id="authForm" novalidate>
+      <div class="field" id="nameRow" hidden><label for="aName">Your name</label><input id="aName" autocomplete="nickname" placeholder="Adam" maxlength="40"></div>
+      <div class="field"><label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div>
+      <div class="field" id="pwRow"><label for="aPw">Password</label><input id="aPw" type="password" autocomplete="current-password" placeholder="At least 8 characters"></div>
+      <span class="hint" id="authMsg" role="alert"></span>
+      <button class="btn fish wide" type="submit" id="authGo">Sign in</button>
+      <button class="link" type="button" id="forgotBtn">Forgot your password?</button>
+    </form>
+  </div>
+</div>
+
+<!-- entry sheet (catch / spot) -->
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+    <h3 id="formTitle">Log a catch</h3>
+    <div class="seg" role="group" aria-label="Entry type">
+      <button type="button" class="fish" id="segFish" aria-pressed="true">Catch</button>
+      <button type="button" class="spot" id="segSpot" aria-pressed="false">Spot</button>
+    </div>
+    <form id="entryForm" novalidate>
+      <div id="catchFields">
+        <label class="photo" id="photoBox">
+          <span class="pv" id="photoPv"><svg><use href="#i-fish"/></svg></span>
+          <span class="pt"><b id="photoTitle">Add a photo</b><small id="photoSub">Location and date fill in from the photo when it has them</small></span>
+          <input type="file" id="fPhoto" accept="image/*">
+        </label>
+      </div>
+      <div class="field" id="nameField" hidden>
+        <label for="fName">Spot name</label>
+        <input id="fName" placeholder="Timber Coulee at Bohemian Valley Rd">
+      </div>
+      <div class="field">
+        <label for="fCoords">Location</label>
+        <div class="loc">
+          <input id="fCoords" inputmode="decimal" placeholder="43.6120, -90.9081" autocomplete="off">
+          <button class="btn" type="button" id="gpsBtn"><svg><use href="#i-gps"/></svg>Here</button>
+          <button class="btn" type="button" id="pickBtn"><svg><use href="#i-pin"/></svg>Map</button>
+        </div>
+        <span class="hint" id="coordHint">Use your location, pick on the map, or paste coordinates.</span>
+      </div>
+
+      <div id="catchFields2">
+        <div class="grid3">
+          <div class="field"><label for="fSpecies">Species</label><input id="fSpecies" list="speciesList" placeholder="Brown trout"></div>
+          <div class="field"><label for="fLen">Length (in)</label><input id="fLen" inputmode="decimal" placeholder="14"></div>
+          <div class="field"><label for="fCount">Fish</label><input id="fCount" type="number" min="0" value="1"></div>
+        </div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="fFly">Fly</label><input id="fFly" list="flyList" placeholder="#16 Elk Hair Caddis"></div>
+          <div class="field"><label for="fDate">Date</label><input id="fDate" type="date"></div>
+        </div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="fTrip">Trip</label><select id="fTrip"><option value="">No trip</option></select></div>
+          <div class="field"><label for="fSpotLink">At spot</label><select id="fSpotLink"><option value="">None</option></select></div>
+        </div>
+      </div>
+
+      <div id="spotFields" hidden>
+        <div class="grid2">
+          <div class="field"><label for="fWater">Water type</label>
+            <select id="fWater"><option>Creek</option><option>River</option><option>Spring pond</option><option>Lake</option><option>Flowage</option></select></div>
+          <div class="field"><label for="fClass">Trout class</label>
+            <select id="fClass"><option value="">Not set</option><option>Class I</option><option>Class II</option><option>Class III</option></select></div>
+        </div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="fTarget">Target species</label><input id="fTarget" list="speciesList" placeholder="Brook trout"></div>
+          <div class="field"><label for="fStatus">Status</label>
+            <select id="fStatus"><option value="want">Want to try</option><option value="scouted">Scouted</option><option value="fished">Fished</option></select></div>
+        </div>
+      </div>
+
+      <div class="field"><label for="fNotes">Notes</label><textarea id="fNotes" placeholder="Water level, hatch, access, parking"></textarea></div>
+      <div class="field">
+        <label>Friends see</label>
+        <div class="seg vis" role="group" aria-label="What friends can see" id="visSeg">
+          <button type="button" data-v="exact" aria-pressed="false">Exact spot</button>
+          <button type="button" data-v="county" aria-pressed="true">County only</button>
+          <button type="button" data-v="private" aria-pressed="false">Nothing</button>
+        </div>
+      </div>
+      <span class="hint" id="formErr" role="alert"></span>
+      <div class="actions">
+        <button class="btn" type="button" id="cancelBtn">Cancel</button>
+        <button class="btn fish" type="submit" id="saveBtn">Save catch</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- trip sheet -->
+<div class="scrim" id="tripScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="tripTitle">
+    <h3 id="tripTitle">New trip</h3>
+    <form id="tripForm" novalidate>
+      <div class="field"><label for="tName">Trip name</label><input id="tName" placeholder="Driftless, Memorial Day" maxlength="80"></div>
+      <div class="grid2">
+        <div class="field"><label for="tStart">First day</label><input id="tStart" type="date"></div>
+        <div class="field"><label for="tEnd">Last day</label><input id="tEnd" type="date"></div>
+      </div>
+      <div class="field"><label for="tBase">Home base</label><input id="tBase" placeholder="Westby campground"></div>
+      <div class="field"><label for="tNotes">Notes</label><textarea id="tNotes" placeholder="Who came, water conditions, what worked"></textarea></div>
+      <label class="check"><input type="checkbox" id="tShared" checked> Friends can see this trip</label>
+      <span class="hint" id="tripErr" role="alert"></span>
+      <div class="actions">
+        <button class="btn" type="button" id="tripCancel">Cancel</button>
+        <button class="btn ink" type="submit" id="tripSave">Save trip</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<datalist id="speciesList">
+  <option>Brook trout</option><option>Brown trout</option><option>Rainbow trout</option><option>Tiger trout</option>
+  <option>Smallmouth bass</option><option>Largemouth bass</option><option>Northern pike</option><option>Musky</option>
+  <option>Bluegill</option><option>Pumpkinseed</option><option>Crappie</option><option>Rock bass</option><option>Walleye</option><option>Common carp</option>
+</datalist>
+<datalist id="flyList">
+  <option>Elk Hair Caddis</option><option>Parachute Adams</option><option>Pheasant Tail Nymph</option><option>Hare's Ear Nymph</option>
+  <option>Copper John</option><option>Woolly Bugger</option><option>Scud</option><option>Zebra Midge</option><option>Hopper</option><option>Clouser Minnow</option><option>Sulphur</option><option>Blue-winged Olive</option>
+</datalist>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
