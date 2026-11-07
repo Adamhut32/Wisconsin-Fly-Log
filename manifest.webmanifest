@@ -1,6 +1,6 @@
 {
-  "name": "Wisconsin Fly Log",
-  "short_name": "Fly Log",
+  "name": "Coulee",
+  "short_name": "Coulee",
   "description": "Fly fishing spots, catches and trips across Wisconsin's counties.",
   "start_url": "./",
   "scope": "./",

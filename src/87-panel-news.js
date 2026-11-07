@@ -38,7 +38,7 @@ async function checkWhatsNew(){
   if(!me || !profile || !profile.onboarded || !$("guide").hidden || !$("news").hidden) return;
   const { data, error } = await sb.from("releases").select("*").gt("id", profile.last_seen_release || 0).order("id", { ascending:false }).limit(5);
   if(error || !data || !data.length) return;
-  $("newsTitle").textContent = data.length === 1 ? data[0].title : "Updates to Wisconsin Fly Log";
+  $("newsTitle").textContent = data.length === 1 ? data[0].title : "Updates to Coulee";
   $("newsBody").innerHTML = data.map(r => `<div class="news-rel">${data.length > 1 ? `<h5>${esc(r.title)}</h5>` : ""}<small>${esc(fmtDate(r.published_at.slice(0,10)))}</small><ul class="steps">${r.items.map(i => `<li>${esc(i)}</li>`).join("")}</ul></div>`).join("");
   $("news").dataset.latest = data[0].id;
   $("news").hidden = false;

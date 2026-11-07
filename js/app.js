@@ -1,4 +1,4 @@
-/* Wisconsin Fly Log — built from src/*.js by build.py. Edit the files in src/, then run: python3 build.py */
+/* Coulee — built from src/*.js by build.py. Edit the files in src/, then run: python3 build.py */
 (async function(){
 "use strict";
 const CFG = window.FLYLOG_CONFIG;
@@ -1536,8 +1536,8 @@ $("log").addEventListener("click", async ev => {
 });
 async function shareCode(){
   const url = location.origin + location.pathname;
-  const text = `Add me on Wisconsin Fly Log. My friend code is ${profile?.friend_code}. Open ${url} on your phone, create an account, then enter the code in the Friends tab.`;
-  if(navigator.share){ try{ await navigator.share({ title:"Wisconsin Fly Log", text, url }); return; }catch(e){ if(e.name === "AbortError") return; } }
+  const text = `Add me on Coulee, the Wisconsin fly fishing app. My friend code is ${profile?.friend_code}. Open ${url} on your phone, create an account, then enter the code in the Friends tab.`;
+  if(navigator.share){ try{ await navigator.share({ title:"Coulee", text, url }); return; }catch(e){ if(e.name === "AbortError") return; } }
   try{ await navigator.clipboard.writeText(text); toast("Invite copied. Paste it into a text to a friend."); }
   catch(e){ toast(`Your code is ${profile?.friend_code}`); }
 }
@@ -1769,7 +1769,7 @@ $("log").addEventListener("click", async ev => {
 
 /* ---------- setup guide for new accounts ---------- */
 const GUIDE = () => [
-  { t:"Welcome to Wisconsin Fly Log", b:`<p>A map of every named creek and lake in Wisconsin, with DNR trout classes, regulations and public land, plus a log for your spots, catches and trips.</p><p class="muted">This takes about a minute. You can replay it any time from Me → Setup guide.</p>` },
+  { t:"Welcome to Coulee", b:`<p>Coulee is a map of every named creek and lake in Wisconsin, with DNR trout classes, regulations and public land, plus a log for your spots, catches and trips.</p><p class="muted">This takes about a minute. You can replay it any time from Me → Setup guide.</p>` },
   ...(!isStandalone ? [{ t:"Put it on your home screen", b: isIOS
     ? `<ol class="steps"><li>Make sure this page is open in <b>Safari</b>.</li><li>Tap the <b>Share</b> button (the square with an arrow).</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>From now on, open the app from that icon. It opens full screen and works offline.</li></ol>`
     : `<p>Open your browser's menu and choose <b>Install app</b> or <b>Add to Home screen</b>. Then open it from the icon.</p>` }] : []),
@@ -1895,7 +1895,7 @@ async function checkWhatsNew(){
   if(!me || !profile || !profile.onboarded || !$("guide").hidden || !$("news").hidden) return;
   const { data, error } = await sb.from("releases").select("*").gt("id", profile.last_seen_release || 0).order("id", { ascending:false }).limit(5);
   if(error || !data || !data.length) return;
-  $("newsTitle").textContent = data.length === 1 ? data[0].title : "Updates to Wisconsin Fly Log";
+  $("newsTitle").textContent = data.length === 1 ? data[0].title : "Updates to Coulee";
   $("newsBody").innerHTML = data.map(r => `<div class="news-rel">${data.length > 1 ? `<h5>${esc(r.title)}</h5>` : ""}<small>${esc(fmtDate(r.published_at.slice(0,10)))}</small><ul class="steps">${r.items.map(i => `<li>${esc(i)}</li>`).join("")}</ul></div>`).join("");
   $("news").dataset.latest = data[0].id;
   $("news").hidden = false;

@@ -1,4 +1,6 @@
-# Wisconsin Fly Log
+# Coulee
+
+Wisconsin fly fishing map and log (repository name: Wisconsin-Fly-Log).
 
 A fly fishing map and log for Wisconsin: county map with every named creek and lake,
 DNR trout stream classes, regulations and public land, plus your spots, catches, trips,

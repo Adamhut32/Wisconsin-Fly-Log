@@ -115,8 +115,8 @@ $("log").addEventListener("click", async ev => {
 });
 async function shareCode(){
   const url = location.origin + location.pathname;
-  const text = `Add me on Wisconsin Fly Log. My friend code is ${profile?.friend_code}. Open ${url} on your phone, create an account, then enter the code in the Friends tab.`;
-  if(navigator.share){ try{ await navigator.share({ title:"Wisconsin Fly Log", text, url }); return; }catch(e){ if(e.name === "AbortError") return; } }
+  const text = `Add me on Coulee, the Wisconsin fly fishing app. My friend code is ${profile?.friend_code}. Open ${url} on your phone, create an account, then enter the code in the Friends tab.`;
+  if(navigator.share){ try{ await navigator.share({ title:"Coulee", text, url }); return; }catch(e){ if(e.name === "AbortError") return; } }
   try{ await navigator.clipboard.writeText(text); toast("Invite copied. Paste it into a text to a friend."); }
   catch(e){ toast(`Your code is ${profile?.friend_code}`); }
 }

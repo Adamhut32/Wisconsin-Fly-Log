@@ -1,4 +1,4 @@
-/* Wisconsin Fly Log — built from src/*.js by build.py. Edit the files in src/, then run: python3 build.py */
+/* Coulee — built from src/*.js by build.py. Edit the files in src/, then run: python3 build.py */
 (async function(){
 "use strict";
 const CFG = window.FLYLOG_CONFIG;
