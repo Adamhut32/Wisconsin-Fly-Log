@@ -50,13 +50,16 @@ $("authForm").addEventListener("submit", async e => {
     } else {
       const { error } = await sb.auth.updateUser({ password:pw });
       if(error) throw new Error("Couldn't save the new password. Try again.");
-      $("auth").hidden = true; toast("Password updated");
+      $("auth").hidden = true; toast("Password updated. You're signed in."); history.replaceState(null, "", location.pathname);
     }
   }catch(err){ msg.className = "hint bad"; msg.textContent = err.message || "Something went wrong. Try again."; }
   finally{ go.disabled = false; }
 });
 
+let recoveryShown = false;
+function showNewPassword(){ if(recoveryShown) return; recoveryShown = true; $("auth").hidden = false; setAuthMode("newpw"); $("authMsg").className = "hint ok"; $("authMsg").textContent = "Choose a new password for your account."; }
 async function startSession(user){
+  if(RECOVERY_LINK) showNewPassword();
   if(me && me.id === user.id) return;
   me = { id:user.id, email:user.email };
   outbox = lsGet(outboxKey(), []);
@@ -64,13 +67,13 @@ async function startSession(user){
   if(cache){ ({ catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile } = { ...cache }); follows = cache.follows || []; tournaments = cache.tournaments || []; announcements = cache.announcements || [];
     for(const j of outbox) if(j.photo){ idb.get(j.photo).then(b => { if(b){ pendingPhotoUrls[j.photo] = URL.createObjectURL(b); renderAll(); } }).catch(()=>{}); } }
   loadState = navigator.onLine ? "loading" : "offline";
-  $("auth").hidden = true; canWrite = true;
+  if(!recoveryShown) $("auth").hidden = true; canWrite = true;
   renderAll(); updateSync();
   await loadAll(); flush();
 }
 function showAuth(){ me = null; $("auth").hidden = false; setAuthMode("in"); }
 sb.auth.onAuthStateChange((event, session) => {
-  if(event === "PASSWORD_RECOVERY"){ $("auth").hidden = false; setAuthMode("newpw"); return; }
+  if(event === "PASSWORD_RECOVERY"){ showNewPassword(); if(session?.user) startSession(session.user); return; }
   if(session?.user) startSession(session.user);
   else if(event === "SIGNED_OUT") showAuth();
 });
@@ -79,7 +82,8 @@ sb.auth.onAuthStateChange((event, session) => {
 tab = lsGet("fl.tab", "map");
 renderAll();
 const { data:{ session } } = await sb.auth.getSession();
-if(session?.user) startSession(session.user); else if(!location.hash.includes("type=recovery")) showAuth();
+if(session?.user) startSession(session.user);
+else { showAuth(); if(LINK_ERROR){ $("authMsg").className = "hint bad"; $("authMsg").textContent = /expired|invalid/i.test(decodeURIComponent(LINK_ERROR)) ? "That email link has expired or was already used. Request a new one." : decodeURIComponent(LINK_ERROR.replace(/\+/g, " ")); } }
 
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("sw.js").catch(e => console.warn("offline support unavailable", e));

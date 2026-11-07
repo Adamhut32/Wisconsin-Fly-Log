@@ -2,6 +2,8 @@
 (async function(){
 "use strict";
 const CFG = window.FLYLOG_CONFIG;
+const RECOVERY_LINK = /type=recovery/.test(location.hash + location.search);
+const LINK_ERROR = (location.hash.match(/error_description=([^&]+)/) || [])[1];
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
