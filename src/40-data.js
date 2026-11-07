@@ -4,7 +4,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
   auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:"fl.auth" }
 });
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
   trips: ["id","name","start_date","end_date","base","notes","shared"]
 };
@@ -47,7 +47,7 @@ let outbox = [];
 const outboxKey = () => "fl.outbox." + (me?.id || "anon");
 const cacheKey = () => "fl.cache." + (me?.id || "anon");
 function saveOutbox(){ lsSet(outboxKey(), outbox); updateSync(); }
-function saveCache(){ lsSet(cacheKey(), { catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile, at:Date.now() }); }
+function saveCache(){ lsSet(cacheKey(), { catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile, follows, tournaments, announcements, at:Date.now() }); }
 function updateSync(){
   const el = $("sync"); const n = outbox.length;
   if(!navigator.onLine){ el.hidden = false; el.className = "sync"; el.innerHTML = `${icon("i-cloud-off")}Offline${n?` · ${n} to sync`:""}`; return; }
@@ -72,6 +72,12 @@ async function flush(){
           }
           const { error } = await sb.from(job.table).upsert(job.row);
           if(error) throw error;
+          if(job.table === "catches"){
+            sb.rpc("auto_enter", { cid: job.row.id }).then(({ data }) => {
+              if(job.isNew && data && data.length) toast(`Entered in ${data.join(", ")}`);
+              if(data && data.length) loadTournaments();
+            });
+          }
           if(job.oldPhoto) await sb.storage.from("photos").remove([job.oldPhoto]);
           if(job.photo){ await idb.del(job.photo).catch(()=>{}); }
           const rec = listFor(job.table).find(r => r.id === job.row.id); if(rec) delete rec._pending;
@@ -98,7 +104,7 @@ setInterval(() => { if(outbox.length) flush(); }, 30000);
 
 async function saveRecord(table, rec, blob, isEdit){
   if(!me) throw Object.assign(new Error("signed out"), { userMessage:"Sign in to save." });
-  const job = { op:"upsert", table, row: pick(table, rec) };
+  const job = { op:"upsert", table, row: pick(table, rec), isNew: !isEdit };
   if(blob){
     const path = `${me.id}/${rec.id}-${Date.now()}.jpg`;
     await idb.put(path, blob);
@@ -131,15 +137,19 @@ async function removeRecord(kind, rec){
 async function loadAll(){
   if(!me || !navigator.onLine) return;
   try{
-    const [c, s, t, fc, fs, ft, fr, pr] = await Promise.all([
+    const [c, s, t, fc, fs, ft, fr, pr, fo, an, su] = await Promise.all([
       sb.from("catches").select("*").order("caught_on", { ascending:false }),
       sb.from("spots").select("*"),
       sb.from("trips").select("*").order("start_date", { ascending:false }),
       sb.rpc("friend_catches"), sb.rpc("friend_spots"), sb.rpc("friend_trips"),
       sb.from("friendships").select("*"),
-      sb.from("profiles").select("*").eq("id", me.id).maybeSingle()
+      sb.from("profiles").select("*").eq("id", me.id).maybeSingle(),
+      sb.rpc("my_follows"),
+      sb.from("announcements").select("*").order("created_at", { ascending:false }).limit(5),
+      sb.from("suggestions").select("*").eq("user_id", me.id).order("created_at", { ascending:false })
     ]);
-    for(const r of [c, s, t, fc, fs, ft, fr, pr]) if(r.error) throw r.error;
+    for(const r of [c, s, t, fc, fs, ft, fr, pr, fo, an, su]) if(r.error) throw r.error;
+    follows = fo.data || []; announcements = an.data || []; mySuggestions = su.data || [];
     // keep local changes that haven't reached the server yet
     const merge = (table, rows) => {
       const pend = outbox.filter(j => j.table === table);
@@ -154,6 +164,8 @@ async function loadAll(){
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
     if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); renderAll();
+    loadTournaments();
+    if(profile && !profile.onboarded) openGuide();
   }catch(e){
     console.error("load", e);
     if(loadState === "loading") loadState = navigator.onLine ? "ready" : "offline";

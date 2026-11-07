@@ -148,7 +148,8 @@ function renderMapTab(el){
     const rows = counties.map(f=>({ id:f.id, name:f.properties.name, ...countyStats(f.id) })).filter(r=>r.spots||r.fish).sort((a,b)=>b.fish-a.fish||b.spots-a.spots||a.name.localeCompare(b.name));
     const recent = [...catches].sort(byDateDesc).slice(0,6);
     const want = spots.filter(s => s.status === "want").slice(0, 5);
-    el.innerHTML = `<div class="eyebrow">Statewide</div><h2>Wisconsin</h2>${statusLine()}
+    const ann = announcements[0] && (Date.now() - new Date(announcements[0].created_at)) < 14*864e5 ? `<div class="card notice" style="margin:8px 0 4px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the creator</p><p>${esc(announcements[0].body)}</p></div>` : "";
+    el.innerHTML = `<div class="eyebrow">Statewide</div><h2>Wisconsin</h2>${statusLine()}${ann}
       <div class="stats"><div class="stat s"><b>${T.spots}</b><span>potential spots</span></div><div class="stat f"><b>${T.fish}</b><span>fish caught</span></div><div class="stat"><b>${T.counties}<small style="font-size:13px;color:var(--muted)">/72</small></b><span>counties</span></div></div>
       ${rows.length ? `<h4><span>Counties</span><span>spots · fish</span></h4><ul class="list">${rows.map(r=>`<li><button class="item" data-county="${r.id}" style="grid-template-columns:1fr auto"><span class="t"><b>${esc(r.name)} County</b></span><span class="num"><span class="s">${r.spots}</span> · <span class="f">${r.fish}</span></span></button></li>`).join("")}</ul>` :
         (loadState!=="loading" ? `<div class="empty"><b>Your log is empty</b>Tap a county to zoom in, then use <b style="display:inline;font:inherit;color:var(--spot)">Add spot</b> for water you want to try, or <b style="display:inline;font:inherit;color:var(--fish)">Log a catch</b> with a photo. Counties fill in as you go.</div>` : "")}
@@ -172,14 +173,18 @@ function renderLog(){
   const el = $("log"); const T = totals();
   $("tSpots").textContent = T.spots; $("tFish").textContent = T.fish; $("tCounties").textContent = T.counties;
   document.querySelectorAll(".tabs [data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
+  const big = tab !== "map", mainEl = document.querySelector(".main");
+  if(mainEl.classList.contains("panel-big") !== big){ mainEl.classList.toggle("panel-big", big); setTimeout(() => { map.invalidateSize(); drawLabels(); }, 300); }
   $("reqDot").hidden = !friendships.some(f => f.status === "pending" && f.addressee === me?.id);
+  $("tDot").hidden = !tournaments.some(t => t.my_status === "invited");
   if(tab === "map") renderMapTab(el);
   else if(tab === "trips") renderTripsTab(el);
+  else if(tab === "tourney") renderTourneyTab(el);
   else if(tab === "friends") renderFriendsTab(el);
   else if(tab === "stats") renderStatsTab(el);
   else renderMeTab(el);
 }
-function setTab(t){ tab = t; lsSet("fl.tab", t); renderLog(); $("log").scrollTop = 0; }
+function setTab(t){ if(t === "me" && tab !== "me") meView = "main"; if(t === "tourney" && tab === "tourney") tourneyOpen = null; if(t === "trips" && tab === "trips") tripOpen = null; tab = t; lsSet("fl.tab", t); renderLog(); $("log").scrollTop = 0; if(t === "tourney") loadTournaments(); }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if(b) setTab(b.dataset.tab); });
 
 $("log").addEventListener("click", ev => {

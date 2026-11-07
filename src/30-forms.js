@@ -37,6 +37,7 @@ function parseTiff(v, start){
 }
 
 /* ---------- catch / spot form ---------- */
+let photoDate = null;
 let formKind = "catch", editing = null, photoFile = null, photoPreviewUrl = null, picking = false, pickMarker = null, tripTouched = false, visibility = "county";
 function setKind(k){
   formKind = k;
@@ -99,15 +100,15 @@ function setPhotoPreview(url, title, sub){
 }
 $("fPhoto").addEventListener("change", async () => {
   const file = $("fPhoto").files[0]; if(!file) return;
-  photoFile = file;
+  photoFile = file; photoDate = null;
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
   photoPreviewUrl = URL.createObjectURL(file);
   let ex = null; try{ ex = readExif(await file.arrayBuffer()); }catch(e){}
   const found = [];
   if(ex && ex.lat != null){ $("fCoords").value = `${ex.lat.toFixed(5)}, ${ex.lng.toFixed(5)}`; coordHint(); found.push("location"); }
-  if(ex && ex.date){ const m = ex.date.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m){ $("fDate").value = `${m[1]}-${m[2]}-${m[3]}`; $("fDate").dispatchEvent(new Event("change")); found.push("date"); } }
+  if(ex && ex.date){ const m = ex.date.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m){ photoDate = `${m[1]}-${m[2]}-${m[3]}`; $("fDate").value = photoDate; $("fDate").dispatchEvent(new Event("change")); found.push("date"); } }
   setPhotoPreview(photoPreviewUrl, file.name || "Photo",
-    found.length ? `Filled ${found.join(" and ")} from the photo.` : "No location in this photo. Tap Here or Map below.");
+    (found.length ? `Filled ${found.join(" and ")} from the photo.` : "No location in this photo. Tap Here or Map below.") + (photoDate ? "" : " It has no date stamp, so it can't count in photo tournaments."));
   $("photoSub").style.color = found.includes("location") ? "var(--spot)" : "var(--danger)";
 });
 
@@ -128,7 +129,7 @@ $("gpsBtn").onclick = () => {
 
 function openForm(kind, rec, prefill){
   if(!canWrite){ toast("Sign in to save entries."); return; }
-  editing = rec || null; photoFile = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = "";
+  editing = rec || null; photoFile = null; photoDate = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = "";
   setKind(kind);
   const r = rec || prefill || {};
   $("fCoords").value = (r.lat != null) ? `${(+r.lat).toFixed(5)}, ${(+r.lng).toFixed(5)}` : "";
@@ -203,7 +204,8 @@ $("entryForm").addEventListener("submit", async ev => {
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
       rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
         fly:$("fFly").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
-        photo_path: editing ? (editing.photo_path || null) : null };
+        photo_path: editing ? (editing.photo_path || null) : null,
+        photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null) };
       if($("fCount").value === "") rec.count = 1;
     } else {
       table = "spots";

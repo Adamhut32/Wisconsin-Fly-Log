@@ -40,16 +40,32 @@ $("log").addEventListener("click", ev => { const y = ev.target.closest("[data-ye
 /* ---------- me ---------- */
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let meView = "main";
 function renderMeTab(el){
-  el.innerHTML = `<div class="eyebrow">Account</div><h2>${esc(profile?.display_name || "You")}</h2>
+  if(meView === "help") return renderHelp(el);
+  if(meView === "suggest") return renderSuggest(el);
+  if(meView === "creator" && profile?.role === "creator") return renderCreator(el);
+  const followers = follows.filter(f => f.direction === "follower").length;
+  el.innerHTML = `<div class="eyebrow">Account${profile?.role === "creator" ? ` · <span class="pill open">Creator</span>` : ""}</div><h2>${esc(profile?.display_name || "You")}</h2>
     <p class="muted" style="margin:0 0 12px">${esc(me?.email || "")}</p>
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>
+    <div class="row2" style="margin-top:14px">
+      <button class="btn sm" type="button" data-me="help">Help</button>
+      <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
+      <button class="btn sm" type="button" data-a="guide">Setup guide</button>
+      ${profile?.role === "creator" ? `<button class="btn sm ink" type="button" data-me="creator">Creator tools</button>` : ""}
+    </div>
+    <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
+    <div class="card">
+      <label class="check"><input type="checkbox" id="mePublic" ${profile?.is_public ? "checked" : ""}> Let anyone find and follow me</label>
+      <p class="muted">Followers see the catches you share (County only or Exact spot), the same as friends do. Catches set to Nothing stay private, and following doesn't let anyone into your tournaments or friend list.</p>
+      <div class="field"><label for="meBio">Short bio</label><textarea id="meBio" maxlength="280" placeholder="Driftless brown trout nut. Mostly dries.">${esc(profile?.bio || "")}</textarea></div>
+      <div class="row2"><button class="btn sm" type="button" data-a="savepublic">Save profile</button><span class="hint" id="pubMsg" role="alert"></span></div>
+    </div>
     ${!isStandalone ? `<h4><span>Put it on your home screen</span></h4><div class="card">${isIOS
       ? `<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p class="muted">It opens full screen like an app and keeps your counties for offline use.</p>`
       : `<p>In your browser's menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`}</div>` : ""}
-    <h4><span>Offline</span></h4>
-    <div class="card"><p>Counties you've opened are saved on this device, so the map and creeks work without signal. Catches you log offline are kept on the phone and sync when you're back in range.</p></div>
     <h4><span>Your data</span></h4>
     <div class="card"><p>${catches.length} catches, ${spots.length} spots and ${trips.length} trips.</p><div class="row2"><button class="btn sm" type="button" data-a="export">Download a copy</button></div></div>
     <h4><span>Map data</span></h4>
@@ -63,6 +79,121 @@ function renderMeTab(el){
     profile = { ...profile, display_name:v }; saveCache(); msg.className = "hint ok"; msg.textContent = "Name saved. Friends will see it on your catches.";
   });
 }
+const HELP = [
+  ["Getting around the map", [
+    "Tap a county to zoom in. Every named creek, river and lake appears, with DNR trout classes as colored bands: green for Class I, gold for Class II, rust for Class III.",
+    "Tap a creek to see its name, trout class, season status and the nearest DNR regulation. Tap Add as spot to save it.",
+    "Green shading is public land: DNR properties, fishing easements, county forests and the national forest. Dashed outlines are easements, where access is usually limited to the stream corridor. Turn it off with the Public land button in the legend.",
+    "Search for any creek or lake by name from the box at the top of the map."]],
+  ["Logging catches", [
+    "Tap Log a catch. Add a photo first; if it has location and date saved in it, they fill in for you.",
+    "No location in the photo? Tap Here to use your phone's GPS, or Map to tap the spot.",
+    "Friends see shows what others can see: Exact spot, County only, or Nothing.",
+    "No signal? Log anyway. The catch is saved on your phone and syncs when you're back in range."]],
+  ["Spots", [
+    "Spots are water you want to fish. Mark each one Want to try, Scouted or Fished.",
+    "Each spot shows when you last fished it and how many fish you've logged there. Pick the spot when you log a catch to connect them."]],
+  ["Trips", [
+    "Make a trip with first and last days. Any catch logged in those dates joins it automatically.",
+    "Each trip shows a recap: fish, species, biggest fish, best fly, photos and a day-by-day list, including days with no fish."]],
+  ["Tournaments", [
+    "Anyone can start a tournament: pick dates, an area (anywhere, a region, or specific counties), species and scoring, then invite friends.",
+    "Catches that fit the rules are entered automatically when you log them. You can also enter or remove catches on the tournament page.",
+    "Photo tournaments only accept fish whose photo was taken during the tournament dates. The app reads the date stamp saved in the photo, so take photos with your phone's camera rather than screenshots."]],
+  ["Friends and following", [
+    "Friends: share your 6-character friend code. Once they accept, you see each other's shared catches, trips and leaderboards, and can invite each other to tournaments.",
+    "Following: turn on a public profile in the Me tab to let anyone follow you. You can follow public anglers from Find anglers without their OK. Followers see your shared catches but aren't on your leaderboard."]],
+  ["Location not filling in from photos", [
+    "On iPhone: Settings → Privacy & Security → Location Services → Camera → While Using the App, with Precise Location on. New photos will then carry their location.",
+    "Some ways of choosing a photo strip the location. If it doesn't fill in, tap Here while you're at the spot, or Map."]],
+  ["Phone location for the Here button", [
+    "When the app asks to use your location, tap Allow.",
+    "If you tapped Don't Allow: Settings → Privacy & Security → Location Services → Safari Websites → While Using the App."]],
+  ["Install it like an app", [
+    "In Safari, tap Share → Add to Home Screen → Add. Open it from the icon from then on.",
+    "Updates arrive on their own the next time you open it."]]
+];
+function renderHelp(el){
+  el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
+    <div class="eyebrow">Help</div><h2>How it works</h2>
+    ${HELP.map(([h, items]) => `<h4><span>${esc(h)}</span></h4><ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`).join("")}
+    <div class="row2" style="margin-top:18px"><button class="btn sm" type="button" data-a="guide">Replay setup guide</button><button class="btn sm" type="button" data-me="suggest">Send a suggestion</button></div>`;
+}
+const SUG_STATUS = { new:"Received", planned:"Planned", done:"Done", declined:"Not planned" };
+function renderSuggest(el){
+  el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
+    <div class="eyebrow">Suggestions</div><h2>Send a suggestion</h2>
+    <p class="muted" style="margin:4px 0 12px">Ideas, problems, anything. They go straight to the creator of the app.</p>
+    <form id="sugForm" novalidate>
+      <div class="seg" role="group" aria-label="Type" id="sugKind"><button type="button" class="ink" data-k="idea" aria-pressed="true">Idea</button><button type="button" class="ink" data-k="problem" aria-pressed="false">Problem</button><button type="button" class="ink" data-k="other" aria-pressed="false">Other</button></div>
+      <div class="field"><label for="sugBody">Your suggestion</label><textarea id="sugBody" maxlength="2000" placeholder="It would help if…" style="min-height:110px"></textarea></div>
+      <span class="hint" id="sugMsg" role="alert"></span>
+      <div class="actions"><button class="btn ink" type="submit">Send</button></div>
+    </form>
+    <h4><span>Your suggestions</span><span>${mySuggestions.length}</span></h4>
+    ${mySuggestions.length ? `<div class="stack">${mySuggestions.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)} · <span class="pill ${s.status==="done"?"fished":s.status==="planned"?"scouted":""}">${SUG_STATUS[s.status]}</span></p><p>${esc(s.body)}</p>${s.reply?`<p style="border-left:3px solid var(--line);padding-left:10px"><b>Reply:</b> ${esc(s.reply)}</p>`:""}</div>`).join("")}</div>` : `<p class="muted">Nothing sent yet.</p>`}`;
+  let kind = "idea";
+  $("sugKind").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if(!b) return; kind = b.dataset.k; $("sugKind").querySelectorAll("[data-k]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+  $("sugForm").addEventListener("submit", async e => {
+    e.preventDefault(); const body = $("sugBody").value.trim(), msg = $("sugMsg");
+    if(body.length < 3){ msg.className = "hint bad"; msg.textContent = "Write a few words first."; return; }
+    const { data, error } = await sb.from("suggestions").insert({ kind, body }).select().single();
+    if(error){ msg.className = "hint bad"; msg.textContent = "Couldn't send it. Check your connection and try again."; return; }
+    mySuggestions = [data, ...mySuggestions]; toast("Suggestion sent. Thanks!"); renderLog();
+  });
+}
+let creatorData = null;
+async function loadCreator(){
+  const [o, s] = await Promise.all([ sb.rpc("creator_overview"), sb.rpc("all_suggestions") ]);
+  creatorData = { o: (o.data || [])[0] || null, s: s.data || [] };
+  if(tab === "me" && meView === "creator") renderLog();
+}
+function renderCreator(el){
+  if(!creatorData){ el.innerHTML = `<p class="status">Loading creator tools…</p>`; loadCreator(); return; }
+  const o = creatorData.o || {};
+  el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
+    <div class="eyebrow">Creator</div><h2>Creator tools</h2>
+    <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
+    <p class="muted" style="margin:0 0 6px">${o.public_anglers ?? 0} public profiles · ${o.catches ?? 0} catches · ${o.trips ?? 0} trips</p>
+    <h4><span>Post an announcement</span></h4>
+    <form id="annForm" novalidate><textarea id="annBody" maxlength="1000" placeholder="Opening weekend tournament starts Saturday. Good luck!"></textarea><div class="actions"><button class="btn ink" type="submit">Post to everyone</button></div></form>
+    ${announcements.length ? `<ul class="list">${announcements.map(a => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b style="white-space:normal">${esc(a.body)}</b><small>${esc(fmtDate(a.created_at.slice(0,10)))}</small></span><button class="link danger" type="button" data-delann="${esc(a.id)}">Remove</button></li>`).join("")}</ul>` : ""}
+    <h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
+    ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
+      <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
+      <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
+      <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button><button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button></div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}
+    <h4><span>Other creator powers</span></h4>
+    <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
+      <li>Feature anglers from Friends → Find anglers. Featured anglers show first with a badge.</li>
+      <li>Hide any shared catch from feeds and tournaments with Hide from feeds in the Friends feed.</li>
+      <li>Make tournaments open to everyone, and delete any tournament.</li>
+    </ul>`;
+  $("annForm").addEventListener("submit", async e => {
+    e.preventDefault(); const body = $("annBody").value.trim(); if(body.length < 2) return;
+    const { data, error } = await sb.from("announcements").insert({ body }).select().single();
+    if(error){ toast("Couldn't post it."); return; }
+    announcements = [data, ...announcements]; toast("Posted. Everyone sees it in their Friends feed."); renderLog();
+  });
+}
+$("log").addEventListener("click", async ev => {
+  const t = ev.target;
+  const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator") creatorData = null; renderLog(); $("log").scrollTop = 0; return; }
+  const da = t.closest("[data-delann]"); if(da){ await sb.from("announcements").delete().eq("id", da.dataset.delann); announcements = announcements.filter(a => a.id !== da.dataset.delann); renderLog(); return; }
+  const ss = t.closest("[data-sugsave]"); if(ss){ const id = ss.dataset.sugsave;
+    const status = $("log").querySelector(`[data-sugstatus="${id}"]`).value, reply = $("log").querySelector(`[data-sugreply="${id}"]`).value.trim() || null;
+    const { error } = await sb.from("suggestions").update({ status, reply, updated_at:new Date().toISOString() }).eq("id", id);
+    toast(error ? "Couldn't save." : "Saved. They'll see it in their Suggestions page."); loadCreator(); return; }
+  const sd = t.closest("[data-sugdel]"); if(sd){ await sb.from("suggestions").delete().eq("id", sd.dataset.sugdel); loadCreator(); return; }
+  const a = t.closest("[data-a]"); if(!a) return;
+  if(a.dataset.a === "guide") openGuide(true);
+  if(a.dataset.a === "savepublic"){
+    const is_public = $("mePublic").checked, bio = $("meBio").value.trim() || null, msg = $("pubMsg");
+    const { error } = await sb.from("profiles").update({ is_public, bio }).eq("id", me.id);
+    if(error){ msg.className = "hint bad"; msg.textContent = "Couldn't save. Try again."; return; }
+    profile = { ...profile, is_public, bio }; saveCache(); msg.className = "hint ok"; msg.textContent = is_public ? "Saved. Anyone can now find and follow you." : "Saved. Your profile is private.";
+  }
+});
 $("log").addEventListener("click", async ev => {
   const a = ev.target.closest("[data-a]"); if(!a) return;
   if(a.dataset.a === "signout"){

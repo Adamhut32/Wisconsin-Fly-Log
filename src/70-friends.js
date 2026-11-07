@@ -1,7 +1,12 @@
 
 /* ---------- friends, feed and leaderboard ---------- */
 let boardPeriod = lsGet("fl.boardPeriod", "year");
-let friendsView = "feed";
+let friendsView = "feed", findQ = "", findResults = null;
+async function searchAnglers(q){
+  const { data, error } = await sb.rpc("find_anglers", { q });
+  findResults = error ? [] : (data || []); if(tab === "friends" && friendsView === "find") renderLog();
+}
+async function refreshFollows(){ const { data } = await sb.rpc("my_follows"); follows = data || []; const fc = await sb.rpc("friend_catches"); if(!fc.error) friendCatches = fc.data || []; renderAll(); }
 function inPeriod(d, p){
   if(p === "all") return true;
   const now = new Date();
@@ -12,7 +17,7 @@ function inPeriod(d, p){
 function everyone(){
   // my catches (all of them, since this is my own view) plus what friends share with me
   const mine = catches.map(c => ({ ...c, user_id: me.id, display_name: profile?.display_name || "You" }));
-  return [...mine, ...friendCatches];
+  return [...mine, ...friendCatches.filter(c => c.rel !== "following")];
 }
 function leaderboards(p){
   const all = everyone().filter(c => inPeriod(c.caught_on, p) && fishOf(c) > 0);
@@ -43,15 +48,16 @@ function renderFriendsTab(el){
   const incoming = friendships.filter(f => f.status === "pending" && f.addressee === me?.id);
   const outgoing = friendships.filter(f => f.status === "pending" && f.requester === me?.id);
   const other = f => people[f.requester === me?.id ? f.addressee : f.requester] || { display_name:"Someone" };
-  const views = [["feed","Feed"],["board","Leaderboard"],["people","People"]];
+  const views = [["feed","Feed"],["board","Leaderboard"],["people","People"],["find","Find anglers"]];
   let body = "";
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
     body = posts.length ? `<div class="feed">${posts.map(c => { const url = photoSrc(c.photo_path); return `<article class="post">${url?`<img class="ph" src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
-      <div class="pb"><span class="who">${esc(c.display_name)}</span><div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
+      <div class="pb"><span class="who">${esc(c.display_name)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
-      <div class="row2" style="margin-top:6px">${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
-      : `<div class="empty"><b>${accepted.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length ? "When friends log catches they share, they show up here." : "Share your friend code below. Once a friend adds you, their shared catches show up here and on the map."}</div>`;
+      <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
+      : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Share your friend code above, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
+    if(announcements.length) body = announcements.slice(0, 2).map(a => `<div class="card notice" style="margin-bottom:10px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the creator · ${esc(fmtDate(a.created_at.slice(0,10)))}</p><p>${esc(a.body)}</p></div>`).join("") + body;
   } else if(friendsView === "board"){
     const b = leaderboards(boardPeriod);
     const periods = [["month","This month"],["year","This year"],["all","All time"]];
@@ -67,7 +73,16 @@ function renderFriendsTab(el){
     body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
       <h4><span>Friends</span><span>${accepted.length}</span></h4>
       ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(other(f).display_name)}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)}><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+      <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
+      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
+      <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
       ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
+  }
+  if(friendsView === "find"){
+    body = `<form id="findForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="findQ" placeholder="Search anglers by name" aria-label="Search anglers by name" value="${esc(findQ)}"><button class="btn" type="submit">Search</button></form>
+      <p class="muted" style="margin:6px 0 10px">Follow anglers with public profiles to see the catches they share. Unlike friends, following doesn't need their OK, and they don't see your catches.</p>
+      <div id="findResults">${findResults ? (findResults.length ? `<ul class="list">${findResults.map(p => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(p.display_name)}${p.featured?` <span class="pill open">Featured</span>`:""}</b><small>${p.followers} follower${p.followers===1?"":"s"} · ${p.fish} shared fish${p.bio?` · ${esc(p.bio)}`:""}</small></span><span class="row2">${profile?.role==="creator"?`<button class="link" type="button" data-feature="${esc(p.id)}" data-on="${p.featured?"0":"1"}">${p.featured?"Unfeature":"Feature"}</button>`:""}<button class="btn sm ${p.following?"":"ink"}" type="button" data-${p.following?"unfollow":"follow"}="${esc(p.id)}">${p.following?"Following":"Follow"}</button></span></li>`).join("")}</ul>` : `<p class="muted">No public anglers match that name.</p>`) : `<p class="status">Loading anglers…</p>`}</div>`;
+    if(!findResults) searchAnglers(findQ);
   }
   el.innerHTML = `<div class="eyebrow">Friends</div><h2>Fishing friends</h2>
     <div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
@@ -81,6 +96,7 @@ function renderFriendsTab(el){
     try{ const n = await addFriend($("friendCode").value); msg.className = "hint ok"; msg.textContent = `Request sent to ${n}. They'll see it in their Friends tab.`; $("friendCode").value = ""; }
     catch(err){ msg.className = "hint bad"; msg.textContent = err.message || "Couldn't add that friend."; }
   });
+  if($("findForm")) $("findForm").addEventListener("submit", e => { e.preventDefault(); findQ = $("findQ").value.trim(); findResults = null; renderLog(); });
   $("showFriendsBox").addEventListener("change", e => { showFriends = e.target.checked; lsSet("fl.showFriends", showFriends); renderAll(); });
 }
 $("log").addEventListener("click", async ev => {
@@ -92,6 +108,10 @@ $("log").addEventListener("click", async ev => {
   const un = t.closest("[data-unfriend]"); if(un){ const slot = un.parentElement; slot.innerHTML = `<span class="row2"><button class="link danger" type="button" data-unfriendyes="${esc(un.dataset.unfriend)}">Remove friend</button><button class="link" type="button" data-fview="people">Keep</button></span>`; return; }
   const uy = t.closest("[data-unfriendyes]"); if(uy){ try{ await answerRequest(uy.dataset.unfriendyes, false); toast("Friend removed"); }catch(e){ toast("Couldn't remove. Try again."); } return; }
   if(t.closest('[data-a="sharecode"]')) shareCode();
+  const fo = t.closest("[data-follow]"); if(fo){ fo.disabled = true; const { error } = await sb.from("follows").insert({ followee: fo.dataset.follow }); if(error){ toast("Couldn't follow. Try again."); fo.disabled = false; return; } toast("Following"); findResults = null; await refreshFollows(); return; }
+  const uf = t.closest("[data-unfollow]"); if(uf){ uf.disabled = true; await sb.from("follows").delete().eq("follower", me.id).eq("followee", uf.dataset.unfollow); toast("Unfollowed"); findResults = null; await refreshFollows(); return; }
+  const ft = t.closest("[data-feature]"); if(ft){ const { error } = await sb.from("profiles").update({ featured: ft.dataset.on === "1" }).eq("id", ft.dataset.feature); toast(error ? "Couldn't update." : ft.dataset.on === "1" ? "Featured" : "No longer featured"); findResults = null; renderLog(); return; }
+  const hd = t.closest("[data-hide]"); if(hd){ const { error } = await sb.rpc("creator_hide_catch", { catch_id: hd.dataset.hide, hide:true }); if(error){ toast("Couldn't hide it."); return; } friendCatches = friendCatches.filter(c => c.id !== hd.dataset.hide); toast("Hidden from all feeds and tournaments"); renderAll(); return; }
 });
 async function shareCode(){
   const url = location.origin + location.pathname;

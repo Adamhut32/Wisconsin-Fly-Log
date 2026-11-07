@@ -19,12 +19,13 @@ let me = null;                 // { id, email }
 let profile = null;            // { id, display_name, friend_code }
 let spots = [], catches = [], trips = [];
 let friendCatches = [], friendSpots = [], friendTrips = [], friendships = [], people = {};
+let follows = [], tournaments = [], announcements = [], mySuggestions = [];
 let showFriends = lsGet("fl.showFriends", true);
 let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
 let loadState = "loading";     // loading | ready | offline
-let tab = "map";               // map | trips | friends | stats | me
+let tab = "map";               // map | trips | tourney | friends | stats | me
 let tripOpen = null;           // trip id shown in Trips tab
 
 /* ---------- base geography ---------- */

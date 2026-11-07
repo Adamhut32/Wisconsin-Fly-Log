@@ -65,6 +65,7 @@
       <nav class="tabs" role="tablist" aria-label="Sections">
         <button role="tab" data-tab="map" aria-selected="true" type="button">Log</button>
         <button role="tab" data-tab="trips" aria-selected="false" type="button">Trips</button>
+        <button role="tab" data-tab="tourney" aria-selected="false" type="button">Tourneys<span class="dot" id="tDot" hidden></span></button>
         <button role="tab" data-tab="friends" aria-selected="false" type="button">Friends<span class="dot" id="reqDot" hidden></span></button>
         <button role="tab" data-tab="stats" aria-selected="false" type="button">Stats</button>
         <button role="tab" data-tab="me" aria-selected="false" type="button">Me</button>
@@ -193,6 +194,53 @@
         <button class="btn ink" type="submit" id="tripSave">Save trip</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- tournament sheet -->
+<div class="scrim" id="tourneyScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="tfTitle">
+    <h3 id="tfTitle">New tournament</h3>
+    <form id="tourneyForm" novalidate>
+      <div class="field"><label for="tfName">Name</label><input id="tfName" maxlength="80" placeholder="Opening weekend brown trout"></div>
+      <div class="field"><label for="tfDesc">Description</label><textarea id="tfDesc" maxlength="1000" placeholder="Prize, house rules, where to meet"></textarea></div>
+      <div class="grid2">
+        <div class="field"><label for="tfStart">Starts</label><input id="tfStart" type="date"></div>
+        <div class="field"><label for="tfEnd">Ends</label><input id="tfEnd" type="date"></div>
+      </div>
+      <div class="field"><label for="tfArea">Area</label>
+        <select id="tfArea"><option value="any">Anywhere in Wisconsin</option><option>Driftless Area</option><option>Northwoods</option><option>Central Sands</option><option value="pick">Pick counties</option></select></div>
+      <div class="card" id="tfCountyBox" hidden>
+        <div class="row2" style="justify-content:space-between"><input id="tfCountyQ" placeholder="Filter counties" aria-label="Filter counties" style="flex:1 1 160px"><span class="muted" id="tfCountyCount">0 selected</span></div>
+        <div id="tfCountyList" style="max-height:180px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="tfSpecies">Species</label>
+          <select id="tfSpecies"><option value="any">Any species</option><option value="trout">Trout only</option><option>Brown trout</option><option>Brook trout</option><option>Rainbow trout</option><option>Smallmouth bass</option><option>Largemouth bass</option><option>Northern pike</option><option>Musky</option><option>Bluegill</option></select></div>
+        <div class="field"><label for="tfScoring">Scoring</label>
+          <select id="tfScoring"><option value="biggest">Biggest fish</option><option value="top3">Top 3 total length</option><option value="most">Most fish</option><option value="species">Most species</option></select></div>
+      </div>
+      <label class="check"><input type="checkbox" id="tfPhoto" checked> Require a photo taken during the tournament</label>
+      <label class="check" id="tfOpenRow" hidden><input type="checkbox" id="tfOpen"> Open to everyone (anyone can join)</label>
+      <div class="field"><label>Invite friends</label><div id="tfInvite" class="stack" style="gap:4px"></div></div>
+      <span class="hint" id="tfErr" role="alert"></span>
+      <div class="actions">
+        <button class="btn" type="button" id="tfCancel">Cancel</button>
+        <button class="btn ink" type="submit" id="tfSave">Create tournament</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- setup guide -->
+<div class="scrim guide" id="guide" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <div class="gsteps" id="guideDots" aria-hidden="true"></div>
+    <div id="guideBody"></div>
+    <div class="actions" style="justify-content:space-between">
+      <button class="link" type="button" id="guideSkip">Skip guide</button>
+      <span class="row2"><button class="btn" type="button" id="guideBack">Back</button><button class="btn ink" type="button" id="guideNext">Next</button></span>
+    </div>
   </div>
 </div>
 
