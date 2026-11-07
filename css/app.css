@@ -352,3 +352,7 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .news-rel:first-child{border-top:0;padding-top:0}
 .news-rel h5{margin:0;font-family:var(--f-display);font-size:19px}
 .news-rel small{color:var(--muted)}
+.pwwrap{position:relative}
+.pwwrap input{padding-right:64px}
+.pwshow{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;font-weight:600;font-size:13.5px;color:var(--water);padding:6px 8px;cursor:pointer;border-radius:6px}
+.pwshow:focus-visible{outline:2px solid var(--water)}

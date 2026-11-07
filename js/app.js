@@ -1926,6 +1926,13 @@ function setAuthMode(m){
   $("authMsg").textContent = ""; $("authMsg").className = "hint";
 }
 try{ $("aStay").checked = lsGet("fl.stay", true); }catch(e){}
+$("pwShow").onclick = () => {
+  const show = $("aPw").type === "password";
+  $("aPw").type = show ? "text" : "password";
+  $("pwShow").textContent = show ? "Hide" : "Show";
+  $("pwShow").setAttribute("aria-pressed", String(show)); $("pwShow").setAttribute("aria-label", show ? "Hide password" : "Show password");
+  $("aPw").focus({ preventScroll:true });
+};
 $("authInTab").onclick = () => setAuthMode("in");
 $("authUpTab").onclick = () => setAuthMode("up");
 $("forgotBtn").onclick = () => setAuthMode("reset");

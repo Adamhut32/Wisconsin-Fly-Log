@@ -91,8 +91,8 @@
     </div>
     <form id="authForm" novalidate>
       <div class="field" id="nameRow" hidden><label for="aName">Your name</label><input id="aName" autocomplete="nickname" placeholder="Adam" maxlength="40"></div>
-      <div class="field"><label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div>
-      <div class="field" id="pwRow"><label for="aPw">Password</label><input id="aPw" type="password" autocomplete="current-password" placeholder="At least 8 characters"></div>
+      <div class="field"><label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <div class="field" id="pwRow"><label for="aPw">Password</label><div class="pwwrap"><input id="aPw" type="password" autocomplete="current-password" placeholder="At least 8 characters" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="pwshow" type="button" id="pwShow" aria-pressed="false" aria-label="Show password">Show</button></div></div>
       <label class="check" id="stayRow"><input type="checkbox" id="aStay" checked> Stay signed in on this device</label>
       <span class="hint" id="authMsg" role="alert"></span>
       <button class="btn fish wide" type="submit" id="authGo">Sign in</button>
