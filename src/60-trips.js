@@ -51,7 +51,7 @@ function renderTrip(el, t){
     ${(() => { const out = cs.filter(c => !days.includes(c.caught_on)); return out.length ? `<div class="day"><h5>Outside the trip dates<span>${out.length}</span></h5><ul class="list">${out.map(itemCatch).join("")}</ul></div>` : ""; })()}
     <p class="note">${t.shared ? "Friends can see this trip and the catches in it that aren't private." : "This trip is private."}</p>`;
 }
-function openTrip(id){ tripOpen = id; tab = "trips"; renderLog(); $("log").scrollTop = 0; fitTrip(); }
+function openTrip(id){ expandPanel(); tripOpen = id; tab = "trips"; renderLog(); $("log").scrollTop = 0; fitTrip(); }
 function fitTrip(){
   const t = trips.find(x => x.id === tripOpen); if(!t) return;
   const pts = tripCatches(t).filter(c => c.lat != null).map(c => [c.lat, c.lng]);

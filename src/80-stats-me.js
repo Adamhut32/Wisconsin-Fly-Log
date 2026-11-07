@@ -144,8 +144,8 @@ function renderSuggest(el){
 }
 let creatorData = null;
 async function loadCreator(){
-  const [o, s] = await Promise.all([ sb.rpc("creator_overview"), sb.rpc("all_suggestions") ]);
-  creatorData = { o: (o.data || [])[0] || null, s: s.data || [] };
+  const [o, s, r] = await Promise.all([ sb.rpc("creator_overview"), sb.rpc("all_suggestions"), sb.from("releases").select("*").order("id", { ascending:false }).limit(10) ]);
+  creatorData = { o: (o.data || [])[0] || null, s: s.data || [], r: r.data || [] };
   if(tab === "me" && meView === "creator") renderLog();
 }
 function renderCreator(el){
@@ -158,6 +158,12 @@ function renderCreator(el){
     <h4><span>Post an announcement</span></h4>
     <form id="annForm" novalidate><textarea id="annBody" maxlength="1000" placeholder="Opening weekend tournament starts Saturday. Good luck!"></textarea><div class="actions"><button class="btn ink" type="submit">Post to everyone</button></div></form>
     ${announcements.length ? `<ul class="list">${announcements.map(a => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b style="white-space:normal">${esc(a.body)}</b><small>${esc(fmtDate(a.created_at.slice(0,10)))}</small></span><button class="link danger" type="button" data-delann="${esc(a.id)}">Remove</button></li>`).join("")}</ul>` : ""}
+    <h4><span>Publish "What's new"</span></h4>
+    <p class="muted" style="margin:0 0 6px">Everyone sees this once, the next time they open the app.</p>
+    <form id="relForm" novalidate><input id="relTitle" maxlength="80" placeholder="Hatch chart and faster maps" aria-label="Update title">
+      <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
+      <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
+    ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
     <h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
     ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
       <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
@@ -169,6 +175,15 @@ function renderCreator(el){
       <li>Hide any shared catch from feeds and tournaments with Hide from feeds in the Friends feed.</li>
       <li>Make tournaments open to everyone, and delete any tournament.</li>
     </ul>`;
+  $("relForm").addEventListener("submit", async e => {
+    e.preventDefault(); const msg = $("relMsg"); msg.className = "hint bad";
+    const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
+    if(title.length < 2){ msg.textContent = "Add a title."; return; }
+    if(!items.length || items.length > 12){ msg.textContent = "Add 1 to 12 changes, one per line."; return; }
+    const { error } = await sb.from("releases").insert({ title, items });
+    if(error){ msg.textContent = "Couldn't publish it. Try again."; return; }
+    toast("Published. Everyone sees it next time they open the app."); loadCreator();
+  });
   $("annForm").addEventListener("submit", async e => {
     e.preventDefault(); const body = $("annBody").value.trim(); if(body.length < 2) return;
     const { data, error } = await sb.from("announcements").insert({ body }).select().single();
@@ -179,6 +194,7 @@ function renderCreator(el){
 $("log").addEventListener("click", async ev => {
   const t = ev.target;
   const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator") creatorData = null; renderLog(); $("log").scrollTop = 0; return; }
+  const dr = t.closest("[data-delrel]"); if(dr){ await sb.from("releases").delete().eq("id", +dr.dataset.delrel); loadCreator(); return; }
   const da = t.closest("[data-delann]"); if(da){ await sb.from("announcements").delete().eq("id", da.dataset.delann); announcements = announcements.filter(a => a.id !== da.dataset.delann); renderLog(); return; }
   const ss = t.closest("[data-sugsave]"); if(ss){ const id = ss.dataset.sugsave;
     const status = $("log").querySelector(`[data-sugstatus="${id}"]`).value, reply = $("log").querySelector(`[data-sugreply="${id}"]`).value.trim() || null;

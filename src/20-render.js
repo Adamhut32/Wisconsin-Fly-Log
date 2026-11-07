@@ -184,7 +184,7 @@ function renderLog(){
   else if(tab === "stats") renderStatsTab(el);
   else renderMeTab(el);
 }
-function setTab(t){ if(t === "me" && tab !== "me") meView = "main"; if(t === "tourney" && tab === "tourney") tourneyOpen = null; if(t === "trips" && tab === "trips") tripOpen = null; tab = t; lsSet("fl.tab", t); renderLog(); $("log").scrollTop = 0; if(t === "tourney") loadTournaments(); }
+function setTab(t){ expandPanel(); if(t === "me" && tab !== "me") meView = "main"; if(t === "tourney" && tab === "tourney") tourneyOpen = null; if(t === "trips" && tab === "trips") tripOpen = null; tab = t; lsSet("fl.tab", t); renderLog(); $("log").scrollTop = 0; if(t === "tourney") loadTournaments(); }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if(b) setTab(b.dataset.tab); });
 
 $("log").addEventListener("click", ev => {

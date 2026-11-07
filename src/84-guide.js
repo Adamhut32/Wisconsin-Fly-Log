@@ -39,7 +39,8 @@ function renderGuide(){
 }
 async function finishGuide(){
   $("guide").hidden = true;
-  if(profile && !profile.onboarded){ profile.onboarded = true; saveCache(); await sb.from("profiles").update({ onboarded:true }).eq("id", me.id); }
+  if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
+    await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
 }
 $("guideNext").onclick = () => { if(guideStep < guideSteps.length - 1){ guideStep++; renderGuide(); $("guide").querySelector(".sheet").scrollTop = 0; } else finishGuide(); };
 $("guideBack").onclick = () => { if(guideStep > 0){ guideStep--; renderGuide(); } };

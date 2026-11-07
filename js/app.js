@@ -578,7 +578,7 @@ function renderLog(){
   else if(tab === "stats") renderStatsTab(el);
   else renderMeTab(el);
 }
-function setTab(t){ if(t === "me" && tab !== "me") meView = "main"; if(t === "tourney" && tab === "tourney") tourneyOpen = null; if(t === "trips" && tab === "trips") tripOpen = null; tab = t; lsSet("fl.tab", t); renderLog(); $("log").scrollTop = 0; if(t === "tourney") loadTournaments(); }
+function setTab(t){ expandPanel(); if(t === "me" && tab !== "me") meView = "main"; if(t === "tourney" && tab === "tourney") tourneyOpen = null; if(t === "trips" && tab === "trips") tripOpen = null; tab = t; lsSet("fl.tab", t); renderLog(); $("log").scrollTop = 0; if(t === "tourney") loadTournaments(); }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if(b) setTab(b.dataset.tab); });
 
 $("log").addEventListener("click", ev => {
@@ -834,9 +834,16 @@ $("entryForm").addEventListener("submit", async ev => {
 
 
 /* ---------- Supabase connection ---------- */
+// "Stay signed in" keeps the session in long-lived storage; otherwise it ends when the app is closed
+const authStore = {
+  getItem: k => { try{ return localStorage.getItem(k) ?? sessionStorage.getItem(k); }catch(e){ return null; } },
+  setItem: (k, v) => { try{ if(lsGet("fl.stay", true)){ localStorage.setItem(k, v); sessionStorage.removeItem(k); } else { sessionStorage.setItem(k, v); localStorage.removeItem(k); } }catch(e){} },
+  removeItem: k => { try{ localStorage.removeItem(k); sessionStorage.removeItem(k); }catch(e){} }
+};
 const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:"fl.auth" }
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:"fl.auth", storage:authStore }
 });
+try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
   catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
@@ -999,7 +1006,7 @@ async function loadAll(){
     if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
-    if(profile && !profile.onboarded) openGuide();
+    if(profile && !profile.onboarded) openGuide(); else checkWhatsNew();
   }catch(e){
     console.error("load", e);
     if(loadState === "loading") loadState = navigator.onLine ? "ready" : "offline";
@@ -1178,7 +1185,7 @@ function renderTrip(el, t){
     ${(() => { const out = cs.filter(c => !days.includes(c.caught_on)); return out.length ? `<div class="day"><h5>Outside the trip dates<span>${out.length}</span></h5><ul class="list">${out.map(itemCatch).join("")}</ul></div>` : ""; })()}
     <p class="note">${t.shared ? "Friends can see this trip and the catches in it that aren't private." : "This trip is private."}</p>`;
 }
-function openTrip(id){ tripOpen = id; tab = "trips"; renderLog(); $("log").scrollTop = 0; fitTrip(); }
+function openTrip(id){ expandPanel(); tripOpen = id; tab = "trips"; renderLog(); $("log").scrollTop = 0; fitTrip(); }
 function fitTrip(){
   const t = trips.find(x => x.id === tripOpen); if(!t) return;
   const pts = tripCatches(t).filter(c => c.lat != null).map(c => [c.lat, c.lng]);
@@ -1278,7 +1285,7 @@ function standings(t, rows){
   return list.sort((a,b) => b.v - a.v);
 }
 async function openTourney(id){
-  tourneyOpen = id; tab = "tourney"; renderLog(); $("log").scrollTop = 0;
+  expandPanel(); tourneyOpen = id; tab = "tourney"; renderLog(); $("log").scrollTop = 0;
   const [b, p] = await Promise.all([ sb.rpc("tournament_board", { tid:id }), sb.rpc("tournament_people", { tid:id }) ]);
   tourneyBoard[id] = b.data || []; tourneyPeople[id] = p.data || [];
   if(tourneyOpen === id && tab === "tourney") renderLog();
@@ -1681,8 +1688,8 @@ function renderSuggest(el){
 }
 let creatorData = null;
 async function loadCreator(){
-  const [o, s] = await Promise.all([ sb.rpc("creator_overview"), sb.rpc("all_suggestions") ]);
-  creatorData = { o: (o.data || [])[0] || null, s: s.data || [] };
+  const [o, s, r] = await Promise.all([ sb.rpc("creator_overview"), sb.rpc("all_suggestions"), sb.from("releases").select("*").order("id", { ascending:false }).limit(10) ]);
+  creatorData = { o: (o.data || [])[0] || null, s: s.data || [], r: r.data || [] };
   if(tab === "me" && meView === "creator") renderLog();
 }
 function renderCreator(el){
@@ -1695,6 +1702,12 @@ function renderCreator(el){
     <h4><span>Post an announcement</span></h4>
     <form id="annForm" novalidate><textarea id="annBody" maxlength="1000" placeholder="Opening weekend tournament starts Saturday. Good luck!"></textarea><div class="actions"><button class="btn ink" type="submit">Post to everyone</button></div></form>
     ${announcements.length ? `<ul class="list">${announcements.map(a => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b style="white-space:normal">${esc(a.body)}</b><small>${esc(fmtDate(a.created_at.slice(0,10)))}</small></span><button class="link danger" type="button" data-delann="${esc(a.id)}">Remove</button></li>`).join("")}</ul>` : ""}
+    <h4><span>Publish "What's new"</span></h4>
+    <p class="muted" style="margin:0 0 6px">Everyone sees this once, the next time they open the app.</p>
+    <form id="relForm" novalidate><input id="relTitle" maxlength="80" placeholder="Hatch chart and faster maps" aria-label="Update title">
+      <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
+      <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
+    ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
     <h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
     ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
       <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
@@ -1706,6 +1719,15 @@ function renderCreator(el){
       <li>Hide any shared catch from feeds and tournaments with Hide from feeds in the Friends feed.</li>
       <li>Make tournaments open to everyone, and delete any tournament.</li>
     </ul>`;
+  $("relForm").addEventListener("submit", async e => {
+    e.preventDefault(); const msg = $("relMsg"); msg.className = "hint bad";
+    const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
+    if(title.length < 2){ msg.textContent = "Add a title."; return; }
+    if(!items.length || items.length > 12){ msg.textContent = "Add 1 to 12 changes, one per line."; return; }
+    const { error } = await sb.from("releases").insert({ title, items });
+    if(error){ msg.textContent = "Couldn't publish it. Try again."; return; }
+    toast("Published. Everyone sees it next time they open the app."); loadCreator();
+  });
   $("annForm").addEventListener("submit", async e => {
     e.preventDefault(); const body = $("annBody").value.trim(); if(body.length < 2) return;
     const { data, error } = await sb.from("announcements").insert({ body }).select().single();
@@ -1716,6 +1738,7 @@ function renderCreator(el){
 $("log").addEventListener("click", async ev => {
   const t = ev.target;
   const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator") creatorData = null; renderLog(); $("log").scrollTop = 0; return; }
+  const dr = t.closest("[data-delrel]"); if(dr){ await sb.from("releases").delete().eq("id", +dr.dataset.delrel); loadCreator(); return; }
   const da = t.closest("[data-delann]"); if(da){ await sb.from("announcements").delete().eq("id", da.dataset.delann); announcements = announcements.filter(a => a.id !== da.dataset.delann); renderLog(); return; }
   const ss = t.closest("[data-sugsave]"); if(ss){ const id = ss.dataset.sugsave;
     const status = $("log").querySelector(`[data-sugstatus="${id}"]`).value, reply = $("log").querySelector(`[data-sugreply="${id}"]`).value.trim() || null;
@@ -1784,7 +1807,8 @@ function renderGuide(){
 }
 async function finishGuide(){
   $("guide").hidden = true;
-  if(profile && !profile.onboarded){ profile.onboarded = true; saveCache(); await sb.from("profiles").update({ onboarded:true }).eq("id", me.id); }
+  if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
+    await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
 }
 $("guideNext").onclick = () => { if(guideStep < guideSteps.length - 1){ guideStep++; renderGuide(); $("guide").querySelector(".sheet").scrollTop = 0; } else finishGuide(); };
 $("guideBack").onclick = () => { if(guideStep > 0){ guideStep--; renderGuide(); } };
@@ -1832,6 +1856,60 @@ async function goTo(r){
 }
 
 
+/* ---------- collapsible panel: drag the handle down for a full-screen map ---------- */
+const mainEl = document.querySelector(".main");
+let panelCollapsed = lsGet("fl.collapsed", false);
+function setCollapsed(v, save = true){
+  panelCollapsed = v;
+  mainEl.classList.toggle("collapsed", v);
+  $("grab").setAttribute("aria-expanded", String(!v));
+  $("panelShow").hidden = !v || window.matchMedia("(max-width:760px)").matches;
+  if(save) lsSet("fl.collapsed", v);
+  setTimeout(() => { map.invalidateSize(); drawLabels(); }, 280);
+}
+function expandPanel(){ if(panelCollapsed) setCollapsed(false); }
+(() => {
+  let y0 = null, x0 = 0, moved = false, startEl = null;
+  // keep following the finger once it leaves the handle; on the tab bar only after a clear vertical pull, so taps still pick tabs
+  const down = e => { y0 = e.clientY; x0 = e.clientX; moved = false; startEl = e.currentTarget; if(startEl === $("grab")) try{ startEl.setPointerCapture(e.pointerId); }catch(_){} };
+  const move = e => { if(y0 == null) return; const dy = e.clientY - y0, dx = e.clientX - x0;
+    if(!moved && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)){ moved = true; try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){} } };
+  const up = e => {
+    if(y0 == null) return;
+    const dy = e.clientY - y0, dx = e.clientX - x0; const fromGrab = startEl === $("grab"); y0 = null;
+    if(moved && Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)){ setCollapsed(dy > 0); return; }
+    if(!moved && fromGrab) setCollapsed(!panelCollapsed);
+  };
+  for(const el of [$("grab"), document.querySelector(".tabs")]){
+    el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", () => { y0 = null; });
+  }
+})();
+$("panelHide").onclick = () => setCollapsed(true);
+$("panelShow").onclick = () => setCollapsed(false);
+window.matchMedia("(max-width:760px)").addEventListener?.("change", () => setCollapsed(panelCollapsed, false));
+setCollapsed(panelCollapsed, false);
+
+/* ---------- what's new after an update ---------- */
+async function checkWhatsNew(){
+  if(!me || !profile || !profile.onboarded || !$("guide").hidden || !$("news").hidden) return;
+  const { data, error } = await sb.from("releases").select("*").gt("id", profile.last_seen_release || 0).order("id", { ascending:false }).limit(5);
+  if(error || !data || !data.length) return;
+  $("newsTitle").textContent = data.length === 1 ? data[0].title : "Updates to Wisconsin Fly Log";
+  $("newsBody").innerHTML = data.map(r => `<div class="news-rel">${data.length > 1 ? `<h5>${esc(r.title)}</h5>` : ""}<small>${esc(fmtDate(r.published_at.slice(0,10)))}</small><ul class="steps">${r.items.map(i => `<li>${esc(i)}</li>`).join("")}</ul></div>`).join("");
+  $("news").dataset.latest = data[0].id;
+  $("news").hidden = false;
+}
+async function markNewsSeen(id){
+  if(!id || !me) return;
+  profile = { ...profile, last_seen_release: id }; saveCache();
+  await sb.from("profiles").update({ last_seen_release: id }).eq("id", me.id);
+}
+$("newsOk").onclick = () => { $("news").hidden = true; markNewsSeen(+$("news").dataset.latest); };
+$("news").addEventListener("click", e => { if(e.target === $("news")) $("newsOk").click(); });
+async function latestReleaseId(){ const { data } = await sb.from("releases").select("id").order("id", { ascending:false }).limit(1); return data && data[0] ? data[0].id : 0; }
+
+
 /* ---------- sign in ---------- */
 let authMode = "in";
 function setAuthMode(m){
@@ -1844,8 +1922,10 @@ function setAuthMode(m){
   $("pwRow").querySelector("label").textContent = m === "newpw" ? "New password" : "Password";
   $("authGo").textContent = { in:"Sign in", up:"Create account", reset:"Send reset link", newpw:"Save new password" }[m];
   $("forgotBtn").hidden = m !== "in";
+  $("stayRow").hidden = m === "reset" || m === "newpw";
   $("authMsg").textContent = ""; $("authMsg").className = "hint";
 }
+try{ $("aStay").checked = lsGet("fl.stay", true); }catch(e){}
 $("authInTab").onclick = () => setAuthMode("in");
 $("authUpTab").onclick = () => setAuthMode("up");
 $("forgotBtn").onclick = () => setAuthMode("reset");
@@ -1857,6 +1937,7 @@ $("authForm").addEventListener("submit", async e => {
   if(authMode !== "reset" && pw.length < 8){ msg.textContent = "Passwords need at least 8 characters."; $("aPw").focus(); return; }
   if(authMode === "up" && !$("aName").value.trim()){ msg.textContent = "Add your name so friends know who you are."; $("aName").focus(); return; }
   go.disabled = true;
+  lsSet("fl.stay", $("aStay").checked);
   const redirect = location.origin + location.pathname;
   try{
     if(authMode === "in"){

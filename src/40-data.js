@@ -1,8 +1,15 @@
 
 /* ---------- Supabase connection ---------- */
+// "Stay signed in" keeps the session in long-lived storage; otherwise it ends when the app is closed
+const authStore = {
+  getItem: k => { try{ return localStorage.getItem(k) ?? sessionStorage.getItem(k); }catch(e){ return null; } },
+  setItem: (k, v) => { try{ if(lsGet("fl.stay", true)){ localStorage.setItem(k, v); sessionStorage.removeItem(k); } else { sessionStorage.setItem(k, v); localStorage.removeItem(k); } }catch(e){} },
+  removeItem: k => { try{ localStorage.removeItem(k); sessionStorage.removeItem(k); }catch(e){} }
+};
 const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:"fl.auth" }
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:"fl.auth", storage:authStore }
 });
+try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
   catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
@@ -165,7 +172,7 @@ async function loadAll(){
     if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
-    if(profile && !profile.onboarded) openGuide();
+    if(profile && !profile.onboarded) openGuide(); else checkWhatsNew();
   }catch(e){
     console.error("load", e);
     if(loadState === "loading") loadState = navigator.onLine ? "ready" : "offline";

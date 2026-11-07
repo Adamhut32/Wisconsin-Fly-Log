@@ -38,7 +38,7 @@ function standings(t, rows){
   return list.sort((a,b) => b.v - a.v);
 }
 async function openTourney(id){
-  tourneyOpen = id; tab = "tourney"; renderLog(); $("log").scrollTop = 0;
+  expandPanel(); tourneyOpen = id; tab = "tourney"; renderLog(); $("log").scrollTop = 0;
   const [b, p] = await Promise.all([ sb.rpc("tournament_board", { tid:id }), sb.rpc("tournament_people", { tid:id }) ]);
   tourneyBoard[id] = b.data || []; tourneyPeople[id] = p.data || [];
   if(tourneyOpen === id && tab === "tourney") renderLog();

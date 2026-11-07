@@ -11,8 +11,10 @@ function setAuthMode(m){
   $("pwRow").querySelector("label").textContent = m === "newpw" ? "New password" : "Password";
   $("authGo").textContent = { in:"Sign in", up:"Create account", reset:"Send reset link", newpw:"Save new password" }[m];
   $("forgotBtn").hidden = m !== "in";
+  $("stayRow").hidden = m === "reset" || m === "newpw";
   $("authMsg").textContent = ""; $("authMsg").className = "hint";
 }
+try{ $("aStay").checked = lsGet("fl.stay", true); }catch(e){}
 $("authInTab").onclick = () => setAuthMode("in");
 $("authUpTab").onclick = () => setAuthMode("up");
 $("forgotBtn").onclick = () => setAuthMode("reset");
@@ -24,6 +26,7 @@ $("authForm").addEventListener("submit", async e => {
   if(authMode !== "reset" && pw.length < 8){ msg.textContent = "Passwords need at least 8 characters."; $("aPw").focus(); return; }
   if(authMode === "up" && !$("aName").value.trim()){ msg.textContent = "Add your name so friends know who you are."; $("aName").focus(); return; }
   go.disabled = true;
+  lsSet("fl.stay", $("aStay").checked);
   const redirect = location.origin + location.pathname;
   try{
     if(authMode === "in"){
