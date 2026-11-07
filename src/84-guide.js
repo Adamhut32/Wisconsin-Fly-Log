@@ -15,7 +15,7 @@ const GUIDE = () => [
   { t:"Log spots and catches", b:`<ul class="steps"><li><b>Add spot</b> saves water to try. Mark it Want to try, Scouted or Fished.</li><li><b>Log a catch</b> with a photo, species, length and fly.</li><li><b>Friends see</b> lets you choose Exact spot, County only or Nothing for every entry. Spots start private.</li><li>No signal? Log anyway. It syncs when you're back in range.</li></ul>` },
   { t:"Trips and tournaments", b:`<ul class="steps"><li><b>Trips</b>: set the dates and every catch from those days joins the trip, with a recap at the end.</li><li><b>Tournaments</b>: pick dates, an area, species and scoring, and invite friends. Fish that fit are entered automatically. Photo tournaments only accept photos taken during the tournament.</li></ul>` },
   { t:"Friends and following", b:`<ul class="steps"><li><b>Friends</b>: share your friend code${profile?.friend_code ? ` (<b style="font-family:var(--f-data);letter-spacing:.1em">${esc(profile.friend_code)}</b>)` : ""}. Friends see each other's shared catches and leaderboards.</li><li><b>Following</b>: follow anglers with public profiles without needing their OK. Turn on your own public profile in the Me tab if you want followers.</li></ul>` },
-  { t:"You're set", b:`<p>Tap a county to start exploring, or log your first fish.</p><p class="muted">Help and Suggestions are in the Me tab. Suggestions go straight to the person who built the app.</p>` }
+  { t:"You're set", b:`<p>Tap a county to start exploring, or log your first fish.</p><p class="muted">Help and Suggestions are in the Me tab. Suggestions go straight to the founder.</p>` }
 ];
 let guideStep = 0, guideSteps = [];
 function openGuide(replay){

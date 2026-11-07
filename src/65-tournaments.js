@@ -164,7 +164,7 @@ $("tourneyForm").addEventListener("submit", async e => {
   const { data, error } = await sb.rpc("create_tournament", { p_name:name, p_description:$("tfDesc").value.trim() || null, p_starts:a, p_ends:b, p_counties:ids, p_area_label:label,
     p_species:species, p_scoring:$("tfScoring").value, p_require_photo:$("tfPhoto").checked, p_open:$("tfOpen").checked, p_invite:invite });
   btn.disabled = false;
-  if(error){ err.textContent = error.message.includes("creator") ? error.message : "Couldn't create the tournament. Check your connection and try again."; return; }
+  if(error){ err.textContent = error.message.includes("creator") ? "Only the founder can make open tournaments." : "Couldn't create the tournament. Check your connection and try again."; return; }
   $("tourneyScrim").hidden = true;
   toast(invite.length ? `Tournament created. Invited ${invite.length} friend${invite.length===1?"":"s"}.` : "Tournament created");
   await loadTournaments();

@@ -544,7 +544,7 @@ function renderMapTab(el){
     const rows = counties.map(f=>({ id:f.id, name:f.properties.name, ...countyStats(f.id) })).filter(r=>r.spots||r.fish).sort((a,b)=>b.fish-a.fish||b.spots-a.spots||a.name.localeCompare(b.name));
     const recent = [...catches].sort(byDateDesc).slice(0,6);
     const want = spots.filter(s => s.status === "want").slice(0, 5);
-    const ann = announcements[0] && (Date.now() - new Date(announcements[0].created_at)) < 14*864e5 ? `<div class="card notice" style="margin:8px 0 4px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the creator</p><p>${esc(announcements[0].body)}</p></div>` : "";
+    const ann = announcements[0] && (Date.now() - new Date(announcements[0].created_at)) < 14*864e5 ? `<div class="card notice" style="margin:8px 0 4px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the founder</p><p>${esc(announcements[0].body)}</p></div>` : "";
     el.innerHTML = `<div class="eyebrow">Statewide</div><h2>Wisconsin</h2>${statusLine()}${ann}
       <div class="stats"><div class="stat s"><b>${T.spots}</b><span>potential spots</span></div><div class="stat f"><b>${T.fish}</b><span>fish caught</span></div><div class="stat"><b>${T.counties}<small style="font-size:13px;color:var(--muted)">/72</small></b><span>counties</span></div></div>
       ${rows.length ? `<h4><span>Counties</span><span>spots · fish</span></h4><ul class="list">${rows.map(r=>`<li><button class="item" data-county="${r.id}" style="grid-template-columns:1fr auto"><span class="t"><b>${esc(r.name)} County</b></span><span class="num"><span class="s">${r.spots}</span> · <span class="f">${r.fish}</span></span></button></li>`).join("")}</ul>` :
@@ -562,7 +562,7 @@ function renderMapTab(el){
       <h4><span>Spots</span></h4>${sp.length?`<ul class="list">${sp.map(itemSpot).join("")}</ul>`:`<div class="empty">No spots in ${esc(f.properties.name)} County yet. Tap a creek and choose <b style="display:inline;font:inherit;color:var(--spot)">Add as spot</b>, or use <b style="display:inline;font:inherit;color:var(--spot)">Add spot</b>.</div>`}
       <h4><span>Catches</span></h4>${ca.length?`<ul class="list">${ca.map(itemCatch).join("")}</ul>`:`<div class="empty">No catches logged here yet.</div>`}
       ${fc.length?`<h4><span>Friends here</span><span>${fc.reduce((a,c)=>a+fishOf(c),0)} fish</span></h4><ul class="list">${fc.slice(0,8).map(c=>`<li><button class="item" data-go="${c.lat!=null?"f:"+esc(c.id):""}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc(c.display_name)} · ${esc(fmtDate(c.caught_on))}${c.lat==null?" · county only":""}</small></span><span class="num"></span></button></li>`).join("")}</ul>`:""}
-      ${watersBlock(currentCounty)}`;
+      ${watersBlock(currentCounty)}${offlineBlock(currentCounty)}`;
   }
 }
 function renderLog(){
@@ -1413,7 +1413,7 @@ $("tourneyForm").addEventListener("submit", async e => {
   const { data, error } = await sb.rpc("create_tournament", { p_name:name, p_description:$("tfDesc").value.trim() || null, p_starts:a, p_ends:b, p_counties:ids, p_area_label:label,
     p_species:species, p_scoring:$("tfScoring").value, p_require_photo:$("tfPhoto").checked, p_open:$("tfOpen").checked, p_invite:invite });
   btn.disabled = false;
-  if(error){ err.textContent = error.message.includes("creator") ? error.message : "Couldn't create the tournament. Check your connection and try again."; return; }
+  if(error){ err.textContent = error.message.includes("creator") ? "Only the founder can make open tournaments." : "Couldn't create the tournament. Check your connection and try again."; return; }
   $("tourneyScrim").hidden = true;
   toast(invite.length ? `Tournament created. Invited ${invite.length} friend${invite.length===1?"":"s"}.` : "Tournament created");
   await loadTournaments();
@@ -1480,7 +1480,7 @@ function renderFriendsTab(el){
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
       <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
       : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Share your friend code above, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
-    if(announcements.length) body = announcements.slice(0, 2).map(a => `<div class="card notice" style="margin-bottom:10px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the creator · ${esc(fmtDate(a.created_at.slice(0,10)))}</p><p>${esc(a.body)}</p></div>`).join("") + body;
+    if(announcements.length) body = announcements.slice(0, 2).map(a => `<div class="card notice" style="margin-bottom:10px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the founder · ${esc(fmtDate(a.created_at.slice(0,10)))}</p><p>${esc(a.body)}</p></div>`).join("") + body;
   } else if(friendsView === "board"){
     const b = leaderboards(boardPeriod);
     const periods = [["month","This month"],["year","This year"],["all","All time"]];
@@ -1592,7 +1592,7 @@ function renderMeTab(el){
   if(meView === "suggest") return renderSuggest(el);
   if(meView === "creator" && profile?.role === "creator") return renderCreator(el);
   const followers = follows.filter(f => f.direction === "follower").length;
-  el.innerHTML = `<div class="eyebrow">Account${profile?.role === "creator" ? ` · <span class="pill open">Creator</span>` : ""}</div><h2>${esc(profile?.display_name || "You")}</h2>
+  el.innerHTML = `<div class="eyebrow">Account${profile?.role === "creator" ? ` · <span class="pill open">Founder</span>` : ""}</div><h2>${esc(profile?.display_name || "You")}</h2>
     <p class="muted" style="margin:0 0 12px">${esc(me?.email || "")}</p>
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>
@@ -1600,7 +1600,7 @@ function renderMeTab(el){
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
       <button class="btn sm" type="button" data-a="guide">Setup guide</button>
-      ${profile?.role === "creator" ? `<button class="btn sm ink" type="button" data-me="creator">Creator tools</button>` : ""}
+      ${profile?.role === "creator" ? `<button class="btn sm ink" type="button" data-me="creator">Founder tools</button>` : ""}
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
     <div class="card">
@@ -1612,6 +1612,7 @@ function renderMeTab(el){
     ${!isStandalone ? `<h4><span>Put it on your home screen</span></h4><div class="card">${isIOS
       ? `<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p class="muted">It opens full screen like an app and keeps your counties for offline use.</p>`
       : `<p>In your browser's menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`}</div>` : ""}
+    ${offlineBlock(null)}
     <h4><span>Your data</span></h4>
     <div class="card"><p>${catches.length} catches, ${spots.length} spots and ${trips.length} trips.</p><div class="row2"><button class="btn sm" type="button" data-a="export">Download a copy</button></div></div>
     <h4><span>Map data</span></h4>
@@ -1669,7 +1670,7 @@ const SUG_STATUS = { new:"Received", planned:"Planned", done:"Done", declined:"N
 function renderSuggest(el){
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Suggestions</div><h2>Send a suggestion</h2>
-    <p class="muted" style="margin:4px 0 12px">Ideas, problems, anything. They go straight to the creator of the app.</p>
+    <p class="muted" style="margin:4px 0 12px">Ideas, problems, anything. They go straight to the founder of Coulee.</p>
     <form id="sugForm" novalidate>
       <div class="seg" role="group" aria-label="Type" id="sugKind"><button type="button" class="ink" data-k="idea" aria-pressed="true">Idea</button><button type="button" class="ink" data-k="problem" aria-pressed="false">Problem</button><button type="button" class="ink" data-k="other" aria-pressed="false">Other</button></div>
       <div class="field"><label for="sugBody">Your suggestion</label><textarea id="sugBody" maxlength="2000" placeholder="It would help if…" style="min-height:110px"></textarea></div>
@@ -1698,7 +1699,7 @@ function renderCreator(el){
   if(!creatorData){ el.innerHTML = `<p class="status">Loading creator tools…</p>`; loadCreator(); return; }
   const o = creatorData.o || {};
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
-    <div class="eyebrow">Creator</div><h2>Creator tools</h2>
+    <div class="eyebrow">Founder</div><h2>Founder tools</h2>
     <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
     <p class="muted" style="margin:0 0 6px">${o.public_anglers ?? 0} public profiles · ${o.catches ?? 0} catches · ${o.trips ?? 0} trips</p>
     <h4><span>Post an announcement</span></h4>
@@ -1715,7 +1716,7 @@ function renderCreator(el){
       <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
       <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
       <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button><button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button></div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}
-    <h4><span>Other creator powers</span></h4>
+    <h4><span>Other founder powers</span></h4>
     <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
       <li>Feature anglers from Friends → Find anglers. Featured anglers show first with a badge.</li>
       <li>Hide any shared catch from feeds and tournaments with Hide from feeds in the Friends feed.</li>
@@ -1785,7 +1786,7 @@ const GUIDE = () => [
   { t:"Log spots and catches", b:`<ul class="steps"><li><b>Add spot</b> saves water to try. Mark it Want to try, Scouted or Fished.</li><li><b>Log a catch</b> with a photo, species, length and fly.</li><li><b>Friends see</b> lets you choose Exact spot, County only or Nothing for every entry. Spots start private.</li><li>No signal? Log anyway. It syncs when you're back in range.</li></ul>` },
   { t:"Trips and tournaments", b:`<ul class="steps"><li><b>Trips</b>: set the dates and every catch from those days joins the trip, with a recap at the end.</li><li><b>Tournaments</b>: pick dates, an area, species and scoring, and invite friends. Fish that fit are entered automatically. Photo tournaments only accept photos taken during the tournament.</li></ul>` },
   { t:"Friends and following", b:`<ul class="steps"><li><b>Friends</b>: share your friend code${profile?.friend_code ? ` (<b style="font-family:var(--f-data);letter-spacing:.1em">${esc(profile.friend_code)}</b>)` : ""}. Friends see each other's shared catches and leaderboards.</li><li><b>Following</b>: follow anglers with public profiles without needing their OK. Turn on your own public profile in the Me tab if you want followers.</li></ul>` },
-  { t:"You're set", b:`<p>Tap a county to start exploring, or log your first fish.</p><p class="muted">Help and Suggestions are in the Me tab. Suggestions go straight to the person who built the app.</p>` }
+  { t:"You're set", b:`<p>Tap a county to start exploring, or log your first fish.</p><p class="muted">Help and Suggestions are in the Me tab. Suggestions go straight to the founder.</p>` }
 ];
 let guideStep = 0, guideSteps = [];
 function openGuide(replay){
@@ -1910,6 +1911,55 @@ async function markNewsSeen(id){
 $("newsOk").onclick = () => { $("news").hidden = true; markNewsSeen(+$("news").dataset.latest); };
 $("news").addEventListener("click", e => { if(e.target === $("news")) $("newsOk").click(); });
 async function latestReleaseId(){ const { data } = await sb.from("releases").select("id").order("id", { ascending:false }).limit(1); return data && data[0] ? data[0].id : 0; }
+
+/* ---------- save counties for offline use ---------- */
+const OFFLINE_CACHE = "flylog-data";
+const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json")];
+let offlineSaved = null, offlineBusy = false;
+async function countSavedCounties(){
+  if(!("caches" in window)) return null;
+  try{ const c = await caches.open(OFFLINE_CACHE); const keys = new Set((await c.keys()).map(r => new URL(r.url).pathname + new URL(r.url).search));
+    const base = new URL(dataUrl("water/x.json"), location.href).pathname.replace(/x\.json$/, "");
+    offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion)));
+  }catch(e){ offlineSaved = null; }
+  return offlineSaved;
+}
+async function saveCountiesOffline(ids, onProgress){
+  const c = await caches.open(OFFLINE_CACHE);
+  const extra = [dataUrl("water/index.json"), dataUrl("geo.json")];
+  for(const u of extra){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
+  let done = 0, failed = 0;
+  for(const id of ids){
+    for(const u of countyFiles(id)){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); else failed++; } }catch(e){ failed++; } }
+    done++; onProgress && onProgress(done, ids.length);
+  }
+  await countSavedCounties();
+  return failed;
+}
+async function offlineAction(which){
+  if(offlineBusy) return;
+  if(!navigator.onLine){ toast("Connect to the internet to save counties."); return; }
+  offlineBusy = true;
+  try{ await navigator.storage?.persist?.(); }catch(e){}
+  const ids = which === "all" ? counties.map(f => f.id) : [which];
+  const label = which === "all" ? "Wisconsin" : countyName(which);
+  const failed = await saveCountiesOffline(ids, (d, n) => { const el = $("offlineProg"); if(el) el.textContent = `Saving ${d} of ${n} counties…`; });
+  offlineBusy = false;
+  toast(failed ? `Saved most of ${label}. A few files didn't download; try again on Wi-Fi.` : `${label} is saved for offline use.`);
+  renderLog();
+}
+$("log").addEventListener("click", e => { const b = e.target.closest("[data-offline]"); if(b){ b.disabled = true; offlineAction(b.dataset.offline); } });
+function offlineBlock(cid){
+  if(!("caches" in window)) return "";
+  if(offlineSaved === null){ countSavedCounties().then(() => renderLog()); return ""; }
+  if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations and public land work without signal.</p>`
+    : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
+  const n = offlineSaved.size;
+  return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
+    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically. Your catches still log offline and sync later.</p>
+    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 50 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
+    <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
+}
 
 
 /* ---------- sign in ---------- */

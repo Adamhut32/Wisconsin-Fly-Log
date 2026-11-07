@@ -46,7 +46,7 @@ function renderMeTab(el){
   if(meView === "suggest") return renderSuggest(el);
   if(meView === "creator" && profile?.role === "creator") return renderCreator(el);
   const followers = follows.filter(f => f.direction === "follower").length;
-  el.innerHTML = `<div class="eyebrow">Account${profile?.role === "creator" ? ` · <span class="pill open">Creator</span>` : ""}</div><h2>${esc(profile?.display_name || "You")}</h2>
+  el.innerHTML = `<div class="eyebrow">Account${profile?.role === "creator" ? ` · <span class="pill open">Founder</span>` : ""}</div><h2>${esc(profile?.display_name || "You")}</h2>
     <p class="muted" style="margin:0 0 12px">${esc(me?.email || "")}</p>
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>
@@ -54,7 +54,7 @@ function renderMeTab(el){
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
       <button class="btn sm" type="button" data-a="guide">Setup guide</button>
-      ${profile?.role === "creator" ? `<button class="btn sm ink" type="button" data-me="creator">Creator tools</button>` : ""}
+      ${profile?.role === "creator" ? `<button class="btn sm ink" type="button" data-me="creator">Founder tools</button>` : ""}
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
     <div class="card">
@@ -66,6 +66,7 @@ function renderMeTab(el){
     ${!isStandalone ? `<h4><span>Put it on your home screen</span></h4><div class="card">${isIOS
       ? `<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p class="muted">It opens full screen like an app and keeps your counties for offline use.</p>`
       : `<p>In your browser's menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`}</div>` : ""}
+    ${offlineBlock(null)}
     <h4><span>Your data</span></h4>
     <div class="card"><p>${catches.length} catches, ${spots.length} spots and ${trips.length} trips.</p><div class="row2"><button class="btn sm" type="button" data-a="export">Download a copy</button></div></div>
     <h4><span>Map data</span></h4>
@@ -123,7 +124,7 @@ const SUG_STATUS = { new:"Received", planned:"Planned", done:"Done", declined:"N
 function renderSuggest(el){
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Suggestions</div><h2>Send a suggestion</h2>
-    <p class="muted" style="margin:4px 0 12px">Ideas, problems, anything. They go straight to the creator of the app.</p>
+    <p class="muted" style="margin:4px 0 12px">Ideas, problems, anything. They go straight to the founder of Coulee.</p>
     <form id="sugForm" novalidate>
       <div class="seg" role="group" aria-label="Type" id="sugKind"><button type="button" class="ink" data-k="idea" aria-pressed="true">Idea</button><button type="button" class="ink" data-k="problem" aria-pressed="false">Problem</button><button type="button" class="ink" data-k="other" aria-pressed="false">Other</button></div>
       <div class="field"><label for="sugBody">Your suggestion</label><textarea id="sugBody" maxlength="2000" placeholder="It would help if…" style="min-height:110px"></textarea></div>
@@ -152,7 +153,7 @@ function renderCreator(el){
   if(!creatorData){ el.innerHTML = `<p class="status">Loading creator tools…</p>`; loadCreator(); return; }
   const o = creatorData.o || {};
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
-    <div class="eyebrow">Creator</div><h2>Creator tools</h2>
+    <div class="eyebrow">Founder</div><h2>Founder tools</h2>
     <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
     <p class="muted" style="margin:0 0 6px">${o.public_anglers ?? 0} public profiles · ${o.catches ?? 0} catches · ${o.trips ?? 0} trips</p>
     <h4><span>Post an announcement</span></h4>
@@ -169,7 +170,7 @@ function renderCreator(el){
       <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
       <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
       <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button><button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button></div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}
-    <h4><span>Other creator powers</span></h4>
+    <h4><span>Other founder powers</span></h4>
     <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
       <li>Feature anglers from Friends → Find anglers. Featured anglers show first with a badge.</li>
       <li>Hide any shared catch from feeds and tournaments with Hide from feeds in the Friends feed.</li>
