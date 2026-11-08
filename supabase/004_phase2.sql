@@ -236,3 +236,6 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke execute on function public.my_tournaments() from public, anon;
 grant execute on function public.my_tournaments() to authenticated;
+
+revoke execute on function public.create_tournament(text, text, date, date, text[], text, text[], text, boolean, boolean, uuid[], text[]), public.withdraw_catch(uuid, uuid) from public, anon;
+grant execute on function public.create_tournament(text, text, date, date, text[], text, text[], text, boolean, boolean, uuid[], text[]), public.withdraw_catch(uuid, uuid) to authenticated;
