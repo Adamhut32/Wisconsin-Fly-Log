@@ -52,7 +52,23 @@ function setKind(k){
 }
 $("segFish").onclick = () => setKind("catch");
 $("segSpot").onclick = () => setKind("spot");
-function setVis(v){ visibility = v; $("visSeg").querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v)); }
+function setVis(v){ visibility = v; $("visSeg").querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v)); renderShareRow(); }
+/* spots can go to only some friends */
+let shareWith = null; // null = all friends, otherwise a Set of friend ids
+function myFriends(){ return friendships.filter(f => f.status === "accepted").map(f => f.requester === me?.id ? f.addressee : f.requester).map(id => ({ id, name:people[id]?.display_name || "Friend" })).sort((a, b) => a.name.localeCompare(b.name)); }
+function renderShareRow(){
+  const el = $("shareRow"); if(!el) return;
+  const fr = myFriends();
+  if(formKind !== "spot" || visibility === "private" || !fr.length){ el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<div class="seg vis sm" role="group" aria-label="Which friends"><button type="button" data-sw="all" aria-pressed="${!shareWith}">All friends</button><button type="button" data-sw="some" aria-pressed="${!!shareWith}">Only some</button></div>
+    ${shareWith ? `<div class="chips">${fr.map(f => `<button type="button" class="chip" data-swid="${esc(f.id)}" aria-pressed="${shareWith.has(f.id)}">${esc(f.name)}</button>`).join("")}</div>
+    <small class="hint">${shareWith.size ? `Only ${shareWith.size === 1 ? "this friend sees" : `these ${shareWith.size} friends see`} it. Followers don't.` : "Pick at least one friend, or nobody sees it."}</small>` : ""}`;
+}
+$("shareRow").addEventListener("click", e => {
+  const a = e.target.closest("[data-sw]"); if(a){ shareWith = a.dataset.sw === "some" ? new Set(shareWith || []) : null; renderShareRow(); return; }
+  const c = e.target.closest("[data-swid]"); if(c){ shareWith.has(c.dataset.swid) ? shareWith.delete(c.dataset.swid) : shareWith.add(c.dataset.swid); renderShareRow(); }
+});
 $("visSeg").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if(b) setVis(b.dataset.v); });
 
 function parseCoords(s){
@@ -144,7 +160,8 @@ function openForm(kind, rec, prefill){
   $("fWt").value = r.weight_lb ? String(+r.weight_lb) : ""; $("fWtHint").textContent = r.weight_lb ? wtTxt(r.weight_lb) : ""; syncWeightRow(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
-  if(rec) setVis(rec.visibility);
+  shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
+  if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path);
   if(r.photo_path) setPhotoPreview(url, "Photo saved", "Choose another to replace it");
   else setPhotoPreview(null, "Add a photo", "Location and date fill in from the photo when it has them");
@@ -217,7 +234,8 @@ $("entryForm").addEventListener("submit", async ev => {
       if($("fCount").value === "") rec.count = 1;
     } else {
       table = "spots";
-      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value };
+      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value, share_with: visibility !== "private" && shareWith ? [...shareWith] : null };
+      if(rec.share_with && !rec.share_with.length){ err.textContent = "Pick at least one friend to share this spot with, or choose All friends."; btn.disabled = false; btn.textContent = label; return; }
     }
     const wasEditing = !!editing;
     if(table === "catches") lsSet("fl.method", rec.method);

@@ -496,3 +496,30 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .guide.coach .sheet h3{font-size:20px;margin:0}
 @media (prefers-reduced-motion:reduce){.coachRing{transition:none}}
 .testpill{margin-left:8px;background:var(--fish);color:#fff;border-color:var(--fish);font-size:11px;vertical-align:middle}
+#map.popopen .viewsw{opacity:0;pointer-events:none;transition:opacity .15s}
+.viewsw{transition:opacity .15s}
+.reqbox{margin:10px 0 12px;border:2px solid var(--friend);border-radius:12px;background:color-mix(in srgb, var(--friend) 10%, var(--panel));overflow:hidden}
+.reqhead{background:var(--friend);color:#fff;font:700 12px/1 var(--f-body);letter-spacing:.08em;text-transform:uppercase;padding:8px 12px}
+.reqrow{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:10px 12px}
+.reqrow+.reqrow{border-top:1px solid var(--line)}
+.reqrow .t{display:flex;flex-direction:column;min-width:0}
+.reqrow small{color:var(--muted)}
+/* friends on the map: blue, filled, so they never read as your own orange catches */
+.mk-fish.friend{border-color:var(--friend);background-color:var(--friend);color:#fff}
+.mk-fish.friend.ph{width:36px;height:36px;border-width:3px}
+.mk-fish.friend .n{background:var(--friend)}
+.mk-spot.friend{background:var(--friend)}
+.mk-spot.friend.want{background:var(--panel);border-color:var(--friend)}
+.mk-spot.friend.scouted{background:color-mix(in srgb,var(--friend) 35%,var(--panel));border-color:var(--friend)}
+#map.personmode .cbadge .f{background:var(--friend)} #map.personmode .cbadge .s{background:color-mix(in srgb,var(--friend) 70%,#000)}
+.personbar{position:relative;margin-top:0;flex:0 0 100%;max-width:340px;box-sizing:border-box;pointer-events:auto;display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;
+  padding:8px 10px;border-radius:12px;background:var(--panel);border:2px solid var(--friend);box-shadow:var(--shadow)}
+.personbar .t{display:flex;flex-direction:column;min-width:0} .personbar b{color:var(--friend)} .personbar small{color:var(--muted);font-size:12px}
+.sharerow{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.seg.sm button{min-height:30px;font-size:12.5px}
+/* friends sub-views: one scrollable row at the top instead of wrapping under the add-friend tools */
+.yearsel.subnav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-left:-2px;padding:2px}
+.yearsel.subnav::-webkit-scrollbar{display:none}
+.yearsel.subnav button{flex:0 0 auto;white-space:nowrap}
+#map.personmode .viewsw{display:none}
+.personbar[hidden]{display:none}

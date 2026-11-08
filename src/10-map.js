@@ -1,4 +1,4 @@
-const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:16, zoomSnap:0.25, preferCanvas:false });
+const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:18, zoomSnap:0.25, preferCanvas:false });
 map.zoomControl.setPosition("topright");
 const wiBounds = L.geoJSON(GEO.counties).getBounds();
 map.setMaxBounds(wiBounds.pad(0.6));
@@ -67,6 +67,18 @@ function setMask(id){
 /* ---------- detailed creeks, lakes and trout water, one file per county ---------- */
 const waterCache = {}, troutCache = {};
 let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], detailLabelsExtra = [];
+/* the creek data has a point every ~60 m, so lines look jagged up close; round the corners (Chaikin) so they read like water */
+function smoothPath(pts, n = 2){
+  if(pts.length < 3) return pts;
+  for(let k = 0; k < n; k++){
+    const out = [pts[0]];
+    for(let i = 0; i < pts.length - 1; i++){ const a = pts[i], b = pts[i+1];
+      out.push([a[0]*.75 + b[0]*.25, a[1]*.75 + b[1]*.25], [a[0]*.25 + b[0]*.75, a[1]*.25 + b[1]*.75]); }
+    out.push(pts[pts.length - 1]); pts = out;
+  }
+  return pts;
+}
+const llPaths = paths => paths.map(pa => smoothPath(pa.map(q => [q[1], q[0]])));
 function streamWeight(o){ return o >= 6 ? 3 : o >= 5 ? 2.5 : o >= 4 ? 2 : o >= 3 ? 1.6 : o >= 2 ? 1.25 : 0.95; }
 const TROUT = { 1:{ label:"Class I", tok:"--t1" }, 2:{ label:"Class II", tok:"--t2" }, 3:{ label:"Class III", tok:"--t3" } };
 async function getJSON(cache, path, id){
@@ -122,7 +134,7 @@ async function loadDetail(id){
   catch(e){ if(detailFor===id) toast("Couldn't load creeks for this county."); return; }
   if(detailFor !== id) return;
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
-  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6 }); // a fresh canvas per county
+  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:.6 });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
     const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1 });
     if(name && name !== "Unnamed"){ p.on("click", e => openWaterPopup(e, name, waterType(name))); detailLakes.push({ name, poly:p }); }
@@ -136,7 +148,7 @@ async function loadDetail(id){
   /* trout class bands sit under the creek line, like a highlighter on a paper map */
   if(t) for(const [name, c, mi, orw, paths] of t.t){
     if(!TROUT[c]) continue;
-    const band = L.polyline(paths.map(pa=>pa.map(q=>[q[1],q[0]])), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round" });
+    const band = L.polyline(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
     g.addLayer(band);
@@ -144,10 +156,10 @@ async function loadDetail(id){
   for(const [name, order, raw] of w.s){
     const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
     if(!paths.length) continue;
-    const ll = paths.map(pa=>pa.map(q=>[q[1],q[0]]));
+    const ll = llPaths(paths);
     const wgt = streamWeight(order);
-    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85 }));
-    const line = L.polyline(ll, { renderer:R, color:css("--stream"), weight:wgt, opacity:1 });
+    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
+    const line = L.polyline(ll, { renderer:R, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
     const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
     line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null));
     line.on("mouseover", () => setHover(name)); line.on("mouseout", () => setHover(null));
@@ -169,15 +181,15 @@ async function loadNearby(id){
   const lb = {}; countyLayer.eachLayer(l => lb[l.feature.id] = l.getBounds());
   const around = lb[id].pad(0.35);
   const ids = Object.keys(lb).filter(k => k !== id && around.intersects(lb[k]));
-  const R = nearbyRenderer = L.canvas({ pane:"nearby" });
+  const R = nearbyRenderer = L.canvas({ pane:"nearby", padding:.6 });
   const layer = nearbyLayer = L.layerGroup().addTo(map);
   await Promise.all(ids.map(async k => {
     let w, t;
     try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + k + ".json"), k), getJSON(troutCache, dataUrl("water/trout/" + k + ".json"), k).catch(()=>null) ]); }catch(e){ return; }
     if(detailFor !== id || nearbyLayer !== layer) return;
     for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1 }));
-    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(L.polyline(paths.map(pa=>pa.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css(TROUT[c].tok), weight:5, opacity:.3 }));
-    for(const [name, order, paths] of w.s) layer.addLayer(L.polyline(paths.map(pa=>pa.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order) }));
+    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), weight:5, opacity:.3, lineJoin:"round" }));
+    for(const [name, order, paths] of w.s) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order), lineJoin:"round" }));
   }));
 }
 function clearDetail(){

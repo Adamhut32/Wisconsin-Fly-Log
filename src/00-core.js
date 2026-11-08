@@ -26,6 +26,7 @@ let showFriends = lsGet("fl.showFriends", true);
 let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
+let mapPerson = null; // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me
 let tripOpen = null;           // trip id shown in Trips tab
@@ -57,7 +58,13 @@ const lenTxt = v => v == null || v === "" ? "" : `${+v}″`;
 
 /* ---------- derived numbers ---------- */
 function countyStats(id){
-  let s=0,f=0; for(const x of spots) if(x.county===id) s++; for(const c of catches) if(c.county===id) f+=fishOf(c);
+  let s=0,f=0;
+  if(mapPerson){ // looking at a friend's map: count what they share
+    for(const x of friendSpots) if(x.user_id===mapPerson && x.county===id) s++;
+    for(const c of friendCatches) if(c.user_id===mapPerson && c.county===id) f+=fishOf(c);
+    return { spots:s, fish:f };
+  }
+  for(const x of spots) if(x.county===id) s++; for(const c of catches) if(c.county===id) f+=fishOf(c);
   return { spots:s, fish:f };
 }
 function totals(){

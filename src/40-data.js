@@ -12,7 +12,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
   catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb"],
-  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
+  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
 const pick = (table, r) => { const o = {}; for(const k of COLS[table]) if(k in r) o[k] = r[k] === undefined ? null : r[k]; return o; };

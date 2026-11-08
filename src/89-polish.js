@@ -2,7 +2,7 @@
 /* ---------- terrain shading: soft hillshade under the field map, so coulees and ridges show ---------- */
 pane("hill", 396, false);
 const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
-  { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:16, crossOrigin:true });
+  { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4 });
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){
   const on = terrainOn && mapView === "field";
@@ -17,7 +17,7 @@ syncTerrain();
 
 /* ---------- moving water: a slow drift along trout streams when zoomed in close ---------- */
 pane("flow", 433, false);
-const flowRenderer = L.svg({ pane:"flow", padding:.3 });
+const flowRenderer = L.svg({ pane:"flow", padding:.5 });
 let flowLayer = null, flowKey = "";
 function updateFlow(){
   const z = map.getZoom(), t = detailFor && troutCache[detailFor];
@@ -30,7 +30,7 @@ function updateFlow(){
   for(const [, c, , , paths] of t.t){
     if(!TROUT[c]) continue;
     for(const pa of paths){
-      const ll = pa.map(q => [q[1], q[0]]);
+      const ll = smoothPath(pa.map(q => [q[1], q[0]]));
       if(ll.length < 2 || !ll.some(p => b.contains(p))) continue;
       g.addLayer(L.polyline(ll, { renderer:flowRenderer, interactive:false, className:"flow", color:"#fff", weight:z >= 15 ? 2.4 : 1.8, opacity:.8, lineCap:"round" }));
     }

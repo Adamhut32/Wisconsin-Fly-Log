@@ -49,7 +49,7 @@ function renderFriendsTab(el){
   const incoming = friendships.filter(f => f.status === "pending" && f.addressee === me?.id);
   const outgoing = friendships.filter(f => f.status === "pending" && f.requester === me?.id);
   const other = f => people[f.requester === me?.id ? f.addressee : f.requester] || { display_name:"Someone" };
-  const views = [["feed","Feed"],["messages","Messages"],["forums","Forums"],["board","Leaderboard"],["people","People"],["find","Find anglers"]];
+  const views = [["feed","Feed"],["people","Friends"],["messages","Messages"],["board","Leaderboard"],["forums","Forums"],["find","Find anglers"]];
   let body = "";
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
@@ -57,7 +57,7 @@ function renderFriendsTab(el){
       <div class="pb"><span class="who">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}${titlePill(c.user_id)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
       <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
-      : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Share your friend code above, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
+      : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Tap Friends above to add people by friend code or name, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
     if(announcements.length) body = announcements.slice(0, 2).map(a => `<div class="card notice" style="margin-bottom:10px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the founder · ${esc(fmtDate(a.created_at.slice(0,10)))}</p><p>${esc(a.body)}</p></div>`).join("") + body;
   } else if(friendsView === "board"){
     const b = leaderboards(boardPeriod);
@@ -71,11 +71,10 @@ function renderFriendsTab(el){
       ${boardHtml("Most counties fished", b.counties, "", "No counties logged in this period.")}
       </div><p class="note">Boards count your catches and what friends share with you. Private catches don't count toward anyone else's view.</p>`;
   } else {
-    body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.requester, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
-      <h4><span>Friends</span><span>${accepted.length}</span></h4>
-      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+    body = `<h4><span>Friends</span><span>${accepted.length}</span></h4>
+      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc((f.requester === me.id ? f.addressee : f.requester))}">Map</button><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
       <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
-      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
+      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc(f.user_id)}">Map</button><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></span></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
       <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
       ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.addressee, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
   }
@@ -89,14 +88,14 @@ function renderFriendsTab(el){
   }
   const social = friendsView === "messages" || friendsView === "forums";
   el.innerHTML = `<div class="eyebrow">Friends</div><h2>${friendsView === "forums" ? "Forums" : friendsView === "messages" ? "Messages" : "Fishing friends"}</h2>
-    ${social ? "" : `<div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
+    ${requestsBannerHtml()}
+    <div class="yearsel subnav" style="margin-top:6px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
+    <div style="margin-top:10px">${friendsView !== "people" ? "" : `<div class="code" style="margin:4px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
     <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search anglers by name" aria-label="Search anglers by name" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
     ${nameResultsHtml()}
-    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}
-    <div class="yearsel" style="margin-top:${social ? 6 : 14}px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
-    <div style="margin-top:10px">${body}</div>`;
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}${body}</div>`;
   if($("addFriendForm")) $("addFriendForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("friendMsg"); msg.className = "hint"; msg.textContent = "Sending…";
     try{ const n = await addFriend($("friendCode").value); msg.className = "hint ok"; msg.textContent = `Request sent to ${n}. They'll see it in their Friends tab.`; $("friendCode").value = ""; }
@@ -162,3 +161,32 @@ $("log").addEventListener("click", async e => {
   toast(`Friend request sent${p ? ` to ${p.display_name}` : ""}. They'll see it in their Friends tab.`);
   await loadAll(); renderLog();
 });
+
+/* ---------- friend requests show up quickly: check every 30 s while the app is open ---------- */
+const friendKey = list => (list || []).map(f => f.id + f.status).sort().join(",");
+let friendPollBusy = false;
+async function pollFriends(){
+  if(friendPollBusy || !me || !navigator.onLine || document.visibilityState !== "visible" || accountState() !== "ok") return;
+  friendPollBusy = true;
+  try{
+    const { data, error } = await sb.from("friendships").select("id, status");
+    if(!error && friendKey(data) !== friendKey(friendships)){
+      const before = new Set(friendships.filter(f => f.status === "pending" && f.addressee === me.id).map(f => f.id));
+      await loadAll();
+      const fresh = friendships.filter(f => f.status === "pending" && f.addressee === me.id && !before.has(f.id));
+      if(fresh.length) toast(`${people[fresh[0].requester]?.display_name || "Someone"} sent you a friend request. Open Friends to accept.`);
+    }
+  }catch(e){}
+  friendPollBusy = false;
+}
+setInterval(pollFriends, 30000);
+
+/* requests sit at the top of the Friends tab, whatever view is open */
+function requestsBannerHtml(){
+  const incoming = friendships.filter(f => f.status === "pending" && f.addressee === me?.id);
+  if(!incoming.length) return "";
+  const nm = f => people[f.requester]?.display_name || "Someone";
+  return `<div class="reqbox"><div class="reqhead">${incoming.length === 1 ? "Friend request" : `${incoming.length} friend requests`}</div>
+    ${incoming.map(f => `<div class="reqrow">${avHtml(f.requester, nm(f))}<span class="t"><b class="wrap">${esc(nm(f))}</b><small>Wants to be fishing friends</small></span>
+      <span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></div>`).join("")}</div>`;
+}

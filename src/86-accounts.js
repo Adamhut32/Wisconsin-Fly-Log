@@ -137,8 +137,10 @@ $("log").addEventListener("click", async e => {
 pane("tiles", 395, false);
 const VIEWS = {
   field:{ label:"Map" },
-  sat:{ label:"Satellite", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}", credit:"Imagery: USGS The National Map" },
-  topo:{ label:"Topo", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}", credit:"Topo: USGS The National Map" }
+  // Esri imagery is sharp to zoom 19; USGS imagery stops at 16 and goes soft up close
+  sat:{ label:"Satellite", url:"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", native:19, credit:"Imagery: Esri, Maxar, Earthstar Geographics" },
+  // USGS topo tiles stop at 16; on sharp phone screens ask for one level finer so contours stay crisp
+  topo:{ label:"Topo", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}", native:16, retina:true, credit:"Topo: USGS The National Map" }
 };
 let mapView = lsGet("fl.view", "field"), viewLayer = null, tileErrors = 0;
 const viewCtl = L.control({ position:"topright" });
@@ -156,7 +158,9 @@ function setMapView(v){
   mapView = v; lsSet("fl.view", v); tileErrors = 0;
   if(viewLayer){ map.removeLayer(viewLayer); viewLayer = null; }
   if(VIEWS[v].url){
-    viewLayer = L.tileLayer(VIEWS[v].url, { pane:"tiles", maxNativeZoom:16, maxZoom:16, crossOrigin:true });
+    // retina: Leaflet asks for zoom+1 and lowers maxZoom by one, so offset both to stay within the tile cache and keep zoom 18
+    const ret = !!VIEWS[v].retina && L.Browser.retina;
+    viewLayer = L.tileLayer(VIEWS[v].url, { pane:"tiles", maxNativeZoom:VIEWS[v].native - (ret ? 1 : 0), maxZoom:ret ? 19 : 18, crossOrigin:true, detectRetina:ret, updateWhenIdle:false, keepBuffer:4 });
     viewLayer.on("tileerror", () => { if(++tileErrors === 6) toast(navigator.onLine ? `${VIEWS[v].label} tiles aren't loading right now.` : `${VIEWS[v].label} view needs a connection. Switch to Map for offline use.`); });
     viewLayer.addTo(map);
   }
@@ -178,3 +182,7 @@ function appBusy(){
 function showUpdateReady(){ updateWaiting = true; $("updBar").hidden = false; }
 $("updGo").onclick = () => location.reload();
 $("updLater").onclick = () => { $("updBar").hidden = true; };
+
+/* the map style switch sat on top of creek cards: tuck it away while a card is open */
+map.on("popupopen", () => document.getElementById("map").classList.add("popopen"));
+map.on("popupclose", () => document.getElementById("map").classList.remove("popopen"));

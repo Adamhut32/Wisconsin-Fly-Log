@@ -49,6 +49,7 @@
       <div class="crumb">
         <div class="search"><svg><use href="#i-search"/></svg><input id="q" type="search" placeholder="Find a creek or lake" autocomplete="off" aria-label="Find a creek or lake"><ul id="qres" hidden></ul></div>
         <button class="btn" id="backBtn" type="button" hidden><svg><use href="#i-back"/></svg>All of Wisconsin</button>
+        <div class="personbar" id="personBar" hidden></div>
       </div>
       <div class="pickbar" id="pickbar" hidden><span>Tap the map to place it</span><button id="pickCancel" type="button">Cancel</button></div>
       <div class="legend" id="legend">
@@ -187,6 +188,7 @@
           <button type="button" data-v="county" aria-pressed="true">County only</button>
           <button type="button" data-v="private" aria-pressed="false">Nothing</button>
         </div>
+        <div id="shareRow" class="sharerow" hidden></div>
       </div>
       <span class="hint" id="formErr" role="alert"></span>
       <div class="actions">

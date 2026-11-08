@@ -14,12 +14,12 @@ function renderBadges(){
 const markerIndex = {};
 function renderMarkers(){
   markerLayer.clearLayers(); friendLayer.clearLayers();
-  for(const s of spots){
+  for(const s of (mapPerson ? [] : spots)){
     const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot ${esc(s.status)}"></div>`, iconSize:[0,0] }), riseOnHover:true, title:s.name||"Spot" });
     m.bindPopup(() => spotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });
     markerLayer.addLayer(m); markerIndex["s:"+s.id] = m;
   }
-  for(const c of catches){
+  for(const c of (mapPerson ? [] : catches)){
     if(c.lat == null) continue;
     const url = photoSrc(c.photo_path);
     const bg = url ? `style="background-image:url('${url}')"` : "";
@@ -29,20 +29,27 @@ function renderMarkers(){
     markerLayer.addLayer(m); markerIndex["c:"+c.id] = m;
   }
   for(const c of friendCatches){
-    if(c.lat == null) continue;
+    if(c.lat == null || (mapPerson && c.user_id !== mapPerson)) continue;
     const first = (c.display_name || "Friend").split(" ")[0];
-    const html = `<div class="mk-fish friend">${icon("i-fish")}<span class="mk-name">${esc(first)}</span></div>`;
+    const url = photoSrc(c.photo_path);
+    const html = `<div class="mk-fish friend${url ? " ph" : ""}" ${url ? `style="background-image:url('${url}')"` : ""}>${url ? "" : icon("i-fish")}${fishOf(c)>1?`<span class="n">${fishOf(c)}</span>`:""}${mapPerson ? "" : `<span class="mk-name">${esc(first)}</span>`}</div>`;
     const m = L.marker([c.lat,c.lng], { icon:L.divIcon({ className:"", html, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:300, title:`${c.display_name}: ${c.species||"Catch"}` });
     m.bindPopup(() => friendCatchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
     friendLayer.addLayer(m); markerIndex["f:"+c.id] = m;
   }
-  $("legend").classList.toggle("friends-on", showFriends && friendCatches.some(c => c.lat != null));
+  for(const s of friendSpots){
+    if(s.lat == null || (mapPerson ? s.user_id !== mapPerson : !showFriends)) continue;
+    const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot friend ${esc(s.status || "")}"></div>`, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:200, title:`${s.display_name}: ${s.name || "Spot"}` });
+    m.bindPopup(() => friendSpotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });
+    friendLayer.addLayer(m); markerIndex["fs:"+s.id] = m;
+  }
+  $("legend").classList.toggle("friends-on", !!mapPerson || (showFriends && (friendCatches.some(c => c.lat != null) || friendSpots.some(s => s.lat != null))));
 }
 function updateZoomLayers(){
   const z = map.getZoom();
   const detail = z >= DETAIL_ZOOM;
   const want = (l, on) => { if(on && !map.hasLayer(l)) map.addLayer(l); if(!on && map.hasLayer(l)) map.removeLayer(l); };
-  want(badgeLayer, !detail); want(markerLayer, detail); want(nameLayer, detail); want(friendLayer, detail && showFriends);
+  want(badgeLayer, !detail); want(markerLayer, detail); want(nameLayer, detail); want(friendLayer, detail && (showFriends || !!mapPerson));
   const showRegions = z < 8.6 && !currentCounty;
   [regionLayer, regionNames].forEach(l => want(l, showRegions));
   want(neighborNames, z < 8);
@@ -76,7 +83,7 @@ function spotPopup(s){
   const v = spotVisits(s);
   const bits = [s.water, s.trout_class, s.target ? "for " + s.target : ""].filter(Boolean).join(" · ");
   const div = popupShell("spot", s, `<h3>${esc(s.name||"Unnamed spot")}</h3>
-    <div class="row2" style="margin:2px 0 4px"><span class="pill ${esc(s.status)}">${STATUS[s.status]||"Want to try"}</span>${s.visibility==="private"?`<span class="pill priv">Private</span>`:""}</div>
+    <div class="row2" style="margin:2px 0 4px"><span class="pill ${esc(s.status)}">${STATUS[s.status]||"Want to try"}</span>${s.visibility==="private"?`<span class="pill priv">Private</span>`:s.share_with?.length?`<span class="pill" title="${esc(s.share_with.map(id => people[id]?.display_name || "Friend").join(", "))}">Shared with ${esc(s.share_with.length === 1 ? (people[s.share_with[0]]?.display_name || "1 friend") : s.share_with.length + " friends")}</span>`:""}</div>
     <div class="meta">${esc(bits)}</div>
     <div class="meta">${v.last ? `Last fished ${esc(fmtDate(v.last))} · ${v.fish} fish over ${v.days} day${v.days===1?"":"s"}` : "No catches logged here yet"}</div>
     <div data-season></div>
@@ -103,7 +110,7 @@ function friendCatchPopup(c){
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
     ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
-    ${c.lat!=null?`<div class="row"><a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div>`:""}`;
+    <div class="row">${c.lat!=null?`<a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
   return div;
 }
 
