@@ -2,11 +2,14 @@
 """Build Coulee.
 
   python3 build.py              join src/*.js into js/app.js (the live app everyone uses)
-  python3 build.py --beta N     build test version N into beta/ (founder and admins get it first)
+  python3 build.py --beta N [--note "text"]
+                                build test version N into beta/ (founder and admins get it first)
   python3 build.py --promote    copy the approved test version in beta/ over the live app
 
 The live app sits at the site root; the test copy sits in beta/ and shares the root's
 data/, vendor/ and icons/ folders. Promoting reverses exactly the path changes --beta makes.
+If data-next/water/hd/ exists (from the monthly DNR refresh), the test copy reads detailed creek
+lines from there, and promoting moves them over data/water/hd/ and bumps hdVersion.
 """
 import json, pathlib, re, shutil, sys
 
@@ -35,7 +38,10 @@ def build_live():
     (root / "js" / "app.js").write_text(js)
     print("built js/app.js from", ", ".join(names))
 
-def build_beta(n):
+NEXT_HD = root / "data-next" / "water" / "hd"
+LIVE_HD = root / "data" / "water" / "hd"
+
+def build_beta(n, note=None):
     live = json.loads((root / "build.json").read_text())["build"]
     if n <= live:
         sys.exit(f"test build {n} must be newer than the live build {live}")
@@ -47,6 +53,8 @@ def build_beta(n):
     cfg = (root / "js" / "config.js").read_text()
     cfg = re.sub(r"build: \d+", f"build: {n}", cfg)
     cfg += BETA_MARK + 'window.FLYLOG_CONFIG.channel = "beta";\nwindow.FLYLOG_CONFIG.dataBase = "../data/";\n'
+    if NEXT_HD.exists():  # try the refreshed DNR creek lines before everyone gets them
+        cfg += 'window.FLYLOG_CONFIG.hdBase = "../data-next/water/hd/";\nwindow.FLYLOG_CONFIG.hdVersion = "next";\n'
     (beta / "js" / "config.js").write_text(cfg)
     (beta / "index.html").write_text(to_beta((root / "index.html").read_text()))
     sw = (root / "sw.js").read_text()
@@ -56,7 +64,9 @@ def build_beta(n):
     man["name"] = "Coulee (test)"
     for i in man["icons"]: i["src"] = "../" + i["src"]
     (beta / "manifest.webmanifest").write_text(json.dumps(man, indent=2) + "\n")
-    (beta / "build.json").write_text(json.dumps({"build": n}) + "\n")
+    info = {"build": n}
+    if note: info["note"] = note
+    (beta / "build.json").write_text(json.dumps(info) + "\n")
     print(f"built test version {n} in beta/ (live is {live})")
 
 def promote():
@@ -72,11 +82,19 @@ def promote():
     (root / "index.html").write_text(from_beta((beta / "index.html").read_text()))
     sw = (beta / "sw.js").read_text().replace(f'const VERSION = "flylog-beta-v{n}";', f'const VERSION = "flylog-v{n}";')
     (root / "sw.js").write_text(from_beta(sw))
+    if NEXT_HD.exists():  # refreshed creek lines go live with this release
+        if LIVE_HD.exists(): shutil.rmtree(LIVE_HD)
+        shutil.move(str(NEXT_HD), str(LIVE_HD))
+        shutil.rmtree(root / "data-next")
+        cfg = (root / "js" / "config.js").read_text()
+        v = int((re.search(r'hdVersion: "(\d+)"', cfg) or [None, "1"])[1]) + 1
+        (root / "js" / "config.js").write_text(re.sub(r'hdVersion: "\d+"', f'hdVersion: "{v}"', cfg))
+        print(f"released the refreshed DNR creek lines (hdVersion {v})")
     (root / "build.json").write_text(json.dumps({"build": n}) + "\n")
     print(f"released build {n} to everyone (was {live})")
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    if a[:1] == ["--beta"]: build_beta(int(a[1]))
+    if a[:1] == ["--beta"]: build_beta(int(a[1]), a[3] if a[2:3] == ["--note"] else None)
     elif a[:1] == ["--promote"]: promote()
     else: build_live()

@@ -1,7 +1,7 @@
 
 /* ---------- test versions: the founder and admins get new builds first; the founder releases them ---------- */
 const CHANNEL = CFG.channel || "stable", BUILD = CFG.build || 0;
-let liveBuild = CHANNEL === "stable" ? BUILD : null, betaBuild = CHANNEL === "beta" ? BUILD : null, gateBuild = null;
+let liveBuild = CHANNEL === "stable" ? BUILD : null, betaBuild = CHANNEL === "beta" ? BUILD : null, gateBuild = null, betaNote = "";
 async function readBuild(base){ try{ const r = await fetch(base + "build.json?t=" + Date.now(), { cache:"no-store" }); return r.ok ? (await r.json()).build : null; }catch(e){ return null; } }
 const wantsBeta = () => isStaff() && lsGet("fl.useBeta", true);
 async function routeChannel(){
@@ -13,6 +13,7 @@ async function routeChannel(){
   if(CHANNEL === "beta" && !wantsBeta()){ location.replace("../" + location.hash); return; }
   if(CHANNEL === "beta"){
     liveBuild = await readBuild("../");
+    try{ betaNote = (await (await fetch("build.json?t=" + Date.now(), { cache:"no-store" })).json()).note || ""; }catch(e){}
     const { data } = await sb.from("release_gate").select("approved_build").eq("id", 1).maybeSingle(); gateBuild = data?.approved_build ?? null;
     $("testPill").hidden = false; $("testPill").textContent = `Test · build ${BUILD}`;
     if(tab === "me") renderLog();
@@ -24,6 +25,7 @@ function channelHtml(){
   const ahead = liveBuild != null && BUILD > liveBuild, approved = gateBuild != null && gateBuild >= BUILD;
   return `<h4><span>Test version</span><span>build ${BUILD}</span></h4><div class="card notice">
     <p style="margin:0 0 6px"><b>${ahead ? `You're trying build ${BUILD}. Everyone else has build ${liveBuild}.` : "This test version matches what everyone has."}</b></p>
+    ${ahead && betaNote ? `<p style="margin:0 0 6px">${esc(betaNote)}${/creek/i.test(betaNote) ? ". Zoom in close on a few creeks to check them." : ""}</p>` : ""}
     ${ahead ? (approved ? `<p class="muted" style="margin:0">Approved. It reaches everyone within about 15 minutes, and their app updates the next time they open it.</p>`
       : isFounder() ? `<p class="muted" style="margin:0 0 8px">Try it out. When you're happy, release it. Until then only you and admins have it.</p><div class="row2"><button class="btn sm ink" type="button" data-approve="${BUILD}">Release build ${BUILD} to everyone</button></div>`
       : `<p class="muted" style="margin:0">Only the founder can release it to everyone.</p>`) : ""}

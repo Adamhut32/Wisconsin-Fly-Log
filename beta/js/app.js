@@ -9,6 +9,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const dataUrl = p => (CFG.dataBase || "data/") + p + "?v=" + CFG.dataVersion;
+// detailed creek lines (DNR 24K) for close zoom; a test version may point these at the monthly refresh
+const hdUrl = id => (CFG.hdBase || (CFG.dataBase || "data/") + "water/hd/") + id + ".json?h=" + (CFG.hdVersion || "1");
+const offlineV = () => CFG.dataVersion + "." + (CFG.hdVersion || "1");
 const DETAIL_ZOOM = 9;
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
 const todayStr = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; };
@@ -526,7 +529,7 @@ async function updateHd(){
   try{
     const z = map.getZoom(), shown = [detailFor, ...areaOn].filter(Boolean);
     if(z >= HD_ZOOM) await Promise.all(shown.filter(id => !hdCache[id]).map(id =>
-      fetch(dataUrl("water/hd/" + id + ".json")).then(r => r.ok ? r.json() : null).then(d => { if(d) hdCache[id] = d; }).catch(() => {})));
+      fetch(hdUrl(id)).then(r => r.ok ? r.json() : null).then(d => { if(d) hdCache[id] = d; }).catch(() => {})));
     let changed = false;
     for(const id of [detailFor, ...areaOn].filter(Boolean)){
       const want = map.getZoom() >= HD_ZOOM && hdCache[id] ? "hd" : "base";
@@ -2604,13 +2607,15 @@ async function latestReleaseId(){ const { data } = await sb.from("releases").sel
 
 /* ---------- save counties for offline use ---------- */
 const OFFLINE_CACHE = "flylog-data";
-const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json")];
+const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json"), hdUrl(id)];
 let offlineSaved = null, offlineBusy = false;
 async function countSavedCounties(){
   if(!("caches" in window)) return null;
   try{ const c = await caches.open(OFFLINE_CACHE); const keys = new Set((await c.keys()).map(r => new URL(r.url).pathname + new URL(r.url).search));
     const base = new URL(dataUrl("water/x.json"), location.href).pathname.replace(/x\.json$/, "");
-    offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion)));
+    const hdKey = id => { const u = new URL(hdUrl(id), location.href); return u.pathname + u.search; };
+    // saved = the county's map file and its detailed creek lines are both on the phone
+    offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion) && keys.has(hdKey(id))));
   }catch(e){ offlineSaved = null; }
   return offlineSaved;
 }
@@ -2624,8 +2629,8 @@ async function saveCountiesOffline(ids, onProgress){
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();
-  const rec = lsGet("fl.offlineIds", { v:CFG.dataVersion, ids:[] });
-  lsSet("fl.offlineIds", { v:CFG.dataVersion, ids:[...new Set([...(rec.v === CFG.dataVersion ? rec.ids : []), ...ids])] });
+  const rec = lsGet("fl.offlineIds", { v:offlineV(), ids:[] });
+  lsSet("fl.offlineIds", { v:offlineV(), ids:[...new Set([...(rec.v === offlineV() ? rec.ids : []), ...ids])] });
   return failed;
 }
 async function offlineAction(which){
@@ -2648,11 +2653,11 @@ function offlineBlock(cid){
   if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations and public land work without signal.</p>`
     : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
   const n = offlineSaved.size, old = lsGet("fl.offlineIds", null);
-  const stale = old && old.v !== CFG.dataVersion && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
+  const stale = old && old.v !== offlineV() && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
   return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
     ${stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>The map data was updated.</b> ${stale} of your saved counties need a refresh to keep working offline.</p><div class="row2"><button class="btn sm ink" type="button" data-offline="refresh">Refresh saved counties</button></div></div>` : ""}
-    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically. Your catches still log offline and sync later.</p>
-    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 50 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
+    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
+    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 90 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
 }
 
@@ -3011,7 +3016,7 @@ $("camTest").addEventListener("change", async () => {
 
 /* ---------- test versions: the founder and admins get new builds first; the founder releases them ---------- */
 const CHANNEL = CFG.channel || "stable", BUILD = CFG.build || 0;
-let liveBuild = CHANNEL === "stable" ? BUILD : null, betaBuild = CHANNEL === "beta" ? BUILD : null, gateBuild = null;
+let liveBuild = CHANNEL === "stable" ? BUILD : null, betaBuild = CHANNEL === "beta" ? BUILD : null, gateBuild = null, betaNote = "";
 async function readBuild(base){ try{ const r = await fetch(base + "build.json?t=" + Date.now(), { cache:"no-store" }); return r.ok ? (await r.json()).build : null; }catch(e){ return null; } }
 const wantsBeta = () => isStaff() && lsGet("fl.useBeta", true);
 async function routeChannel(){
@@ -3023,6 +3028,7 @@ async function routeChannel(){
   if(CHANNEL === "beta" && !wantsBeta()){ location.replace("../" + location.hash); return; }
   if(CHANNEL === "beta"){
     liveBuild = await readBuild("../");
+    try{ betaNote = (await (await fetch("build.json?t=" + Date.now(), { cache:"no-store" })).json()).note || ""; }catch(e){}
     const { data } = await sb.from("release_gate").select("approved_build").eq("id", 1).maybeSingle(); gateBuild = data?.approved_build ?? null;
     $("testPill").hidden = false; $("testPill").textContent = `Test · build ${BUILD}`;
     if(tab === "me") renderLog();
@@ -3034,6 +3040,7 @@ function channelHtml(){
   const ahead = liveBuild != null && BUILD > liveBuild, approved = gateBuild != null && gateBuild >= BUILD;
   return `<h4><span>Test version</span><span>build ${BUILD}</span></h4><div class="card notice">
     <p style="margin:0 0 6px"><b>${ahead ? `You're trying build ${BUILD}. Everyone else has build ${liveBuild}.` : "This test version matches what everyone has."}</b></p>
+    ${ahead && betaNote ? `<p style="margin:0 0 6px">${esc(betaNote)}${/creek/i.test(betaNote) ? ". Zoom in close on a few creeks to check them." : ""}</p>` : ""}
     ${ahead ? (approved ? `<p class="muted" style="margin:0">Approved. It reaches everyone within about 15 minutes, and their app updates the next time they open it.</p>`
       : isFounder() ? `<p class="muted" style="margin:0 0 8px">Try it out. When you're happy, release it. Until then only you and admins have it.</p><div class="row2"><button class="btn sm ink" type="button" data-approve="${BUILD}">Release build ${BUILD} to everyone</button></div>`
       : `<p class="muted" style="margin:0">Only the founder can release it to everyone.</p>`) : ""}

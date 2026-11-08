@@ -93,7 +93,7 @@ async function updateHd(){
   try{
     const z = map.getZoom(), shown = [detailFor, ...areaOn].filter(Boolean);
     if(z >= HD_ZOOM) await Promise.all(shown.filter(id => !hdCache[id]).map(id =>
-      fetch(dataUrl("water/hd/" + id + ".json")).then(r => r.ok ? r.json() : null).then(d => { if(d) hdCache[id] = d; }).catch(() => {})));
+      fetch(hdUrl(id)).then(r => r.ok ? r.json() : null).then(d => { if(d) hdCache[id] = d; }).catch(() => {})));
     let changed = false;
     for(const id of [detailFor, ...areaOn].filter(Boolean)){
       const want = map.getZoom() >= HD_ZOOM && hdCache[id] ? "hd" : "base";

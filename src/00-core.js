@@ -9,6 +9,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const dataUrl = p => (CFG.dataBase || "data/") + p + "?v=" + CFG.dataVersion;
+// detailed creek lines (DNR 24K) for close zoom; a test version may point these at the monthly refresh
+const hdUrl = id => (CFG.hdBase || (CFG.dataBase || "data/") + "water/hd/") + id + ".json?h=" + (CFG.hdVersion || "1");
+const offlineV = () => CFG.dataVersion + "." + (CFG.hdVersion || "1");
 const DETAIL_ZOOM = 9;
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
 const todayStr = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; };

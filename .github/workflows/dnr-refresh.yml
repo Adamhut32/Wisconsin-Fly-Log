@@ -1,0 +1,51 @@
+# Monthly DNR creek refresh.
+# Downloads the Wisconsin DNR's detailed creek lines and rebuilds the per-county files. If any county
+# changed, the new files go to data-next/ and a test version is built that uses them. The founder and
+# admins get that test version automatically; nothing reaches everyone until the founder taps
+# "Release build N to everyone" (the release workflow then moves data-next/ into place).
+name: Monthly DNR creek refresh
+on:
+  schedule:
+    - cron: "41 8 3 * *"     # 3rd of each month, about 3:41 am Central
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/dnr-refresh.yml", "tools/dnr_refresh.py"]
+permissions:
+  contents: write
+  pages: write
+concurrency: release
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install "shapely>=2,<3"
+      - name: Download and compare DNR creek lines
+        id: dnr
+        run: python3 tools/dnr_refresh.py
+      - name: Build a test version with the new creek lines
+        if: steps.dnr.outputs.changed == '1'
+        run: |
+          live=$(python3 -c "import json; print(json.load(open('build.json'))['build'])")
+          test=$(python3 -c "import json,os; print(json.load(open('beta/build.json'))['build'] if os.path.exists('beta/build.json') else 0)")
+          n=$(( (live > test ? live : test) + 1 ))
+          python3 build.py --beta "$n" --note "${{ steps.dnr.outputs.note }}"
+          echo "msg=Test build $n: ${{ steps.dnr.outputs.note }}" >> "$GITHUB_ENV"
+      - name: Save
+        run: |
+          git config user.name "Coulee DNR refresh"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "${msg:-${{ steps.dnr.outputs.note }}}"
+          git pull --rebase
+          git push
+      - name: Publish the site
+        if: steps.dnr.outputs.changed == '1'
+        run: |
+          curl -sf -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages/builds" || echo "Pages will rebuild from the push"

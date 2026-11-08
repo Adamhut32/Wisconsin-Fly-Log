@@ -5,6 +5,7 @@ window.FLYLOG_CONFIG = {
   supabaseUrl: "https://acufuumrjbzbiktodojz.supabase.co",
   supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjdWZ1dW1yamJ6YmlrdG9kb2p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwNzYyMjEsImV4cCI6MjEwOTY1MjIyMX0.yioLflzuQ3rhUkTZWQWhOAjPXokV4lO_zNnLV-UM_7A",
   dataVersion: "1",
+  hdVersion: "1",
   // which copy of the app this is: "stable" for everyone, "beta" for the founder and admins to try first
   channel: "stable",
   build: 19,

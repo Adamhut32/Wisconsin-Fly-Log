@@ -54,13 +54,15 @@ async function latestReleaseId(){ const { data } = await sb.from("releases").sel
 
 /* ---------- save counties for offline use ---------- */
 const OFFLINE_CACHE = "flylog-data";
-const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json")];
+const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json"), hdUrl(id)];
 let offlineSaved = null, offlineBusy = false;
 async function countSavedCounties(){
   if(!("caches" in window)) return null;
   try{ const c = await caches.open(OFFLINE_CACHE); const keys = new Set((await c.keys()).map(r => new URL(r.url).pathname + new URL(r.url).search));
     const base = new URL(dataUrl("water/x.json"), location.href).pathname.replace(/x\.json$/, "");
-    offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion)));
+    const hdKey = id => { const u = new URL(hdUrl(id), location.href); return u.pathname + u.search; };
+    // saved = the county's map file and its detailed creek lines are both on the phone
+    offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion) && keys.has(hdKey(id))));
   }catch(e){ offlineSaved = null; }
   return offlineSaved;
 }
@@ -74,8 +76,8 @@ async function saveCountiesOffline(ids, onProgress){
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();
-  const rec = lsGet("fl.offlineIds", { v:CFG.dataVersion, ids:[] });
-  lsSet("fl.offlineIds", { v:CFG.dataVersion, ids:[...new Set([...(rec.v === CFG.dataVersion ? rec.ids : []), ...ids])] });
+  const rec = lsGet("fl.offlineIds", { v:offlineV(), ids:[] });
+  lsSet("fl.offlineIds", { v:offlineV(), ids:[...new Set([...(rec.v === offlineV() ? rec.ids : []), ...ids])] });
   return failed;
 }
 async function offlineAction(which){
@@ -98,10 +100,10 @@ function offlineBlock(cid){
   if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations and public land work without signal.</p>`
     : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
   const n = offlineSaved.size, old = lsGet("fl.offlineIds", null);
-  const stale = old && old.v !== CFG.dataVersion && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
+  const stale = old && old.v !== offlineV() && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
   return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
     ${stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>The map data was updated.</b> ${stale} of your saved counties need a refresh to keep working offline.</p><div class="row2"><button class="btn sm ink" type="button" data-offline="refresh">Refresh saved counties</button></div></div>` : ""}
-    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically. Your catches still log offline and sync later.</p>
-    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 50 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
+    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
+    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 90 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
 }
