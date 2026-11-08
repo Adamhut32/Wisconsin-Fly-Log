@@ -147,7 +147,7 @@ function renderMeTab(el){
     <div class="mehead">${avHtml(me?.id, profile?.display_name, "lg")}<div><h2 style="margin:0">${esc(profile?.display_name || "You")}</h2>
       <p class="muted" style="margin:2px 0 6px">${esc(me?.email || "")}</p>
       <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
-    ${isStaff() && (pendingCount || flagCount) ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${[pendingCount ? `${pendingCount} account${pendingCount===1?"":"s"} waiting for approval` : "", flagCount ? `${flagCount} catch flag${flagCount===1?"":"s"} to review` : ""].filter(Boolean).join(" · ")}</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
+    ${isStaff() && (pendingCount || flagCount || reportOpenCount) ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${[pendingCount ? `${pendingCount} account${pendingCount===1?"":"s"} waiting for approval` : "", reportOpenCount ? `${reportOpenCount} report${reportOpenCount===1?"":"s"}` : "", flagCount ? `${flagCount} catch flag${flagCount===1?"":"s"} to review` : ""].filter(Boolean).join(" · ")}</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>${titlePickerHtml()}
     <div class="row2" style="margin-top:14px">
@@ -166,7 +166,10 @@ function renderMeTab(el){
     ${!isStandalone ? `<h4><span>Put it on your home screen</span></h4><div class="card">${isIOS
       ? `<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p class="muted">It opens full screen like an app and keeps your counties for offline use.</p>`
       : `<p>In your browser's menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`}</div>` : ""}
+    ${notifyCardHtml()}
+    ${themeHtml()}
     ${offlineBlock(null)}
+    ${blockedHtml()}
     <h4><span>Your data</span></h4>
     <div class="card"><p>${catches.length} catches, ${spots.length} spots and ${trips.length} trips.</p><div class="row2"><button class="btn sm" type="button" data-a="export">Download a copy</button></div></div>
     <h4><span>Map data</span></h4>
@@ -195,6 +198,18 @@ const HELP = [
     "Pick the method for each catch: Fly, Spinning, Baitcasting, Ice fishing, Trolling or Other. The Fly box becomes Lure or bait for the others.",
     "Species covers trout, bass, walleye, pike, musky, panfish, salmon, catfish and more. Type any other species too.",
     "Catches outside Wisconsin are kept with their exact location in an Outside Wisconsin list on the Log tab. They'll file into the right state when Coulee adds it."]],
+  ["Notifications", [
+    "On iPhone, open Coulee from its Home Screen icon (iOS 16.4 or newer), then Me → Notifications → Turn on notifications, and tap Allow.",
+    "Choose which alerts you want: friend requests, messages, tournament invites and changes, fish logged for you, and forum replies. Turn them off any time in the same place, or in Settings → Notifications → Coulee."]],
+  ["Messages", [
+    "Message any friend from Friends → Messages, or the Message button next to a friend. Messages are for anglers 16 and older, friends only.",
+    "Messages are private. A reviewer only sees one if someone reports it. Block anyone from the chat; they can't message you after that."]],
+  ["Forums", [
+    "Friends → Forums has boards for regions, fly tying, gear, tournaments and help. Start a thread or reply; you'll get a notification when someone replies to a thread you're in.",
+    "Keep exact spots general unless they're public water. Report anything out of line and a moderator will look at it. Bad language is starred out automatically."]],
+  ["Map style", [
+    "Terrain shading shows coulees and ridges on the map; turn it off with Terrain in the legend. Zoom in close on a trout stream and the water drifts along it.",
+    "Me → Appearance switches between Auto, Light and Dark. Dark is easier on the eyes at dawn and dusk."]],
   ["Finding your catches", [
     "The Stats tab lists every catch. Search by creek, fly or notes, or tap Filters to narrow by species (or all trout, bass or panfish), method, county, water, trip, photo or length. The numbers above the list follow the same filters.",
     "Tap a creek in Best water to see just the fish from there. Download these saves the list as a spreadsheet file."]],
@@ -285,13 +300,14 @@ function renderCreator(el){
   const o = creatorData.o || {};
   if(!isFounder()){
     el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
-      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
+      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${reportQueueHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
     return;
   }
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Founder</div><h2>Founder tools</h2>
     <div class="row2" style="margin:0 0 6px"><button class="btn sm ink" type="button" data-me="analytics">Analytics</button></div>
     ${staffAccountsHtml()}
+    ${reportQueueHtml()}
     ${flagQueueHtml()}
     <h4><span>Overview</span></h4>
     <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
@@ -332,7 +348,7 @@ function renderCreator(el){
 }
 $("log").addEventListener("click", async ev => {
   const t = ev.target;
-  const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator"){ creatorData = null; flagList = null; } if(meView === "analytics") statsData = null; renderLog(); $("log").scrollTop = 0; return; }
+  const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator"){ creatorData = null; flagList = null; reportList = null; } if(meView === "analytics") statsData = null; renderLog(); $("log").scrollTop = 0; return; }
   const dr = t.closest("[data-delrel]"); if(dr){ await sb.from("releases").delete().eq("id", +dr.dataset.delrel); loadCreator(); return; }
   const da = t.closest("[data-delann]"); if(da){ await sb.from("announcements").delete().eq("id", da.dataset.delann); announcements = announcements.filter(a => a.id !== da.dataset.delann); renderLog(); return; }
   const ss = t.closest("[data-sugsave]"); if(ss){ const id = ss.dataset.sugsave;
@@ -353,6 +369,7 @@ $("log").addEventListener("click", async ev => {
   const a = ev.target.closest("[data-a]"); if(!a) return;
   if(a.dataset.a === "signout"){
     if(outbox.length){ toast("Some entries haven't synced yet. Get back online first so nothing is lost."); return; }
+    try{ const reg = await navigator.serviceWorker?.ready; const sub = await reg?.pushManager?.getSubscription(); if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); } }catch(e){}
     await sb.auth.signOut(); location.reload();
   }
   if(a.dataset.a === "export"){

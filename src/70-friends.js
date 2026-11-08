@@ -49,7 +49,7 @@ function renderFriendsTab(el){
   const incoming = friendships.filter(f => f.status === "pending" && f.addressee === me?.id);
   const outgoing = friendships.filter(f => f.status === "pending" && f.requester === me?.id);
   const other = f => people[f.requester === me?.id ? f.addressee : f.requester] || { display_name:"Someone" };
-  const views = [["feed","Feed"],["board","Leaderboard"],["people","People"],["find","Find anglers"]];
+  const views = [["feed","Feed"],["messages","Messages"],["forums","Forums"],["board","Leaderboard"],["people","People"],["find","Find anglers"]];
   let body = "";
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
@@ -73,36 +73,39 @@ function renderFriendsTab(el){
   } else {
     body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.requester, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
       <h4><span>Friends</span><span>${accepted.length}</span></h4>
-      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)}><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
       <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
       ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
       <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
       ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.addressee, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
   }
+  if(friendsView === "messages") body = messagesHtml();
+  if(friendsView === "forums") body = forumsHtml();
   if(friendsView === "find"){
     body = `<form id="findForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="findQ" placeholder="Search anglers by name" aria-label="Search anglers by name" value="${esc(findQ)}"><button class="btn" type="submit">Search</button></form>
       <p class="muted" style="margin:6px 0 10px">Follow anglers with public profiles to see the catches they share. Unlike friends, following doesn't need their OK, and they don't see your catches.</p>
       <div id="findResults">${findResults ? (findResults.length ? `<ul class="list">${findResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name)}<span class="t"><b class="wrap">${esc(p.display_name)}${titlePill(p.id)}${p.featured?` <span class="pill open">Featured</span>`:""}</b><small>${p.followers} follower${p.followers===1?"":"s"} · ${p.fish} shared fish${p.bio?` · ${esc(p.bio)}`:""}</small></span><span class="row2">${profile?.role==="creator"?`<button class="link" type="button" data-feature="${esc(p.id)}" data-on="${p.featured?"0":"1"}">${p.featured?"Unfeature":"Feature"}</button>`:""}<button class="btn sm ${p.following?"":"ink"}" type="button" data-${p.following?"unfollow":"follow"}="${esc(p.id)}">${p.following?"Following":"Follow"}</button></span></li>`).join("")}</ul>` : `<p class="muted">No public anglers match that name.</p>`) : `<p class="status">Loading anglers…</p>`}</div>`;
     if(!findResults) searchAnglers(findQ);
   }
-  el.innerHTML = `<div class="eyebrow">Friends</div><h2>Fishing friends</h2>
-    <div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
+  const social = friendsView === "messages" || friendsView === "forums";
+  el.innerHTML = `<div class="eyebrow">Friends</div><h2>${friendsView === "forums" ? "Forums" : friendsView === "messages" ? "Messages" : "Fishing friends"}</h2>
+    ${social ? "" : `<div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
-    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>
-    <div class="yearsel" style="margin-top:14px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}</button>`).join("")}</div>
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}
+    <div class="yearsel" style="margin-top:${social ? 6 : 14}px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
     <div style="margin-top:10px">${body}</div>`;
-  $("addFriendForm").addEventListener("submit", async e => {
+  if($("addFriendForm")) $("addFriendForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("friendMsg"); msg.className = "hint"; msg.textContent = "Sending…";
     try{ const n = await addFriend($("friendCode").value); msg.className = "hint ok"; msg.textContent = `Request sent to ${n}. They'll see it in their Friends tab.`; $("friendCode").value = ""; }
     catch(err){ msg.className = "hint bad"; msg.textContent = err.message || "Couldn't add that friend."; }
   });
   if($("findForm")) $("findForm").addEventListener("submit", e => { e.preventDefault(); findQ = $("findQ").value.trim(); findResults = null; renderLog(); });
-  $("showFriendsBox").addEventListener("change", e => { showFriends = e.target.checked; lsSet("fl.showFriends", showFriends); renderAll(); });
+  if($("showFriendsBox")) $("showFriendsBox").addEventListener("change", e => { showFriends = e.target.checked; lsSet("fl.showFriends", showFriends); renderAll(); });
 }
 $("log").addEventListener("click", async ev => {
   const t = ev.target;
-  const fv = t.closest("[data-fview]"); if(fv){ friendsView = fv.dataset.fview; renderLog(); return; }
+  const fv = t.closest("[data-fview]"); if(fv){ friendsView = fv.dataset.fview; if(friendsView === "messages"){ chatWith = null; chatOpenFor = null; convos = null; } if(friendsView === "forums"){ forumThread = null; forumNew = false; forumThreads = null; } renderLog(); return; }
   const pe = t.closest("[data-period]"); if(pe){ boardPeriod = pe.dataset.period; lsSet("fl.boardPeriod", boardPeriod); renderLog(); return; }
   const ac = t.closest("[data-accept]"); if(ac){ ac.disabled = true; try{ await answerRequest(ac.dataset.accept, true); toast("Friend added"); }catch(e){ toast("Couldn't accept. Try again."); } return; }
   const de = t.closest("[data-decline]"); if(de){ de.disabled = true; try{ await answerRequest(de.dataset.decline, false); }catch(e){ toast("Couldn't update. Try again."); } return; }

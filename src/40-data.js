@@ -173,7 +173,9 @@ async function loadAll(){
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
     if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
-    if(isStaff()){ loadStaffList(); loadFlags(); }
+    if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
+    loadBlocks(); loadConvos();
+    if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
     loadInbox(); touchActive(); setTimeout(backfillHashes, 4000); setTimeout(backfillWaters, 6000);
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){

@@ -176,7 +176,7 @@ function renderLog(){
   document.querySelectorAll(".tabs [data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
   const big = tab !== "map", mainEl = document.querySelector(".main");
   if(mainEl.classList.contains("panel-big") !== big){ mainEl.classList.toggle("panel-big", big); setTimeout(() => { map.invalidateSize(); drawLabels(); }, 300); }
-  $("reqDot").hidden = !friendships.some(f => f.status === "pending" && f.addressee === me?.id);
+  $("reqDot").hidden = !friendships.some(f => f.status === "pending" && f.addressee === me?.id) && !unreadTotal;
   $("tDot").hidden = !tournaments.some(t => t.my_status === "invited") && !notices.some(n => n.kind.startsWith("tourney") && !n.read);
   if(tab === "map") renderMapTab(el);
   else if(tab === "trips") renderTripsTab(el);

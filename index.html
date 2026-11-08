@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Coulee</title>
 <meta name="description" content="Fly fishing spots, catches and trips across Wisconsin's counties.">
+<script>try{var t=JSON.parse(localStorage.getItem("fl.theme")||'"auto"');if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 <meta name="theme-color" content="#FAF6EB" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1F1E19" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -55,6 +56,7 @@
         <span class="tl"><i style="background:var(--t1)"></i>Class I</span><span class="tl"><i style="background:var(--t2)"></i>Class II</span><span class="tl"><i style="background:var(--t3)"></i>Class III</span>
         <span class="al"><i class="sq" style="background:var(--pub)"></i>Public land</span>
         <button class="lgbtn" id="accessToggle" type="button" aria-pressed="true">Public land on</button>
+        <button class="lgbtn" id="terrainToggle" type="button" aria-pressed="true">Terrain on</button>
       </div>
       <button class="btn panelshow" id="panelShow" type="button" hidden>« Show panel</button>
       <div class="fab" id="fab">

@@ -429,3 +429,28 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .sfgrid .field{margin:0}
 .sfchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .sfchips .pill{cursor:pointer;font:inherit;font-size:12.5px}
+
+/* ---------- map polish ---------- */
+.leaflet-hill-pane{mix-blend-mode:multiply;opacity:.32}
+:root[data-theme="dark"] .leaflet-hill-pane{opacity:.5;mix-blend-mode:soft-light}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .leaflet-hill-pane{opacity:.5;mix-blend-mode:soft-light} }
+#map.imagery .leaflet-hill-pane{display:none}
+.flow{stroke-dasharray:1.5 13;animation:flow 1.6s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-14.5}}
+@media (prefers-reduced-motion:reduce){.flow{animation:none;display:none}}
+.legend .lgbtn+.lgbtn{margin-left:4px}
+
+/* ---------- messages and forums ---------- */
+.chathead{display:flex;align-items:center;gap:10px;margin:2px 0 8px}
+.chat{display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--paper-2)}
+.bub{max-width:82%;align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:8px 11px}
+.bub.mine{align-self:flex-end;background:var(--spot-soft);border-color:var(--spot);border-radius:14px 14px 4px 14px}
+.bub p{margin:0 0 4px;overflow-wrap:anywhere}.bub small{font-size:11.5px;color:var(--muted)}.bub small .link{font-size:11.5px}
+.chatin{display:flex;gap:8px;margin-top:8px;align-items:flex-end}.chatin textarea{flex:1;min-height:44px;max-height:140px}
+.fpost{border-top:1px solid var(--line);padding:10px 0}.fpost:first-of-type{border-top:0}
+.fpost.hid{opacity:.6}.fpost.blocked{padding:6px 0}
+.fmeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.fbody p{margin:0 0 8px;overflow-wrap:anywhere}
+.factions{margin:0;gap:4px 14px}.factions .link{font-size:13px}
+.card.rep blockquote{margin:6px 0;padding:6px 10px;border-left:3px solid var(--line);background:var(--paper-2);border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+.legend #terrainToggle{display:inline-block}.legend #terrainToggle[hidden]{display:none}

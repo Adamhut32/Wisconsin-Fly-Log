@@ -164,6 +164,7 @@ function setMapView(v){
   document.getElementById("map").classList.toggle("imagery", v !== "field");
   document.querySelectorAll(".viewsw [data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
   const c = $("viewCredit"); if(c) c.textContent = VIEWS[v].credit || "";
+  document.dispatchEvent(new Event("mapview"));
 }
 setMapView(mapView);
 

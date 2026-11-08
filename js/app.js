@@ -578,7 +578,7 @@ function renderLog(){
   document.querySelectorAll(".tabs [data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
   const big = tab !== "map", mainEl = document.querySelector(".main");
   if(mainEl.classList.contains("panel-big") !== big){ mainEl.classList.toggle("panel-big", big); setTimeout(() => { map.invalidateSize(); drawLabels(); }, 300); }
-  $("reqDot").hidden = !friendships.some(f => f.status === "pending" && f.addressee === me?.id);
+  $("reqDot").hidden = !friendships.some(f => f.status === "pending" && f.addressee === me?.id) && !unreadTotal;
   $("tDot").hidden = !tournaments.some(t => t.my_status === "invited") && !notices.some(n => n.kind.startsWith("tourney") && !n.read);
   if(tab === "map") renderMapTab(el);
   else if(tab === "trips") renderTripsTab(el);
@@ -1035,7 +1035,9 @@ async function loadAll(){
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
     if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
-    if(isStaff()){ loadStaffList(); loadFlags(); }
+    if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
+    loadBlocks(); loadConvos();
+    if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
     loadInbox(); touchActive(); setTimeout(backfillHashes, 4000); setTimeout(backfillWaters, 6000);
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
@@ -1509,7 +1511,7 @@ function renderFriendsTab(el){
   const incoming = friendships.filter(f => f.status === "pending" && f.addressee === me?.id);
   const outgoing = friendships.filter(f => f.status === "pending" && f.requester === me?.id);
   const other = f => people[f.requester === me?.id ? f.addressee : f.requester] || { display_name:"Someone" };
-  const views = [["feed","Feed"],["board","Leaderboard"],["people","People"],["find","Find anglers"]];
+  const views = [["feed","Feed"],["messages","Messages"],["forums","Forums"],["board","Leaderboard"],["people","People"],["find","Find anglers"]];
   let body = "";
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
@@ -1533,36 +1535,39 @@ function renderFriendsTab(el){
   } else {
     body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.requester, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
       <h4><span>Friends</span><span>${accepted.length}</span></h4>
-      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)}><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
       <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
       ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
       <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
       ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.addressee, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
   }
+  if(friendsView === "messages") body = messagesHtml();
+  if(friendsView === "forums") body = forumsHtml();
   if(friendsView === "find"){
     body = `<form id="findForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="findQ" placeholder="Search anglers by name" aria-label="Search anglers by name" value="${esc(findQ)}"><button class="btn" type="submit">Search</button></form>
       <p class="muted" style="margin:6px 0 10px">Follow anglers with public profiles to see the catches they share. Unlike friends, following doesn't need their OK, and they don't see your catches.</p>
       <div id="findResults">${findResults ? (findResults.length ? `<ul class="list">${findResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name)}<span class="t"><b class="wrap">${esc(p.display_name)}${titlePill(p.id)}${p.featured?` <span class="pill open">Featured</span>`:""}</b><small>${p.followers} follower${p.followers===1?"":"s"} · ${p.fish} shared fish${p.bio?` · ${esc(p.bio)}`:""}</small></span><span class="row2">${profile?.role==="creator"?`<button class="link" type="button" data-feature="${esc(p.id)}" data-on="${p.featured?"0":"1"}">${p.featured?"Unfeature":"Feature"}</button>`:""}<button class="btn sm ${p.following?"":"ink"}" type="button" data-${p.following?"unfollow":"follow"}="${esc(p.id)}">${p.following?"Following":"Follow"}</button></span></li>`).join("")}</ul>` : `<p class="muted">No public anglers match that name.</p>`) : `<p class="status">Loading anglers…</p>`}</div>`;
     if(!findResults) searchAnglers(findQ);
   }
-  el.innerHTML = `<div class="eyebrow">Friends</div><h2>Fishing friends</h2>
-    <div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
+  const social = friendsView === "messages" || friendsView === "forums";
+  el.innerHTML = `<div class="eyebrow">Friends</div><h2>${friendsView === "forums" ? "Forums" : friendsView === "messages" ? "Messages" : "Fishing friends"}</h2>
+    ${social ? "" : `<div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
-    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>
-    <div class="yearsel" style="margin-top:14px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}</button>`).join("")}</div>
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}
+    <div class="yearsel" style="margin-top:${social ? 6 : 14}px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
     <div style="margin-top:10px">${body}</div>`;
-  $("addFriendForm").addEventListener("submit", async e => {
+  if($("addFriendForm")) $("addFriendForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("friendMsg"); msg.className = "hint"; msg.textContent = "Sending…";
     try{ const n = await addFriend($("friendCode").value); msg.className = "hint ok"; msg.textContent = `Request sent to ${n}. They'll see it in their Friends tab.`; $("friendCode").value = ""; }
     catch(err){ msg.className = "hint bad"; msg.textContent = err.message || "Couldn't add that friend."; }
   });
   if($("findForm")) $("findForm").addEventListener("submit", e => { e.preventDefault(); findQ = $("findQ").value.trim(); findResults = null; renderLog(); });
-  $("showFriendsBox").addEventListener("change", e => { showFriends = e.target.checked; lsSet("fl.showFriends", showFriends); renderAll(); });
+  if($("showFriendsBox")) $("showFriendsBox").addEventListener("change", e => { showFriends = e.target.checked; lsSet("fl.showFriends", showFriends); renderAll(); });
 }
 $("log").addEventListener("click", async ev => {
   const t = ev.target;
-  const fv = t.closest("[data-fview]"); if(fv){ friendsView = fv.dataset.fview; renderLog(); return; }
+  const fv = t.closest("[data-fview]"); if(fv){ friendsView = fv.dataset.fview; if(friendsView === "messages"){ chatWith = null; chatOpenFor = null; convos = null; } if(friendsView === "forums"){ forumThread = null; forumNew = false; forumThreads = null; } renderLog(); return; }
   const pe = t.closest("[data-period]"); if(pe){ boardPeriod = pe.dataset.period; lsSet("fl.boardPeriod", boardPeriod); renderLog(); return; }
   const ac = t.closest("[data-accept]"); if(ac){ ac.disabled = true; try{ await answerRequest(ac.dataset.accept, true); toast("Friend added"); }catch(e){ toast("Couldn't accept. Try again."); } return; }
   const de = t.closest("[data-decline]"); if(de){ de.disabled = true; try{ await answerRequest(de.dataset.decline, false); }catch(e){ toast("Couldn't update. Try again."); } return; }
@@ -1731,7 +1736,7 @@ function renderMeTab(el){
     <div class="mehead">${avHtml(me?.id, profile?.display_name, "lg")}<div><h2 style="margin:0">${esc(profile?.display_name || "You")}</h2>
       <p class="muted" style="margin:2px 0 6px">${esc(me?.email || "")}</p>
       <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
-    ${isStaff() && (pendingCount || flagCount) ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${[pendingCount ? `${pendingCount} account${pendingCount===1?"":"s"} waiting for approval` : "", flagCount ? `${flagCount} catch flag${flagCount===1?"":"s"} to review` : ""].filter(Boolean).join(" · ")}</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
+    ${isStaff() && (pendingCount || flagCount || reportOpenCount) ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${[pendingCount ? `${pendingCount} account${pendingCount===1?"":"s"} waiting for approval` : "", reportOpenCount ? `${reportOpenCount} report${reportOpenCount===1?"":"s"}` : "", flagCount ? `${flagCount} catch flag${flagCount===1?"":"s"} to review` : ""].filter(Boolean).join(" · ")}</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>${titlePickerHtml()}
     <div class="row2" style="margin-top:14px">
@@ -1750,7 +1755,10 @@ function renderMeTab(el){
     ${!isStandalone ? `<h4><span>Put it on your home screen</span></h4><div class="card">${isIOS
       ? `<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p class="muted">It opens full screen like an app and keeps your counties for offline use.</p>`
       : `<p>In your browser's menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`}</div>` : ""}
+    ${notifyCardHtml()}
+    ${themeHtml()}
     ${offlineBlock(null)}
+    ${blockedHtml()}
     <h4><span>Your data</span></h4>
     <div class="card"><p>${catches.length} catches, ${spots.length} spots and ${trips.length} trips.</p><div class="row2"><button class="btn sm" type="button" data-a="export">Download a copy</button></div></div>
     <h4><span>Map data</span></h4>
@@ -1779,6 +1787,18 @@ const HELP = [
     "Pick the method for each catch: Fly, Spinning, Baitcasting, Ice fishing, Trolling or Other. The Fly box becomes Lure or bait for the others.",
     "Species covers trout, bass, walleye, pike, musky, panfish, salmon, catfish and more. Type any other species too.",
     "Catches outside Wisconsin are kept with their exact location in an Outside Wisconsin list on the Log tab. They'll file into the right state when Coulee adds it."]],
+  ["Notifications", [
+    "On iPhone, open Coulee from its Home Screen icon (iOS 16.4 or newer), then Me → Notifications → Turn on notifications, and tap Allow.",
+    "Choose which alerts you want: friend requests, messages, tournament invites and changes, fish logged for you, and forum replies. Turn them off any time in the same place, or in Settings → Notifications → Coulee."]],
+  ["Messages", [
+    "Message any friend from Friends → Messages, or the Message button next to a friend. Messages are for anglers 16 and older, friends only.",
+    "Messages are private. A reviewer only sees one if someone reports it. Block anyone from the chat; they can't message you after that."]],
+  ["Forums", [
+    "Friends → Forums has boards for regions, fly tying, gear, tournaments and help. Start a thread or reply; you'll get a notification when someone replies to a thread you're in.",
+    "Keep exact spots general unless they're public water. Report anything out of line and a moderator will look at it. Bad language is starred out automatically."]],
+  ["Map style", [
+    "Terrain shading shows coulees and ridges on the map; turn it off with Terrain in the legend. Zoom in close on a trout stream and the water drifts along it.",
+    "Me → Appearance switches between Auto, Light and Dark. Dark is easier on the eyes at dawn and dusk."]],
   ["Finding your catches", [
     "The Stats tab lists every catch. Search by creek, fly or notes, or tap Filters to narrow by species (or all trout, bass or panfish), method, county, water, trip, photo or length. The numbers above the list follow the same filters.",
     "Tap a creek in Best water to see just the fish from there. Download these saves the list as a spreadsheet file."]],
@@ -1869,13 +1889,14 @@ function renderCreator(el){
   const o = creatorData.o || {};
   if(!isFounder()){
     el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
-      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
+      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${reportQueueHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
     return;
   }
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Founder</div><h2>Founder tools</h2>
     <div class="row2" style="margin:0 0 6px"><button class="btn sm ink" type="button" data-me="analytics">Analytics</button></div>
     ${staffAccountsHtml()}
+    ${reportQueueHtml()}
     ${flagQueueHtml()}
     <h4><span>Overview</span></h4>
     <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
@@ -1916,7 +1937,7 @@ function renderCreator(el){
 }
 $("log").addEventListener("click", async ev => {
   const t = ev.target;
-  const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator"){ creatorData = null; flagList = null; } if(meView === "analytics") statsData = null; renderLog(); $("log").scrollTop = 0; return; }
+  const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator"){ creatorData = null; flagList = null; reportList = null; } if(meView === "analytics") statsData = null; renderLog(); $("log").scrollTop = 0; return; }
   const dr = t.closest("[data-delrel]"); if(dr){ await sb.from("releases").delete().eq("id", +dr.dataset.delrel); loadCreator(); return; }
   const da = t.closest("[data-delann]"); if(da){ await sb.from("announcements").delete().eq("id", da.dataset.delann); announcements = announcements.filter(a => a.id !== da.dataset.delann); renderLog(); return; }
   const ss = t.closest("[data-sugsave]"); if(ss){ const id = ss.dataset.sugsave;
@@ -1937,6 +1958,7 @@ $("log").addEventListener("click", async ev => {
   const a = ev.target.closest("[data-a]"); if(!a) return;
   if(a.dataset.a === "signout"){
     if(outbox.length){ toast("Some entries haven't synced yet. Get back online first so nothing is lost."); return; }
+    try{ const reg = await navigator.serviceWorker?.ready; const sub = await reg?.pushManager?.getSubscription(); if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); } }catch(e){}
     await sb.auth.signOut(); location.reload();
   }
   if(a.dataset.a === "export"){
@@ -2200,6 +2222,7 @@ function setMapView(v){
   document.getElementById("map").classList.toggle("imagery", v !== "field");
   document.querySelectorAll(".viewsw [data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
   const c = $("viewCredit"); if(c) c.textContent = VIEWS[v].credit || "";
+  document.dispatchEvent(new Event("mapview"));
 }
 setMapView(mapView);
 
@@ -2745,6 +2768,354 @@ function renderAnalytics(el){
 /* ---------- suggestion triage labels ---------- */
 const SUG_CAT = { bug:"Bug", idea:"Idea", question:"Question", other:"Other" };
 function triageHtml(s){ return s.category || s.triage_note ? `<p class="triage">${s.category ? `<span class="pill ${s.category === "bug" ? "want" : "scouted"}">${SUG_CAT[s.category]}</span> ` : ""}${s.triage_note ? esc(s.triage_note) : ""}</p>` : ""; }
+
+
+/* ---------- terrain shading: soft hillshade under the field map, so coulees and ridges show ---------- */
+pane("hill", 396, false);
+const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
+  { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:16, crossOrigin:true });
+let terrainOn = lsGet("fl.terrain", true);
+function syncTerrain(){
+  const on = terrainOn && mapView === "field";
+  if(on && !map.hasLayer(hillLayer)) hillLayer.addTo(map);
+  if(!on && map.hasLayer(hillLayer)) map.removeLayer(hillLayer);
+  const b = $("terrainToggle");
+  if(b){ b.hidden = mapView !== "field"; b.setAttribute("aria-pressed", String(terrainOn)); b.textContent = terrainOn ? "Terrain on" : "Terrain off"; }
+}
+$("terrainToggle").onclick = () => { terrainOn = !terrainOn; lsSet("fl.terrain", terrainOn); syncTerrain(); };
+document.addEventListener("mapview", syncTerrain);
+syncTerrain();
+
+/* ---------- moving water: a slow drift along trout streams when zoomed in close ---------- */
+pane("flow", 433, false);
+const flowRenderer = L.svg({ pane:"flow", padding:.3 });
+let flowLayer = null, flowKey = "";
+function updateFlow(){
+  const z = map.getZoom(), t = detailFor && troutCache[detailFor];
+  const want = !calm() && z >= 13 && t && mapView !== "sat";
+  const key = want ? `${detailFor}:${Math.round(z)}:${map.getBounds().pad(.3).toBBoxString()}` : "";
+  if(key === flowKey) return; flowKey = key;
+  if(flowLayer){ map.removeLayer(flowLayer); flowLayer = null; }
+  if(!want) return;
+  const b = map.getBounds().pad(.3), g = L.layerGroup();
+  for(const [, c, , , paths] of t.t){
+    if(!TROUT[c]) continue;
+    for(const pa of paths){
+      const ll = pa.map(q => [q[1], q[0]]);
+      if(ll.length < 2 || !ll.some(p => b.contains(p))) continue;
+      g.addLayer(L.polyline(ll, { renderer:flowRenderer, interactive:false, className:"flow", color:"#fff", weight:z >= 15 ? 2.4 : 1.8, opacity:.8, lineCap:"round" }));
+    }
+  }
+  flowLayer = g.addTo(map);
+}
+map.on("moveend zoomend", updateFlow);
+document.addEventListener("mapview", updateFlow);
+
+
+/* ================= Phase 4: notifications, forums, messages, reports ================= */
+const folks = {}; // id -> { display_name, avatar_path, title } for anyone we've shown
+async function loadFolks(ids){
+  ids = [...new Set(ids.filter(id => id && id !== me?.id && !folks[id]))];
+  if(!ids.length) return;
+  const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title").in("id", ids.slice(0, 300));
+  for(const p of data || []){ folks[p.id] = p; avatars[p.id] = p.avatar_path || ""; titles[p.id] = p.title || ""; }
+}
+const nameOf = id => id === me?.id ? (profile?.display_name || "You") : (folks[id]?.display_name || people[id]?.display_name || "Angler");
+const ago = ts => { const s = (Date.now() - new Date(ts)) / 1000; return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : s < 604800 ? `${Math.floor(s / 86400)}d` : fmtDate(String(ts).slice(0, 10)); };
+const paras = t => esc(t).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+
+/* ---------- blocking ---------- */
+let blocks = new Set(lsGet("fl.blocks", []));
+async function loadBlocks(){ const { data, error } = await sb.from("user_blocks").select("blocked"); if(!error){ blocks = new Set((data || []).map(b => b.blocked)); lsSet("fl.blocks", [...blocks]); } }
+async function setBlock(id, on){
+  const r = on ? await sb.from("user_blocks").insert({ blocker:me.id, blocked:id }) : await sb.from("user_blocks").delete().eq("blocker", me.id).eq("blocked", id);
+  if(r.error && !/duplicate/.test(r.error.message || "")){ toast("Couldn't update. Try again."); return; }
+  if(on) blocks.add(id); else blocks.delete(id); lsSet("fl.blocks", [...blocks]);
+  toast(on ? `Blocked ${nameOf(id)}. They can't message you, and their posts are tucked away.` : `Unblocked ${nameOf(id)}.`); renderLog();
+}
+
+/* ---------- reports ---------- */
+function reportForm(kind, ref, slot){
+  slot.innerHTML = `<div class="card" style="margin-top:6px"><div class="field"><label>What's wrong?</label>
+    <select data-repwhy><option>Rude or harassing</option><option>Hateful or offensive</option><option>Spam or ads</option><option>Sharing someone's private spot or info</option><option>Something else</option></select></div>
+    <input data-repmore maxlength="300" placeholder="Anything else the reviewer should know (optional)">
+    <div class="row2" style="margin-top:6px"><button class="btn sm ink" type="button" data-repgo="${esc(kind)}:${esc(ref)}">Send report</button><button class="link" type="button" data-repcancel>Cancel</button></div></div>`;
+}
+$("log").addEventListener("click", async e => {
+  const r = e.target.closest("[data-report]");
+  if(r){ const [kind, ref] = r.dataset.report.split(":"); const slot = r.closest("[data-rslot]")?.querySelector(".rslot") || r.parentElement.nextElementSibling; if(slot) reportForm(kind, ref, slot); return; }
+  if(e.target.closest("[data-repcancel]")){ e.target.closest(".card").remove(); return; }
+  const g = e.target.closest("[data-repgo]");
+  if(g){ const [kind, ref] = g.dataset.repgo.split(":"), card = g.closest(".card");
+    const reason = [card.querySelector("[data-repwhy]").value, card.querySelector("[data-repmore]").value.trim()].filter(Boolean).join(": ");
+    const { error } = await sb.from("reports").insert({ reporter:me.id, kind, ref, reason });
+    card.remove(); toast(error && !/duplicate/.test(error.message || "") ? "Couldn't send the report." : "Reported. A reviewer will take a look. Thanks."); }
+});
+
+/* ---------- push notifications ---------- */
+const PUSH_CATS = [["friends","Friend requests"],["messages","Messages"],["tourneys","Tournament invites and changes"],["fish","Fish logged for you, fair-play notices"],["forum","Replies to your forum threads"]];
+let pushStateV = null;
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function refreshPushState(){
+  let s;
+  if(!pushSupported()) s = isIOS && !isStandalone ? "ios-install" : "unsupported";
+  else if(Notification.permission === "denied") s = "denied";
+  else { try{ const reg = await navigator.serviceWorker.ready; s = (await reg.pushManager.getSubscription()) ? "on" : "off"; }catch(e){ s = "off"; } }
+  if(s !== pushStateV){ pushStateV = s; if(tab === "me" && meView === "main") renderLog(); }
+}
+async function enablePush(){
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm !== "granted"){ toast(perm === "denied" ? "Notifications are blocked. Turn them on in Settings → Notifications → Coulee." : "Notifications weren't turned on."); return refreshPushState(); }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64u(CFG.vapidPublic) });
+    const j = sub.toJSON();
+    await sb.from("push_subscriptions").delete().eq("endpoint", j.endpoint);
+    const { error } = await sb.from("push_subscriptions").insert({ user_id:me.id, endpoint:j.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth, ua:navigator.userAgent.slice(0, 120) });
+    if(error) throw error;
+    toast("Notifications are on. Sending a test…"); sb.rpc("push_test");
+  }catch(e){ console.error(e); toast("Couldn't turn on notifications. Try again."); }
+  refreshPushState();
+}
+async function disablePush(){
+  try{ const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+    if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); } }catch(e){}
+  toast("Notifications are off on this device."); refreshPushState();
+}
+function notifyCardHtml(){
+  if(pushStateV === null) refreshPushState();
+  const p = profile?.push_prefs || {};
+  const s = pushStateV;
+  const body = s === "ios-install" ? `<p>On iPhone, notifications work once Coulee is on your Home Screen: in Safari tap <b>Share</b> → <b>Add to Home Screen</b>, then open Coulee from that icon and come back here. Needs iOS 16.4 or newer.</p>`
+    : s === "unsupported" ? `<p>This browser can't show notifications from Coulee. On iPhone, open it from the Home Screen icon. On Android, use Chrome.</p>`
+    : s === "denied" ? `<p>Notifications are blocked for Coulee. Turn them on in <b>Settings → Notifications → Coulee</b> (iPhone) or your browser's site settings, then come back.</p>`
+    : s === "on" ? `<p class="muted" style="margin:0 0 6px">On for this device. Choose what you hear about:</p>
+        ${PUSH_CATS.map(([k, l]) => `<label class="check"><input type="checkbox" data-pushpref="${k}" ${p[k] !== false ? "checked" : ""}> ${esc(l)}</label>`).join("")}
+        ${isStaff() ? `<label class="check"><input type="checkbox" data-pushpref="staff" ${p.staff !== false ? "checked" : ""}> New accounts, reports and flagged photos</label>` : ""}
+        <div class="row2" style="margin-top:8px"><button class="btn sm" type="button" data-push="test">Send a test</button><button class="link" type="button" data-push="off">Turn off on this device</button></div>`
+    : `<p>Get a notification for friend requests, messages, tournament invites and more.</p><div class="row2"><button class="btn sm ink" type="button" data-push="on">Turn on notifications</button></div>`;
+  return `<h4><span>Notifications</span></h4><div class="card">${body}</div>`;
+}
+$("log").addEventListener("click", async e => {
+  const b = e.target.closest("[data-push]"); if(!b) return;
+  if(b.dataset.push === "on"){ b.disabled = true; await enablePush(); }
+  if(b.dataset.push === "off") await disablePush();
+  if(b.dataset.push === "test"){ const { error } = await sb.rpc("push_test"); toast(error ? "Couldn't send a test." : "Test sent. It should arrive in a few seconds."); }
+});
+$("log").addEventListener("change", async e => {
+  const k = e.target.dataset?.pushpref; if(!k) return;
+  const push_prefs = { ...(profile.push_prefs || {}), [k]:e.target.checked };
+  const { error } = await sb.from("profiles").update({ push_prefs }).eq("id", me.id);
+  if(error){ toast("Couldn't save."); e.target.checked = !e.target.checked; return; }
+  profile = { ...profile, push_prefs }; saveCache();
+});
+// a tapped notification opens the right screen
+function openDeepLink(h){
+  if(!h || !me) return false;
+  const [k, id] = h.replace(/^#/, "").split(":");
+  if(k === "friends"){ friendsView = "people"; setTab("friends"); }
+  else if(k === "tourney" && id){ setTab("tourney"); openTourney(id); }
+  else if(k === "log"){ setTab("map"); }
+  else if(k === "messages"){ friendsView = "messages"; chatWith = id || null; setTab("friends"); }
+  else if(k === "forum"){ friendsView = "forums"; forumThread = id || null; setTab("friends"); }
+  else if(k === "staff" && isStaff()){ setTab("me"); meView = "creator"; creatorData = null; renderLog(); }
+  else if(k === "me"){ setTab("me"); }
+  else return false;
+  return true;
+}
+navigator.serviceWorker?.addEventListener("message", e => { if(e.data?.type === "open") openDeepLink(e.data.url); });
+let pendingDeepLink = /^#(friends|tourney|log|messages|forum|staff|me)\b/.test(location.hash) ? location.hash : null;
+if(pendingDeepLink) history.replaceState(null, "", location.pathname + location.search);
+
+/* ---------- messages ---------- */
+let convos = null, chatWith = null, chatOpenFor = null, chatMsgs = [], chatBlock = null, chatPoll = null, unreadTotal = 0;
+async function loadConvos(){
+  const { data, error } = await sb.rpc("my_conversations"); if(error) return;
+  convos = (data || []).sort((a, b) => new Date(b.last_at) - new Date(a.last_at));
+  unreadTotal = convos.reduce((a, c) => a + +c.unread, 0);
+  convos.forEach(c => { folks[c.other] ||= { display_name:c.display_name, avatar_path:c.avatar_path }; avatars[c.other] = c.avatar_path || ""; });
+  try{ navigator.setAppBadge?.(unreadTotal || undefined); if(!unreadTotal) navigator.clearAppBadge?.(); }catch(e){}
+  if(tab === "friends") renderLog(); else $("reqDot").hidden = !(unreadTotal || friendships.some(f => f.status === "pending" && f.addressee === me?.id));
+}
+async function loadChat(other){
+  const { data, error } = await sb.from("messages").select("*").or(`and(from_user.eq.${me.id},to_user.eq.${other}),and(from_user.eq.${other},to_user.eq.${me.id})`).order("created_at", { ascending:true }).limit(300);
+  if(error) return;
+  const changed = JSON.stringify(data.map(m => m.id + (m.read_at || ""))) !== JSON.stringify(chatMsgs.map(m => m.id + (m.read_at || "")));
+  chatMsgs = data;
+  const unread = data.filter(m => m.to_user === me.id && !m.read_at).map(m => m.id);
+  if(unread.length){ await sb.from("messages").update({ read_at:new Date().toISOString() }).in("id", unread); loadConvos(); }
+  if(changed && chatWith === other && tab === "friends" && friendsView === "messages"){ renderLog(); const l = $("chatList"); if(l) l.scrollTop = l.scrollHeight; }
+}
+async function openChat(other){
+  chatWith = other; chatOpenFor = other; chatMsgs = []; chatBlock = undefined; renderLog();
+  await loadFolks([other]);
+  const { data } = await sb.rpc("can_message", { other }); chatBlock = data || null;
+  await loadChat(other);
+  clearInterval(chatPoll); chatPoll = setInterval(() => { if(chatWith === other && document.visibilityState === "visible" && tab === "friends" && friendsView === "messages") loadChat(other); }, 8000);
+}
+function messagesHtml(){
+  if(chatWith){
+    if(chatOpenFor !== chatWith){ setTimeout(() => openChat(chatWith), 0); }
+    const other = chatWith, blockedByMe = blocks.has(other);
+    return `<button class="link backlink" type="button" data-chatback>${icon("i-back")}All messages</button>
+      <div class="chathead">${avHtml(other, nameOf(other))}<b>${esc(nameOf(other))}</b>
+        <span class="row2" style="margin-left:auto"><button class="link" type="button" data-blk="${esc(other)}" data-on="${blockedByMe ? 0 : 1}">${blockedByMe ? "Unblock" : "Block"}</button></span></div>
+      <div class="chat" id="chatList">${chatMsgs.length ? chatMsgs.map(m => `<div class="bub ${m.from_user === me.id ? "mine" : ""}" data-rslot><div>${paras(m.body)}</div>
+          <small>${esc(ago(m.created_at))}${m.from_user === me.id && m.read_at ? " · Seen" : ""}${m.from_user !== me.id ? ` · <button class="link" type="button" data-report="message:${esc(m.id)}">Report</button>` : ` · <button class="link" type="button" data-unsend="${esc(m.id)}">Unsend</button>`}</small><div class="rslot"></div></div>`).join("")
+        : `<p class="muted" style="text-align:center;margin:20px 0">${chatBlock === undefined ? "Loading…" : "No messages yet. Say hi."}</p>`}</div>
+      ${chatBlock ? `<p class="note">${esc(chatBlock)}</p>` : `<form id="chatForm" class="chatin" novalidate><textarea id="chatBody" maxlength="2000" rows="1" placeholder="Message ${esc(nameOf(other))}"></textarea><button class="btn ink" type="submit">Send</button></form>`}
+      <p class="note">Messages are private between you two. A reviewer only sees a message if one of you reports it.</p>`;
+  }
+  if(!convos){ if(convos !== false){ convos = false; setTimeout(loadConvos, 0); } return `<p class="status">Loading messages…</p>`; }
+  const fr = friendsList().filter(f => !convos.some(c => c.other === f.id));
+  return `${convos.length ? `<ul class="list">${convos.map(c => `<li><button class="item" type="button" data-chat="${esc(c.other)}" style="grid-template-columns:36px 1fr auto">${avHtml(c.other, c.display_name)}
+      <span class="t"><b>${esc(c.display_name)}</b><small>${c.last_from_me ? "You: " : ""}${esc(c.last_body.slice(0, 70))}</small></span><span class="num">${+c.unread ? `<span class="pill fish">${c.unread}</span>` : `<small class="muted">${esc(ago(c.last_at))}</small>`}</span></button></li>`).join("")}</ul>`
+      : `<div class="empty"><b>No messages yet</b>Message any friend who's 16 or older. Pick one below.</div>`}
+    ${fr.length ? `<h4><span>Start a conversation</span></h4><div class="row2" style="flex-wrap:wrap">${fr.map(f => `<button class="btn sm" type="button" data-chat="${esc(f.id)}">${esc(f.name)}</button>`).join("")}</div>` : ""}
+    <p class="note">Messages are for friends only, and for anglers 16 and older (by the birth year on the account). Bad language is starred out.</p>`;
+}
+$("log").addEventListener("click", async e => {
+  const c = e.target.closest("[data-chat]"); if(c){ friendsView = "messages"; openChat(c.dataset.chat); return; }
+  if(e.target.closest("[data-chatback]")){ chatWith = null; chatOpenFor = null; clearInterval(chatPoll); convos = null; renderLog(); return; }
+  const bl = e.target.closest("[data-blk]"); if(bl){ await setBlock(bl.dataset.blk, bl.dataset.on === "1"); if(chatWith){ const { data } = await sb.rpc("can_message", { other:chatWith }); chatBlock = data || null; renderLog(); } return; }
+  const un = e.target.closest("[data-unsend]"); if(un){ const { error } = await sb.from("messages").delete().eq("id", un.dataset.unsend); if(!error){ chatMsgs = chatMsgs.filter(m => m.id !== un.dataset.unsend); renderLog(); } return; }
+});
+$("log").addEventListener("submit", async e => {
+  if(e.target.id !== "chatForm") return; e.preventDefault();
+  const body = $("chatBody").value.trim(); if(!body || !chatWith) return;
+  const btn = e.target.querySelector("button"); btn.disabled = true;
+  const { error } = await sb.from("messages").insert({ from_user:me.id, to_user:chatWith, body });
+  btn.disabled = false;
+  if(error){ toast("Couldn't send. Check your connection."); return; }
+  $("chatBody").value = ""; await loadChat(chatWith); const l = $("chatList"); if(l) l.scrollTop = l.scrollHeight;
+});
+$("log").addEventListener("keydown", e => { if(e.target.id === "chatBody" && e.key === "Enter" && !e.shiftKey && !isIOS){ e.preventDefault(); $("chatForm").requestSubmit(); } });
+
+/* ---------- forums ---------- */
+const BOARDS = { general:"General", driftless:"Driftless", northwoods:"Northwoods", central:"Central Sands", southeast:"Southeast & Madison", lakemichigan:"Lake Michigan & tributaries", flies:"Fly tying", gear:"Gear", tourneys:"Tournaments", help:"Help & feedback" };
+let forumBoard = lsGet("fl.board", ""), forumThreads = null, forumThread = null, forumPosts = null, forumNew = false;
+async function loadThreads(){
+  let q = sb.from("forum_threads").select("id, board, user_id, title, created_at, last_post_at, reply_count, locked, pinned, hidden").order("pinned", { ascending:false }).order("last_post_at", { ascending:false }).limit(60);
+  if(forumBoard) q = q.eq("board", forumBoard);
+  const { data, error } = await q; forumThreads = error ? [] : data || [];
+  await loadFolks(forumThreads.map(t => t.user_id)); if(tab === "friends" && friendsView === "forums") renderLog();
+}
+async function loadThread(id){
+  const [t, p] = await Promise.all([ sb.from("forum_threads").select("*").eq("id", id).maybeSingle(), sb.from("forum_posts").select("*").eq("thread_id", id).order("created_at", { ascending:true }).limit(500) ]);
+  forumPosts = { thread:t.data || { id, missing:true }, posts:p.data || [] };
+  await loadFolks([t.data?.user_id, ...forumPosts.posts.map(x => x.user_id)]);
+  if(tab === "friends" && friendsView === "forums") renderLog();
+}
+function postHtml(kind, x, isThread){
+  const mine = x.user_id === me?.id, hid = blocks.has(x.user_id);
+  if(hid) return `<div class="fpost blocked"><small class="muted">Post from someone you blocked. <button class="link" type="button" data-blk="${esc(x.user_id)}" data-on="0">Unblock</button></small></div>`;
+  return `<div class="fpost${x.hidden ? " hid" : ""}" data-rslot>
+    <div class="fmeta">${avHtml(x.user_id, nameOf(x.user_id), "sm")}<b>${esc(nameOf(x.user_id))}</b>${titlePill(x.user_id)}<small class="muted">${esc(ago(x.created_at))}${x.edited_at ? " · edited" : ""}${x.hidden ? " · hidden by a moderator" : ""}</small></div>
+    <div class="fbody" data-fbody="${esc(x.id)}">${paras(x.body)}</div>
+    <div class="row2 factions">${mine ? `<button class="link" type="button" data-fedit="${kind}:${esc(x.id)}">Edit</button>${!isThread || !x.reply_count ? `<button class="link danger" type="button" data-fdel="${kind}:${esc(x.id)}">Delete</button>` : ""}`
+      : `<button class="link" type="button" data-report="${kind}:${esc(x.id)}">Report</button><button class="link" type="button" data-blk="${esc(x.user_id)}" data-on="1">Block</button>`}
+      ${isStaff() && !mine ? `<button class="link danger" type="button" data-mod="${kind}:${esc(x.id)}:${x.hidden ? "unhide" : "hide"}">${x.hidden ? "Unhide" : "Hide"}</button>` : ""}</div><div class="rslot"></div></div>`;
+}
+function forumsHtml(){
+  if(forumThread){
+    if(!forumPosts || forumPosts.thread?.id !== forumThread){ forumPosts = { thread:{ id:forumThread }, posts:null }; setTimeout(() => loadThread(forumThread), 0); }
+    if(forumPosts.posts === null) return `<button class="link backlink" type="button" data-fback>${icon("i-back")}${esc(BOARDS[forumBoard] || "All boards")}</button><p class="status">Loading…</p>`;
+    const t = forumPosts.thread; if(!t || t.missing) return `<button class="link backlink" type="button" data-fback>${icon("i-back")}Forums</button><p class="muted">This thread was removed.</p>`;
+    return `<button class="link backlink" type="button" data-fback>${icon("i-back")}${esc(BOARDS[forumBoard] || "All boards")}</button>
+      <div class="eyebrow">${esc(BOARDS[t.board])}${t.pinned ? " · Pinned" : ""}${t.locked ? " · Locked" : ""}</div><h2 class="wrap">${esc(t.title)}</h2>
+      ${isStaff() ? `<div class="row2" style="margin:0 0 8px"><button class="btn sm" type="button" data-mod="thread:${esc(t.id)}:${t.pinned ? "unpin" : "pin"}">${t.pinned ? "Unpin" : "Pin"}</button><button class="btn sm" type="button" data-mod="thread:${esc(t.id)}:${t.locked ? "unlock" : "lock"}">${t.locked ? "Unlock" : "Lock"}</button><button class="btn sm" type="button" data-mod="thread:${esc(t.id)}:${t.hidden ? "unhide" : "hide"}">${t.hidden ? "Unhide thread" : "Hide thread"}</button></div>` : ""}
+      ${postHtml("thread", t, true)}
+      <h4><span>Replies</span><span>${forumPosts.posts?.length || 0}</span></h4>
+      ${(forumPosts.posts || []).map(p => postHtml("post", p, false)).join("") || `<p class="muted">No replies yet.</p>`}
+      ${t.locked ? `<p class="note">This thread is locked.</p>` : `<form id="replyForm" novalidate style="margin-top:10px"><textarea id="replyBody" maxlength="5000" placeholder="Write a reply"></textarea><span class="hint" id="replyMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Reply</button></div></form>`}
+      <p class="note">Be decent, and don't post someone else's spot without their OK. Bad language is starred out.</p>`;
+  }
+  if(forumNew) return `<button class="link backlink" type="button" data-fnewx>${icon("i-back")}Forums</button><h3 style="margin:4px 0 8px">New thread</h3>
+    <form id="threadForm" novalidate><div class="field"><label for="ftBoard">Board</label><select id="ftBoard">${Object.entries(BOARDS).map(([k, l]) => `<option value="${k}" ${forumBoard === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
+      <div class="field"><label for="ftTitle">Title</label><input id="ftTitle" maxlength="120" placeholder="Best BWO patterns for the Kinni?"></div>
+      <div class="field"><label for="ftBody">Post</label><textarea id="ftBody" maxlength="5000" style="min-height:140px" placeholder="What's on your mind? Keep exact spots general unless they're public water."></textarea></div>
+      <span class="hint" id="ftMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Post thread</button></div></form>`;
+  if(forumThreads === null){ forumThreads = false; setTimeout(loadThreads, 0); }
+  return `<div class="row2" style="justify-content:space-between;margin-bottom:8px"><select id="fBoard" aria-label="Board" style="width:auto;flex:1 1 auto"><option value="">All boards</option>${Object.entries(BOARDS).map(([k, l]) => `<option value="${k}" ${forumBoard === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select><button class="btn sm ink" type="button" data-fnew>${icon("i-plus")}New thread</button></div>
+    ${!forumThreads ? `<p class="status">Loading threads…</p>` : forumThreads.length ? `<ul class="list">${forumThreads.filter(t => !blocks.has(t.user_id)).map(t => `<li><button class="item" type="button" data-fthread="${esc(t.id)}" style="grid-template-columns:36px 1fr auto">${avHtml(t.user_id, nameOf(t.user_id))}
+      <span class="t"><b class="wrap">${t.pinned ? "📌 " : ""}${esc(t.title)}${t.locked ? " 🔒" : ""}${t.hidden ? ` <span class="pill priv">Hidden</span>` : ""}</b><small>${esc(nameOf(t.user_id))}${forumBoard ? "" : ` · ${esc(BOARDS[t.board])}`} · ${esc(ago(t.last_post_at))}</small></span>
+      <span class="num"><small class="muted">${t.reply_count} ${t.reply_count === 1 ? "reply" : "replies"}</small></span></button></li>`).join("")}</ul>`
+      : `<div class="empty"><b>No threads yet</b>Start one: a hatch report, a fly pattern, a gear question.</div>`}
+    <p class="note">Forums are open to every approved angler. Report anything out of line and a moderator will look at it.</p>`;
+}
+$("log").addEventListener("change", e => { if(e.target.id === "fBoard"){ forumBoard = e.target.value; lsSet("fl.board", forumBoard); forumThreads = null; renderLog(); } });
+$("log").addEventListener("click", async e => {
+  const t = e.target.closest("[data-fthread]"); if(t){ forumThread = t.dataset.fthread; forumPosts = null; renderLog(); $("log").scrollTop = 0; return; }
+  if(e.target.closest("[data-fback]")){ forumThread = null; forumPosts = null; forumThreads = null; renderLog(); return; }
+  if(e.target.closest("[data-fnew]")){ forumNew = true; renderLog(); return; }
+  if(e.target.closest("[data-fnewx]")){ forumNew = false; renderLog(); return; }
+  const ed = e.target.closest("[data-fedit]");
+  if(ed){ const [kind, id] = ed.dataset.fedit.split(":"), x = kind === "thread" ? forumPosts.thread : forumPosts.posts.find(p => p.id === id);
+    const box = $("log").querySelector(`[data-fbody="${id}"]`);
+    box.innerHTML = `<textarea data-feditbox maxlength="5000" style="min-height:100px">${esc(x.body)}</textarea><div class="row2"><button class="btn sm ink" type="button" data-fsave="${kind}:${esc(id)}">Save</button><button class="link" type="button" data-fcancel>Cancel</button></div>`; return; }
+  if(e.target.closest("[data-fcancel]")){ renderLog(); return; }
+  const sv = e.target.closest("[data-fsave]");
+  if(sv){ const [kind, id] = sv.dataset.fsave.split(":"), body = sv.closest(".fbody").querySelector("[data-feditbox]").value.trim(); if(!body) return;
+    const { error } = await sb.from(kind === "thread" ? "forum_threads" : "forum_posts").update({ body }).eq("id", id);
+    if(error){ toast("Couldn't save."); return; } loadThread(forumThread); return; }
+  const dl = e.target.closest("[data-fdel]");
+  if(dl){ const [kind, id] = dl.dataset.fdel.split(":");
+    if(dl.dataset.sure !== "1"){ dl.dataset.sure = "1"; dl.textContent = "Tap again to delete"; return; }
+    const { error } = await sb.from(kind === "thread" ? "forum_threads" : "forum_posts").delete().eq("id", id);
+    if(error){ toast("Couldn't delete."); return; }
+    if(kind === "thread"){ forumThread = null; forumPosts = null; forumThreads = null; renderLog(); } else loadThread(forumThread); return; }
+  const md = e.target.closest("[data-mod]");
+  if(md){ const [kind, ref, action] = md.dataset.mod.split(":");
+    const { error } = await sb.rpc("moderate", { kind, ref, action }); toast(error ? (error.message || "Couldn't do that.") : "Done.");
+    if(forumThread) loadThread(forumThread); if(md.closest(".rep")) { reportList = null; renderLog(); } return; }
+});
+$("log").addEventListener("submit", async e => {
+  if(e.target.id === "threadForm"){ e.preventDefault(); const msg = $("ftMsg"); msg.className = "hint bad";
+    const title = $("ftTitle").value.trim(), body = $("ftBody").value.trim(), board = $("ftBoard").value;
+    if(title.length < 3){ msg.textContent = "Give it a title."; return; } if(!body){ msg.textContent = "Write something."; return; }
+    const { data, error } = await sb.from("forum_threads").insert({ board, title, body, user_id:me.id }).select("id").single();
+    if(error){ msg.textContent = "Couldn't post it. Try again."; return; }
+    forumNew = false; forumBoard = board; lsSet("fl.board", board); forumThread = data.id; forumPosts = null; renderLog(); }
+  if(e.target.id === "replyForm"){ e.preventDefault(); const body = $("replyBody").value.trim(); if(!body) return;
+    const btn = e.target.querySelector("button[type=submit]"); btn.disabled = true;
+    const { error } = await sb.from("forum_posts").insert({ thread_id:forumThread, user_id:me.id, body });
+    btn.disabled = false; if(error){ $("replyMsg").className = "hint bad"; $("replyMsg").textContent = "Couldn't post. Try again."; return; }
+    loadThread(forumThread); }
+});
+
+/* ---------- reports queue for the founder and admins ---------- */
+let reportList = null, reportOpenCount = 0;
+async function loadReports(){
+  if(!isStaff()) return;
+  const { data, error } = await sb.rpc("report_queue"); if(error) return;
+  reportList = data || []; reportOpenCount = reportList.filter(r => r.status === "open").length;
+  $("meDot").hidden = !(pendingCount || flagCount || reportOpenCount);
+  if(tab === "me") renderLog();
+}
+function reportQueueHtml(){
+  if(!reportList){ if(reportList !== false){ reportList = false; setTimeout(loadReports, 0); } return `<h4><span>Reports</span></h4><p class="status">Loading…</p>`; }
+  const open = reportList.filter(r => r.status === "open");
+  const seen = new Set(), uniq = open.filter(r => { const k = r.kind + r.ref; if(seen.has(k)) return false; seen.add(k); return true; });
+  return `<h4><span>Reports</span><span>${uniq.length} open</span></h4>
+    ${uniq.length ? `<div class="stack">${uniq.map(r => `<div class="card rep"><p class="muted" style="font-size:12.5px;margin:0">${esc(r.kind === "post" ? "Forum reply" : r.kind === "thread" ? "Forum thread" : r.kind === "message" ? "Private message" : "Account")} by <b>${esc(r.author_name)}</b>${r.context ? ` · ${esc(r.context)}` : ""} · ${r.reports} report${+r.reports === 1 ? "" : "s"}</p>
+        <blockquote>${esc((r.content || "").slice(0, 600)) || "<i>(no text)</i>"}</blockquote><p class="muted" style="font-size:13px;margin:0">Reason: ${esc(r.reason || "not given")} · from ${esc(r.reporter_name)}</p>
+        <div class="row2">${r.kind !== "user" ? `<button class="btn sm ink" type="button" data-mod="${esc(r.kind)}:${esc(r.ref)}:hide">Hide it</button>` : ""}${r.kind === "thread" ? `<button class="btn sm" type="button" data-mod="thread:${esc(r.ref)}:lock">Lock</button>` : ""}<button class="btn sm" type="button" data-mod="${esc(r.kind)}:${esc(r.ref)}:close">Looks fine</button></div></div>`).join("")}</div>`
+      : `<p class="muted">No open reports.</p>`}`;
+}
+
+/* ---------- appearance ---------- */
+function themeHtml(){
+  const t = lsGet("fl.theme", "auto");
+  return `<h4><span>Appearance</span></h4><div class="seg" role="group" aria-label="Appearance" style="max-width:320px">${[["auto","Auto"],["light","Light"],["dark","Dark"]].map(([k, l]) => `<button type="button" class="ink" data-theme-set="${k}" aria-pressed="${t === k}">${l}</button>`).join("")}</div>
+    <p class="muted" style="margin:6px 0 0;font-size:13px">Dark is easier on the eyes at dawn and dusk. Auto follows your phone.</p>`;
+}
+function applyTheme(t){ if(t === "light" || t === "dark") document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+$("log").addEventListener("click", e => { const b = e.target.closest("[data-theme-set]"); if(!b) return; lsSet("fl.theme", b.dataset.themeSet); applyTheme(b.dataset.themeSet); renderLog(); });
+function blockedHtml(){
+  if(!blocks.size) return "";
+  return `<h4><span>Blocked</span><span>${blocks.size}</span></h4><ul class="list">${[...blocks].map(id => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(nameOf(id))}</b></span><button class="link" type="button" data-blk="${esc(id)}" data-on="0">Unblock</button></li>`).join("")}</ul>`;
+}
 
 
 /* ---------- which creek or lake a catch came from, worked out from its location ---------- */
