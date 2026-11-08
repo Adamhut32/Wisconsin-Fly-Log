@@ -48,7 +48,7 @@ async function loadStaffList(){
   if(error) return;
   staffList = data || [];
   if(!acctQ) pendingCount = staffList.filter(p => p.status === "pending").length;
-  $("meDot").hidden = !pendingCount;
+  $("meDot").hidden = !(pendingCount || flagCount);
   if(tab === "me") renderLog();
 }
 const ACCT_PILL = { pending:`<span class="pill want">Waiting</span>`, declined:`<span class="pill priv">Declined</span>` };

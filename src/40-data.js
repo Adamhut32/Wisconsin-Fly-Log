@@ -11,7 +11,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
@@ -173,8 +173,8 @@ async function loadAll(){
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
     if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
-    if(isStaff()) loadStaffList();
-    loadInbox();
+    if(isStaff()){ loadStaffList(); loadFlags(); }
+    loadInbox(); touchActive(); setTimeout(backfillHashes, 4000);
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);

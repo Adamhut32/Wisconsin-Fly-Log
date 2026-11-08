@@ -37,7 +37,7 @@ function parseTiff(v, start){
 }
 
 /* ---------- catch / spot form ---------- */
-let photoDate = null;
+let photoDate = null, photoExif = null;
 let formKind = "catch", editing = null, photoFile = null, photoPreviewUrl = null, picking = false, pickMarker = null, tripTouched = false, visibility = "county";
 function setKind(k){
   formKind = k;
@@ -104,6 +104,7 @@ $("fPhoto").addEventListener("change", async () => {
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
   photoPreviewUrl = URL.createObjectURL(file);
   let ex = null; try{ ex = readExif(await file.arrayBuffer()); }catch(e){}
+  photoExif = ex;
   const found = [];
   if(ex && ex.lat != null){ $("fCoords").value = `${ex.lat.toFixed(5)}, ${ex.lng.toFixed(5)}`; coordHint(); found.push("location"); }
   if(ex && ex.date){ const m = ex.date.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m){ photoDate = `${m[1]}-${m[2]}-${m[3]}`; $("fDate").value = photoDate; $("fDate").dispatchEvent(new Event("change")); found.push("date"); } }
@@ -206,7 +207,9 @@ $("entryForm").addEventListener("submit", async ev => {
       rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
         fly:$("fFly").value.trim() || null, method:$("fMethod").value, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
-        photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null) };
+        photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
+        photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
+      if(blob){ try{ rec.photo_hash = await dhash(blob); }catch(e){ rec.photo_hash = null; } rec.photo_meta = photoMeta(photoExif, c); }
       if($("fCount").value === "") rec.count = 1;
     } else {
       table = "spots";

@@ -655,7 +655,7 @@ function parseTiff(v, start){
 }
 
 /* ---------- catch / spot form ---------- */
-let photoDate = null;
+let photoDate = null, photoExif = null;
 let formKind = "catch", editing = null, photoFile = null, photoPreviewUrl = null, picking = false, pickMarker = null, tripTouched = false, visibility = "county";
 function setKind(k){
   formKind = k;
@@ -722,6 +722,7 @@ $("fPhoto").addEventListener("change", async () => {
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
   photoPreviewUrl = URL.createObjectURL(file);
   let ex = null; try{ ex = readExif(await file.arrayBuffer()); }catch(e){}
+  photoExif = ex;
   const found = [];
   if(ex && ex.lat != null){ $("fCoords").value = `${ex.lat.toFixed(5)}, ${ex.lng.toFixed(5)}`; coordHint(); found.push("location"); }
   if(ex && ex.date){ const m = ex.date.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m){ photoDate = `${m[1]}-${m[2]}-${m[3]}`; $("fDate").value = photoDate; $("fDate").dispatchEvent(new Event("change")); found.push("date"); } }
@@ -824,7 +825,9 @@ $("entryForm").addEventListener("submit", async ev => {
       rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
         fly:$("fFly").value.trim() || null, method:$("fMethod").value, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
-        photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null) };
+        photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
+        photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
+      if(blob){ try{ rec.photo_hash = await dhash(blob); }catch(e){ rec.photo_hash = null; } rec.photo_meta = photoMeta(photoExif, c); }
       if($("fCount").value === "") rec.count = 1;
     } else {
       table = "spots";
@@ -865,7 +868,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
@@ -1027,8 +1030,8 @@ async function loadAll(){
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
     if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
-    if(isStaff()) loadStaffList();
-    loadInbox();
+    if(isStaff()){ loadStaffList(); loadFlags(); }
+    loadInbox(); touchActive(); setTimeout(backfillHashes, 4000);
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
@@ -1314,6 +1317,7 @@ async function openTourney(id){
   expandPanel(); tourneyOpen = id; tab = "tourney"; renderLog(); $("log").scrollTop = 0;
   const [b, p] = await Promise.all([ sb.rpc("tournament_board", { tid:id }), sb.rpc("tournament_people", { tid:id }) ]);
   tourneyBoard[id] = b.data || []; tourneyPeople[id] = p.data || [];
+  loadTourneyFlags(tournaments.find(x => x.id === id));
   if(tourneyOpen === id && tab === "tourney") renderLog();
 }
 function renderTourneyTab(el){
@@ -1354,7 +1358,7 @@ function renderTourney(el, t){
     <h4><span>${s === "finished" ? "Final standings" : "Standings"}</span><span>${SCORING[t.scoring]?.label}</span></h4>
     ${!board ? `<p class="status">Loading standings…</p>` : board.length ? `<div class="board"><ol>${board.map((r,i) => `<li class="${r.id===me?.id?"me":""}"><span class="r">${i+1}</span><span>${i===0&&s==="finished"?`<span class="pill open">Winner</span> `:""}${esc(r.name)}<small>${esc(r.sub)}</small></span><span class="v">${esc(r.txt)}</span></li>`).join("")}</ol></div>` : `<p class="muted">No entries yet.</p>`}
     ${rows && rows.length ? `<h4><span>Entries</span><span>${rows.length}</span></h4><div class="strip">${rows.filter(r => r.photo_path).map(r => `<button type="button" title="${esc(r.display_name)}: ${esc(r.species||"")} ${r.length_in?lenTxt(r.length_in):""}" style="background-image:url('${photoSrc(r.photo_path)}')" data-tphoto="${esc(r.catch_id)}"></button>`).join("")}</div>
-      <ul class="list">${rows.slice().sort((a,b)=>(b.caught_on||"").localeCompare(a.caught_on||"")).map(r => `<li class="item" style="cursor:default">${thumb(r)}<span class="t"><b>${esc(r.species||"Fish")}${r.length_in?` · ${lenTxt(r.length_in)}`:""}</b><small>${esc(r.display_name)} · ${esc(fmtDate(r.caught_on))} · ${esc(countyName(r.county))}</small></span><span class="num" data-rmslot>${r.user_id===me?.id && s!=="finished"?`<button class="link danger" type="button" data-twithdraw="${esc(r.catch_id)}">Remove</button>`:isOwner?`<button class="link danger" type="button" data-townerrm="${esc(r.catch_id)}">Remove</button>`:""}</span></li>`).join("")}</ul>` : ""}
+      <ul class="list">${rows.slice().sort((a,b)=>(b.caught_on||"").localeCompare(a.caught_on||"")).map(r => `<li class="item" style="cursor:default">${thumb(r)}<span class="t"><b>${esc(r.species||"Fish")}${r.length_in?` · ${lenTxt(r.length_in)}`:""}</b><small>${esc(r.display_name)} · ${esc(fmtDate(r.caught_on))} · ${esc(countyName(r.county))}${entryFlagHtml(t.id, r.catch_id)}</small></span><span class="num" data-rmslot>${r.user_id===me?.id && s!=="finished"?`<button class="link danger" type="button" data-twithdraw="${esc(r.catch_id)}">Remove</button>`:isOwner?`<button class="link danger" type="button" data-townerrm="${esc(r.catch_id)}">Remove</button>`:""}</span></li>`).join("")}</ul>` : ""}
     ${joined && s !== "finished" ? `<h4><span>Your catches during these dates</span></h4>${myCatches.length ? `<ul class="list">${myCatches.map(c => `<li class="item" style="cursor:default">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc(fmtDate(c.caught_on))}${c.photo_taken_on?"":" · photo has no date"}</small></span><span class="num">${entered.has(c.id)?`<span class="pill fished">Entered</span>`:`<button class="btn sm" type="button" data-tenter="${esc(c.id)}">Enter</button>`}</span></li>`).join("")}</ul><span class="hint" id="tenterMsg" role="alert"></span>` : `<p class="muted">Nothing logged during the tournament yet. Catches that fit the rules are entered when you log them.</p>`}` : ""}
     <h4><span>Anglers</span><span>${ppl.filter(p => p.status === "joined").length}</span></h4>
     <p style="margin:0">${ppl.map(p => `<span class="pill${p.status==="joined"?"":" priv"}" style="margin:0 4px 4px 0">${esc(p.display_name)}${p.status==="invited"?" (invited)":""}</span>`).join("") || `<span class="muted">Loading…</span>`}</p>
@@ -1621,12 +1625,13 @@ function renderMeTab(el){
   if(meView === "help") return renderHelp(el);
   if(meView === "suggest") return renderSuggest(el);
   if(meView === "creator" && isStaff()) return renderCreator(el);
+  if(meView === "analytics" && isFounder()) return renderAnalytics(el);
   const followers = follows.filter(f => f.direction === "follower").length;
   el.innerHTML = `<div class="eyebrow">Account${isFounder() ? ` · <span class="pill open">Founder</span>` : profile?.role === "admin" ? ` · <span class="pill scouted">Admin</span>` : ""}${profile?.verified ? ` · <span class="pill fished">Verified</span>` : ""}</div>
     <div class="mehead">${avHtml(me?.id, profile?.display_name, "lg")}<div><h2 style="margin:0">${esc(profile?.display_name || "You")}</h2>
       <p class="muted" style="margin:2px 0 6px">${esc(me?.email || "")}</p>
       <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
-    ${isStaff() && pendingCount ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${pendingCount} account${pendingCount===1?"":"s"} waiting for approval</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
+    ${isStaff() && (pendingCount || flagCount) ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${[pendingCount ? `${pendingCount} account${pendingCount===1?"":"s"} waiting for approval` : "", flagCount ? `${flagCount} catch flag${flagCount===1?"":"s"} to review` : ""].filter(Boolean).join(" · ")}</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>${titlePickerHtml()}
     <div class="row2" style="margin-top:14px">
@@ -1677,6 +1682,9 @@ const HELP = [
   ["Logging a friend's fish", [
     "In Log a catch, change Whose fish? to a friend. They get it in their Log tab and choose Add to my log or Not mine.",
     "It only counts for them once they accept it, so nobody can add fish to someone else's log."]],
+  ["Fair play", [
+    "Each new photo gets a fingerprint so the same photo can't be entered twice, even resized. Photos with no camera data, or whose date or place doesn't match the catch, are flagged for a person to look at.",
+    "Flags are hints, not proof, and nothing is hidden automatically. Only the founder and admins can hide a catch, and the angler gets a notice saying why. Coulee keeps only the distance and date gap from a photo, never the photo's own location."]],
   ["Titles", [
     "Earn titles like Bass Master, Brookie Hunter and Twenty-Incher as you log fish. See them all, with progress, in the Stats tab.",
     "Pick one to show next to your name in the Me tab."]],
@@ -1739,7 +1747,7 @@ function renderSuggest(el){
 let creatorData = null;
 function suggestionsInboxHtml(){
   return `<h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
-    ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
+    ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>${triageHtml(s)}
       <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
       <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
       <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button>${isFounder() ? `<button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button>` : ""}</div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}`;
@@ -1755,12 +1763,14 @@ function renderCreator(el){
   const o = creatorData.o || {};
   if(!isFounder()){
     el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
-      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${suggestionsInboxHtml()}`;
+      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
     return;
   }
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Founder</div><h2>Founder tools</h2>
+    <div class="row2" style="margin:0 0 6px"><button class="btn sm ink" type="button" data-me="analytics">Analytics</button></div>
     ${staffAccountsHtml()}
+    ${flagQueueHtml()}
     <h4><span>Overview</span></h4>
     <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
     <p class="muted" style="margin:0 0 6px">${o.public_anglers ?? 0} public profiles · ${o.catches ?? 0} catches · ${o.trips ?? 0} trips</p>
@@ -1800,7 +1810,7 @@ function renderCreator(el){
 }
 $("log").addEventListener("click", async ev => {
   const t = ev.target;
-  const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator") creatorData = null; renderLog(); $("log").scrollTop = 0; return; }
+  const mv = t.closest("[data-me]"); if(mv){ meView = mv.dataset.me; if(meView === "creator"){ creatorData = null; flagList = null; } if(meView === "analytics") statsData = null; renderLog(); $("log").scrollTop = 0; return; }
   const dr = t.closest("[data-delrel]"); if(dr){ await sb.from("releases").delete().eq("id", +dr.dataset.delrel); loadCreator(); return; }
   const da = t.closest("[data-delann]"); if(da){ await sb.from("announcements").delete().eq("id", da.dataset.delann); announcements = announcements.filter(a => a.id !== da.dataset.delann); renderLog(); return; }
   const ss = t.closest("[data-sugsave]"); if(ss){ const id = ss.dataset.sugsave;
@@ -1968,7 +1978,7 @@ async function loadStaffList(){
   if(error) return;
   staffList = data || [];
   if(!acctQ) pendingCount = staffList.filter(p => p.status === "pending").length;
-  $("meDot").hidden = !pendingCount;
+  $("meDot").hidden = !(pendingCount || flagCount);
   if(tab === "me") renderLog();
 }
 const ACCT_PILL = { pending:`<span class="pill want">Waiting</span>`, declined:`<span class="pill priv">Declined</span>` };
@@ -2303,7 +2313,7 @@ async function sendGift(rec, blob, friendId){
     if(up.error) throw up.error;
   }
   const catch_ = { species:rec.species, length_in:rec.length_in, count:rec.count, fly:rec.fly, method:rec.method, caught_on:rec.caught_on,
-    lat:rec.lat, lng:rec.lng, county:rec.county, notes:rec.notes, photo_taken_on:rec.photo_taken_on };
+    lat:rec.lat, lng:rec.lng, county:rec.county, notes:rec.notes, photo_taken_on:rec.photo_taken_on, photo_hash:rec.photo_hash, photo_meta:rec.photo_meta };
   const { error } = await sb.from("catch_gifts").insert({ from_user:me.id, to_user:friendId, catch:catch_, photo_path });
   if(error){ if(photo_path) sb.storage.from("photos").remove([photo_path]); throw error; }
 }
@@ -2495,6 +2505,140 @@ function outsideHtml(){
     ${Object.entries(by).sort((a, b) => b[1].length - a[1].length).map(([st, cs]) => `<p class="muted" style="margin:8px 0 4px;font-weight:700">${esc(st)}</p><ul class="list">${cs.sort(byDateDesc).map(itemCatch).join("")}</ul>`).join("")}
     <p class="note">These are saved with their exact location. When Coulee adds more states, they'll file into the right state and county on their own.</p>`;
 }
+
+
+/* ---------- photo fingerprints: a 64-bit "difference hash" that survives resizing and re-saving ---------- */
+async function dhash(blob){
+  let bmp; try{ bmp = await createImageBitmap(blob); }catch(e){ bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(blob); }); }
+  const cv = document.createElement("canvas"); cv.width = 9; cv.height = 8;
+  const g = cv.getContext("2d", { willReadFrequently:true }); g.drawImage(bmp, 0, 0, 9, 8);
+  const d = g.getImageData(0, 0, 9, 8).data, lum = i => d[i] * .299 + d[i + 1] * .587 + d[i + 2] * .114;
+  let bits = "";
+  for(let y = 0; y < 8; y++) for(let x = 0; x < 8; x++) bits += lum((y * 9 + x) * 4) > lum((y * 9 + x + 1) * 4) ? "1" : "0";
+  let hex = ""; for(let i = 0; i < 64; i += 4) hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
+  return hex;
+}
+const kmBetween = (a, b) => { const k = Math.PI / 180, dLat = (b.lat - a.lat) * k, dLng = (b.lng - a.lng) * k;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * k) * Math.cos(b.lat * k) * Math.sin(dLng / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
+// what the photo itself says, compared with what was logged (only distances and dates are kept, never the photo's coordinates)
+function photoMeta(ex, entry){
+  const gps = !!(ex && ex.lat != null), date = ex && ex.date ? (ex.date.match(/^(\d{4}):(\d{2}):(\d{2})/) || []).slice(1).join("-") || null : null;
+  return { has_exif: !!(gps || date), gps, photo_date: date,
+    km_from_entry: gps && entry ? Math.round(kmBetween({ lat:ex.lat, lng:ex.lng }, entry) * 10) / 10 : null };
+}
+// older photos get a fingerprint in the background, a few at a time
+let backfilling = false;
+async function backfillHashes(){
+  if(backfilling || !navigator.onLine || !me) return; backfilling = true;
+  try{
+    const todo = catches.filter(c => c.photo_path && !c.photo_hash && !c._pending && !pendingPhotoUrls[c.photo_path]).slice(0, 8);
+    for(const c of todo){
+      const { data, error } = await sb.storage.from("photos").download(c.photo_path); if(error || !data) continue;
+      const h = await dhash(data);
+      const u = await sb.from("catches").update({ photo_hash:h }).eq("id", c.id);
+      if(!u.error) c.photo_hash = h;
+    }
+    if(todo.length) saveCache();
+  }catch(e){ console.warn("fingerprints", e); } finally { backfilling = false; }
+}
+function touchActive(){
+  const d = todayStr(); if(lsGet("fl.active", "") === d) return;
+  sb.rpc("touch_active").then(({ error }) => { if(!error) lsSet("fl.active", d); });
+}
+
+/* ---------- review queue (founder and admins) ---------- */
+const FLAG_LABEL = { duplicate:"Same photo as another catch", no_camera_data:"No camera data", location_mismatch:"Photo taken elsewhere", date_mismatch:"Photo date doesn't match" };
+let flagList = null, flagCount = 0, flagShowAll = false;
+async function loadFlags(){
+  if(!isStaff()) return;
+  const { data, error } = await sb.rpc("flag_queue", { show: flagShowAll ? "all" : "open" });
+  if(error) return;
+  flagList = data || [];
+  if(!flagShowAll) flagCount = flagList.length;
+  $("meDot").hidden = !(pendingCount || flagCount);
+  if(tab === "me") renderLog();
+}
+function flagQueueHtml(){
+  if(!flagList){ loadFlags(); return `<h4><span>Fair play review</span></h4><p class="status">Loading…</p>`; }
+  const byCatch = {}; flagList.forEach(f => (byCatch[f.catch_id] ||= []).push(f));
+  const groups = Object.values(byCatch);
+  return `<h4><span>Fair play review</span><span>${flagCount} open</span></h4>
+    <p class="muted" style="margin:0 0 8px;font-size:13.5px">Flags are hints, not proof. Phones sometimes drop photo data, and friends sometimes share one photo. Look before you hide anything.</p>
+    <div class="row2" style="margin-bottom:8px"><label class="check" style="margin:0"><input type="checkbox" id="flagAll" ${flagShowAll ? "checked" : ""}> Show reviewed flags too</label></div>
+    ${groups.length ? `<div class="stack">${groups.map(fs => { const f = fs[0], open = fs.some(x => x.status === "open");
+      return `<div class="card flag${open ? "" : " done"}">
+        <p class="muted" style="font-size:12.5px;margin:0">${esc(f.display_name)} · ${esc(f.species || "Fish")}${f.length_in ? ` · ${lenTxt(f.length_in)}` : ""} · ${esc(fmtDate(f.caught_on))} · ${esc(countyName(f.county))}${f.tournaments?.length ? ` · <b>In ${esc(f.tournaments.join(", "))}</b>` : ""}</p>
+        <div class="flagpics">${f.photo_path ? `<figure><img src="${photoSrc(f.photo_path)}" alt="Flagged photo" loading="lazy"><figcaption>This catch</figcaption></figure>` : ""}
+          ${f.other_photo ? `<figure><img src="${photoSrc(f.other_photo)}" alt="Matching photo" loading="lazy"><figcaption>Match: ${esc(f.other_name || "")}</figcaption></figure>` : ""}</div>
+        <ul class="flagwhy">${fs.map(x => `<li><b>${esc(FLAG_LABEL[x.kind] || x.kind)}</b> ${esc(x.detail || "")}${x.status !== "open" ? ` <span class="pill ${x.status === "upheld" ? "priv" : "fished"}">${x.status === "upheld" ? "Hidden" : "Cleared"}</span>` : ""}</li>`).join("")}</ul>
+        ${open ? `<div class="row2"><button class="btn sm" type="button" data-flagok="${esc(f.id)}">Looks fine</button><button class="btn sm" type="button" data-flaghide="${esc(f.id)}">Hide this catch…</button></div><div data-flagslot="${esc(f.id)}"></div>` : ""}</div>`; }).join("")}</div>`
+      : `<p class="muted">Nothing to review. Every photo checks out.</p>`}`;
+}
+$("log").addEventListener("change", e => { if(e.target.id === "flagAll"){ flagShowAll = e.target.checked; flagList = null; renderLog(); } });
+$("log").addEventListener("click", async e => {
+  const ok = e.target.closest("[data-flagok]"), hide = e.target.closest("[data-flaghide]"), yes = e.target.closest("[data-flaghideyes]");
+  if(hide){ const slot = $("log").querySelector(`[data-flagslot="${hide.dataset.flaghide}"]`);
+    slot.innerHTML = `<div class="card" style="margin-top:8px"><div class="field"><label>Reason the angler will see</label><input data-flagnote maxlength="200" placeholder="Same photo as an earlier catch"></div>
+      <p class="muted" style="font-size:13px">Hiding removes it from feeds, leaderboards and tournaments. It stays in their own log, and they get a notice.</p>
+      <div class="row2"><button class="btn sm ink" type="button" data-flaghideyes="${esc(hide.dataset.flaghide)}">Hide catch</button></div></div>`; return; }
+  if(!ok && !yes) return;
+  const id = (ok || yes).dataset[ok ? "flagok" : "flaghideyes"]; (ok || yes).disabled = true;
+  const note = yes ? yes.closest(".card").querySelector("[data-flagnote]")?.value.trim() || null : null;
+  const { error } = await sb.rpc("review_flag", { fid:id, verdict: ok ? "cleared" : "upheld", note });
+  toast(error ? (error.message || "Couldn't save.") : ok ? "Cleared." : "Hidden. The angler was told.");
+  flagList = null; loadFlags();
+});
+
+/* ---------- tournament creators see flags on their entries ---------- */
+let tourneyFlags = {};
+async function loadTourneyFlags(t){
+  if(!t || !(t.owner === me?.id || isStaff())) return;
+  const { data, error } = await sb.rpc("tournament_flags", { tid:t.id });
+  if(error) return;
+  tourneyFlags[t.id] = {}; (data || []).forEach(f => (tourneyFlags[t.id][f.catch_id] ||= []).push(f));
+  if(tourneyOpen === t.id && tab === "tourney") renderLog();
+}
+function entryFlagHtml(tid, cid){
+  const fs = tourneyFlags[tid]?.[cid]; if(!fs || !fs.length) return "";
+  return ` <span class="pill flagpill" title="${esc(fs.map(f => (FLAG_LABEL[f.kind] || f.kind) + ": " + (f.detail || "")).join("\n"))}">⚑ ${esc(FLAG_LABEL[fs[0].kind] || "Flagged")}${fs.length > 1 ? ` +${fs.length - 1}` : ""}</span>`;
+}
+
+/* ---------- founder analytics: totals and trends only, never who did what ---------- */
+let statsData = null;
+async function loadFounderStats(){ const { data, error } = await sb.rpc("founder_stats"); statsData = error ? { error:true } : data; if(tab === "me" && meView === "analytics") renderLog(); }
+function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1 } = {}){
+  const W = 320, n = vals.length, bw = W / n, max = Math.max(1, ...vals);
+  return `<svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
+    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<rect x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(labels[i])}: ${v}</title></rect>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i * bw + bw / 2}" y="${h + 13}" text-anchor="middle">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>`;
+}
+function rankTable(rows, head){ return rows.length ? `<table class="tbl"><thead><tr><th>${head}</th><th class="n">Fish</th></tr></thead><tbody>${rows.map(([k, n]) => `<tr><td>${esc(k)}</td><td class="n">${n}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No data yet.</p>`; }
+function renderAnalytics(el){
+  const back = `<button class="link backlink" data-me="creator" type="button">${icon("i-back")}Founder tools</button><div class="eyebrow">Founder</div><h2>Analytics</h2>`;
+  if(!statsData){ el.innerHTML = back + `<p class="status">Counting…</p>`; loadFounderStats(); return; }
+  if(statsData.error){ el.innerHTML = back + `<p class="muted">Couldn't load analytics. Try again.</p>`; return; }
+  const s = statsData, a = s.accounts || {}, t = s.totals || {}, tn = s.tournaments || {};
+  const day = s.active_days || [], wk = s.signups_weeks || [], mo = s.catches_months || [], tm = s.tournament_months || [];
+  const md = d => { const x = new Date(d + "T12:00:00"); return `${x.getMonth() + 1}/${x.getDate()}`; }, mon = m => MON[+m.slice(5, 7) - 1];
+  el.innerHTML = back + `<p class="muted" style="margin:0 0 10px">Totals and trends only. Nothing here shows who did what or where anyone fishes.</p>
+    <div class="stats four"><div class="stat"><b>${a.approved ?? 0}</b><span>anglers</span></div><div class="stat"><b>${s.active_7 ?? 0}</b><span>active this week</span></div><div class="stat"><b>${s.active_30 ?? 0}</b><span>active this month</span></div><div class="stat"><b>${a.pending ?? 0}</b><span>waiting</span></div></div>
+    <div class="stats four"><div class="stat f"><b>${t.fish ?? 0}</b><span>fish logged</span></div><div class="stat"><b>${t.photos ?? 0}</b><span>photos</span></div><div class="stat"><b>${s.trips ?? 0}</b><span>trips</span></div><div class="stat"><b>${s.flags_open ?? 0}</b><span>open flags</span></div></div>
+    <h4><span>People opening the app</span><span>last 30 days</span></h4>${barsSvg(day.map(x => x[1]), day.map(x => md(x[0])), { every:5 })}
+    <h4><span>New accounts</span><span>by week</span></h4>${barsSvg(wk.map(x => x[1]), wk.map(x => md(x[0])), { every:2, color:"var(--friend)" })}
+    <h4><span>Fish caught</span><span>by month</span></h4>${barsSvg(mo.map(x => x[1]), mo.map(x => mon(x[0])), { color:"var(--fish)" })}
+    <h4><span>When catches get logged</span><span>hour of day</span></h4>${barsSvg(s.catch_hours || [], Array.from({ length:24 }, (_, h) => h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p"), { every:3 })}
+    <h4><span>Busiest days</span></h4>${barsSvg(s.catch_weekdays || [], ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"])}
+    <h4><span>Tournaments</span><span>${tn.total ?? 0} total</span></h4>
+    <p style="margin:0 0 6px">${tn.live ?? 0} live · ${tn.upcoming ?? 0} upcoming · ${tn.finished ?? 0} finished · ${tn.open ?? 0} open to everyone · ${tn.entries ?? 0} entries</p>
+    ${barsSvg(tm.map(x => x[1]), tm.map(x => mon(x[0])), { h:80, color:"var(--t2)" })}
+    <h4><span>Top species</span></h4>${rankTable(s.species || [], "Species")}
+    <h4><span>Methods</span></h4>${rankTable((s.methods || []).map(([m, n]) => [METHODS[m] || m, n]), "Method")}
+    <h4><span>Busiest counties</span></h4>${rankTable((s.counties || []).map(([c, n]) => [countyName(c), n]), "County")}
+    <p class="note">${a.public ?? 0} public profiles · ${a.with_picture ?? 0} with a picture · ${s.friendships ?? 0} friendships · ${s.spots ?? 0} spots · ${t.outside_wi ?? 0} catches outside Wisconsin. "Active" counts anyone who opened the app that day, once.</p>`;
+}
+
+/* ---------- suggestion triage labels ---------- */
+const SUG_CAT = { bug:"Bug", idea:"Idea", question:"Question", other:"Other" };
+function triageHtml(s){ return s.category || s.triage_note ? `<p class="triage">${s.category ? `<span class="pill ${s.category === "bug" ? "want" : "scouted"}">${SUG_CAT[s.category]}</span> ` : ""}${s.triage_note ? esc(s.triage_note) : ""}</p>` : ""; }
 
 
 /* ---------- sign in ---------- */
