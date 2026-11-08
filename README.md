@@ -13,5 +13,5 @@ Open it on your phone, sign in, and use **Share → Add to Home Screen** to inst
 - `src/*.js` is joined into `js/app.js` by `python3 build.py`. Edit `src/`, then rebuild.
 - Accounts, catches, trips and photos live in Supabase (row-level security keeps each
   angler's data private unless they share it with friends).
-- `data/` holds Wisconsin DNR hydrography, trout and public-land data, split by county.
+- `data/` holds Wisconsin DNR hydrography, trout and public-land data, split by county. `data/water/hd/` has the detailed DNR 24K creek lines (within ~3 m) that load when zoomed in to level 12+.
 - `sw.js` keeps the app and opened counties available offline.

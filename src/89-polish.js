@@ -20,14 +20,14 @@ pane("flow", 433, false);
 const flowRenderer = L.svg({ pane:"flow", padding:.5 });
 let flowLayer = null, flowKey = "";
 function updateFlow(){
-  const z = map.getZoom(), t = detailFor && troutCache[detailFor];
-  const want = !calm() && z >= 13 && t && mapView !== "sat";
-  const key = want ? `${detailFor}:${Math.round(z)}:${map.getBounds().pad(.3).toBBoxString()}` : "";
+  const z = map.getZoom(), ids = [detailFor, ...areaOn].filter(id => id && troutCache[id]);
+  const want = !calm() && z >= 13 && ids.length && mapView !== "sat";
+  const key = want ? `${ids.join(",")}:${Math.round(z)}:${map.getBounds().pad(.3).toBBoxString()}` : "";
   if(key === flowKey) return; flowKey = key;
   if(flowLayer){ map.removeLayer(flowLayer); flowLayer = null; }
   if(!want) return;
   const b = map.getBounds().pad(.3), g = L.layerGroup();
-  for(const [, c, , , paths] of t.t){
+  for(const [, c, , , paths] of ids.flatMap(id => troutCache[id].t)){
     if(!TROUT[c]) continue;
     for(const pa of paths){
       const ll = smoothPath(pa.map(q => [q[1], q[0]]));
@@ -39,3 +39,4 @@ function updateFlow(){
 }
 map.on("moveend zoomend", updateFlow);
 document.addEventListener("mapview", updateFlow);
+document.addEventListener("areachange", updateFlow);
