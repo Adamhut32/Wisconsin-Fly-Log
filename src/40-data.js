@@ -169,10 +169,12 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
-    if(profile && !profile.onboarded) openGuide(); else checkWhatsNew();
+    if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(isStaff()) loadStaffList();
+    loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
     if(loadState === "loading") loadState = navigator.onLine ? "ready" : "offline";

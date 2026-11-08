@@ -44,17 +44,20 @@ let meView = "main";
 function renderMeTab(el){
   if(meView === "help") return renderHelp(el);
   if(meView === "suggest") return renderSuggest(el);
-  if(meView === "creator" && profile?.role === "creator") return renderCreator(el);
+  if(meView === "creator" && isStaff()) return renderCreator(el);
   const followers = follows.filter(f => f.direction === "follower").length;
-  el.innerHTML = `<div class="eyebrow">Account${profile?.role === "creator" ? ` · <span class="pill open">Founder</span>` : ""}</div><h2>${esc(profile?.display_name || "You")}</h2>
-    <p class="muted" style="margin:0 0 12px">${esc(me?.email || "")}</p>
+  el.innerHTML = `<div class="eyebrow">Account${isFounder() ? ` · <span class="pill open">Founder</span>` : profile?.role === "admin" ? ` · <span class="pill scouted">Admin</span>` : ""}${profile?.verified ? ` · <span class="pill fished">Verified</span>` : ""}</div>
+    <div class="mehead">${avHtml(me?.id, profile?.display_name, "lg")}<div><h2 style="margin:0">${esc(profile?.display_name || "You")}</h2>
+      <p class="muted" style="margin:2px 0 6px">${esc(me?.email || "")}</p>
+      <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
+    ${isStaff() && pendingCount ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${pendingCount} account${pendingCount===1?"":"s"} waiting for approval</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>
     <div class="row2" style="margin-top:14px">
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
       <button class="btn sm" type="button" data-a="guide">Setup guide</button>
-      ${profile?.role === "creator" ? `<button class="btn sm ink" type="button" data-me="creator">Founder tools</button>` : ""}
+      ${isStaff() ? `<button class="btn sm ink" type="button" data-me="creator">${isFounder() ? "Founder tools" : "Admin tools"}</button>` : ""}
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
     <div class="card">
@@ -144,16 +147,31 @@ function renderSuggest(el){
   });
 }
 let creatorData = null;
+function suggestionsInboxHtml(){
+  return `<h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
+    ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
+      <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
+      <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
+      <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button>${isFounder() ? `<button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button>` : ""}</div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}`;
+}
 async function loadCreator(){
-  const [o, s, r] = await Promise.all([ sb.rpc("creator_overview"), sb.rpc("all_suggestions"), sb.from("releases").select("*").order("id", { ascending:false }).limit(10) ]);
+  const [o, s, r] = await Promise.all([ isFounder() ? sb.rpc("creator_overview") : { data:[] }, sb.rpc("all_suggestions"), sb.from("releases").select("*").order("id", { ascending:false }).limit(10) ]);
+  staffList = null;
   creatorData = { o: (o.data || [])[0] || null, s: s.data || [], r: r.data || [] };
   if(tab === "me" && meView === "creator") renderLog();
 }
 function renderCreator(el){
-  if(!creatorData){ el.innerHTML = `<p class="status">Loading creator tools…</p>`; loadCreator(); return; }
+  if(!creatorData){ el.innerHTML = `<p class="status">Loading tools…</p>`; loadCreator(); return; }
   const o = creatorData.o || {};
+  if(!isFounder()){
+    el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
+      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${suggestionsInboxHtml()}`;
+    return;
+  }
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Founder</div><h2>Founder tools</h2>
+    ${staffAccountsHtml()}
+    <h4><span>Overview</span></h4>
     <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
     <p class="muted" style="margin:0 0 6px">${o.public_anglers ?? 0} public profiles · ${o.catches ?? 0} catches · ${o.trips ?? 0} trips</p>
     <h4><span>Post an announcement</span></h4>
@@ -165,17 +183,15 @@ function renderCreator(el){
       <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
       <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
     ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
-    <h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
-    ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
-      <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
-      <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
-      <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button><button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button></div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}
+    ${suggestionsInboxHtml()}
     <h4><span>Other founder powers</span></h4>
     <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
       <li>Feature anglers from Friends → Find anglers. Featured anglers show first with a badge.</li>
       <li>Hide any shared catch from feeds and tournaments with Hide from feeds in the Friends feed.</li>
       <li>Make tournaments open to everyone, and delete any tournament.</li>
+      <li>Make someone an Admin or Verified from Accounts above. Admins can approve accounts and answer suggestions.</li>
     </ul>`;
+  if(!$("relForm")) return;
   $("relForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("relMsg"); msg.className = "hint bad";
     const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);

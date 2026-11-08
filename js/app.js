@@ -1005,10 +1005,12 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
-    if(profile && !profile.onboarded) openGuide(); else checkWhatsNew();
+    if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(isStaff()) loadStaffList();
+    loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
     if(loadState === "loading") loadState = navigator.onLine ? "ready" : "offline";
@@ -1428,6 +1430,7 @@ let friendsView = "feed", findQ = "", findResults = null;
 async function searchAnglers(q){
   const { data, error } = await sb.rpc("find_anglers", { q });
   findResults = error ? [] : (data || []); if(tab === "friends" && friendsView === "find") renderLog();
+  loadAvatars(findResults.map(p => p.id).filter(id => !(id in avatars)));
 }
 async function refreshFollows(){ const { data } = await sb.rpc("my_follows"); follows = data || []; const fc = await sb.rpc("friend_catches"); if(!fc.error) friendCatches = fc.data || []; renderAll(); }
 function inPeriod(d, p){
@@ -1476,7 +1479,7 @@ function renderFriendsTab(el){
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
     body = posts.length ? `<div class="feed">${posts.map(c => { const url = photoSrc(c.photo_path); return `<article class="post">${url?`<img class="ph" src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
-      <div class="pb"><span class="who">${esc(c.display_name)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
+      <div class="pb"><span class="who">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
       <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
       : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Share your friend code above, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
@@ -1493,18 +1496,18 @@ function renderFriendsTab(el){
       ${boardHtml("Most counties fished", b.counties, "", "No counties logged in this period.")}
       </div><p class="note">Boards count your catches and what friends share with you. Private catches don't count toward anyone else's view.</p>`;
   } else {
-    body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
+    body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.requester, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
       <h4><span>Friends</span><span>${accepted.length}</span></h4>
-      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(other(f).display_name)}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)}><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)}><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
       <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
-      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
+      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
       <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
-      ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
+      ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.addressee, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
   }
   if(friendsView === "find"){
     body = `<form id="findForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="findQ" placeholder="Search anglers by name" aria-label="Search anglers by name" value="${esc(findQ)}"><button class="btn" type="submit">Search</button></form>
       <p class="muted" style="margin:6px 0 10px">Follow anglers with public profiles to see the catches they share. Unlike friends, following doesn't need their OK, and they don't see your catches.</p>
-      <div id="findResults">${findResults ? (findResults.length ? `<ul class="list">${findResults.map(p => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(p.display_name)}${p.featured?` <span class="pill open">Featured</span>`:""}</b><small>${p.followers} follower${p.followers===1?"":"s"} · ${p.fish} shared fish${p.bio?` · ${esc(p.bio)}`:""}</small></span><span class="row2">${profile?.role==="creator"?`<button class="link" type="button" data-feature="${esc(p.id)}" data-on="${p.featured?"0":"1"}">${p.featured?"Unfeature":"Feature"}</button>`:""}<button class="btn sm ${p.following?"":"ink"}" type="button" data-${p.following?"unfollow":"follow"}="${esc(p.id)}">${p.following?"Following":"Follow"}</button></span></li>`).join("")}</ul>` : `<p class="muted">No public anglers match that name.</p>`) : `<p class="status">Loading anglers…</p>`}</div>`;
+      <div id="findResults">${findResults ? (findResults.length ? `<ul class="list">${findResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name)}<span class="t"><b class="wrap">${esc(p.display_name)}${p.featured?` <span class="pill open">Featured</span>`:""}</b><small>${p.followers} follower${p.followers===1?"":"s"} · ${p.fish} shared fish${p.bio?` · ${esc(p.bio)}`:""}</small></span><span class="row2">${profile?.role==="creator"?`<button class="link" type="button" data-feature="${esc(p.id)}" data-on="${p.featured?"0":"1"}">${p.featured?"Unfeature":"Feature"}</button>`:""}<button class="btn sm ${p.following?"":"ink"}" type="button" data-${p.following?"unfollow":"follow"}="${esc(p.id)}">${p.following?"Following":"Follow"}</button></span></li>`).join("")}</ul>` : `<p class="muted">No public anglers match that name.</p>`) : `<p class="status">Loading anglers…</p>`}</div>`;
     if(!findResults) searchAnglers(findQ);
   }
   el.innerHTML = `<div class="eyebrow">Friends</div><h2>Fishing friends</h2>
@@ -1538,7 +1541,7 @@ $("log").addEventListener("click", async ev => {
 });
 async function shareCode(){
   const url = location.origin + location.pathname;
-  const text = `Add me on Coulee, the Wisconsin fly fishing app. My friend code is ${profile?.friend_code}. Open ${url} on your phone, create an account, then enter the code in the Friends tab.`;
+  const text = `Add me on Coulee, the Wisconsin fly fishing app. My friend code is ${profile?.friend_code}. Open ${url} on your phone and create an account. Once you're approved, enter the code in the Friends tab.`;
   if(navigator.share){ try{ await navigator.share({ title:"Coulee", text, url }); return; }catch(e){ if(e.name === "AbortError") return; } }
   try{ await navigator.clipboard.writeText(text); toast("Invite copied. Paste it into a text to a friend."); }
   catch(e){ toast(`Your code is ${profile?.friend_code}`); }
@@ -1590,17 +1593,20 @@ let meView = "main";
 function renderMeTab(el){
   if(meView === "help") return renderHelp(el);
   if(meView === "suggest") return renderSuggest(el);
-  if(meView === "creator" && profile?.role === "creator") return renderCreator(el);
+  if(meView === "creator" && isStaff()) return renderCreator(el);
   const followers = follows.filter(f => f.direction === "follower").length;
-  el.innerHTML = `<div class="eyebrow">Account${profile?.role === "creator" ? ` · <span class="pill open">Founder</span>` : ""}</div><h2>${esc(profile?.display_name || "You")}</h2>
-    <p class="muted" style="margin:0 0 12px">${esc(me?.email || "")}</p>
+  el.innerHTML = `<div class="eyebrow">Account${isFounder() ? ` · <span class="pill open">Founder</span>` : profile?.role === "admin" ? ` · <span class="pill scouted">Admin</span>` : ""}${profile?.verified ? ` · <span class="pill fished">Verified</span>` : ""}</div>
+    <div class="mehead">${avHtml(me?.id, profile?.display_name, "lg")}<div><h2 style="margin:0">${esc(profile?.display_name || "You")}</h2>
+      <p class="muted" style="margin:2px 0 6px">${esc(me?.email || "")}</p>
+      <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
+    ${isStaff() && pendingCount ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${pendingCount} account${pendingCount===1?"":"s"} waiting for approval</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
     <span class="hint" id="nameMsg" role="alert"></span>
     <div class="row2" style="margin-top:14px">
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
       <button class="btn sm" type="button" data-a="guide">Setup guide</button>
-      ${profile?.role === "creator" ? `<button class="btn sm ink" type="button" data-me="creator">Founder tools</button>` : ""}
+      ${isStaff() ? `<button class="btn sm ink" type="button" data-me="creator">${isFounder() ? "Founder tools" : "Admin tools"}</button>` : ""}
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
     <div class="card">
@@ -1690,16 +1696,31 @@ function renderSuggest(el){
   });
 }
 let creatorData = null;
+function suggestionsInboxHtml(){
+  return `<h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
+    ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
+      <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
+      <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
+      <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button>${isFounder() ? `<button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button>` : ""}</div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}`;
+}
 async function loadCreator(){
-  const [o, s, r] = await Promise.all([ sb.rpc("creator_overview"), sb.rpc("all_suggestions"), sb.from("releases").select("*").order("id", { ascending:false }).limit(10) ]);
+  const [o, s, r] = await Promise.all([ isFounder() ? sb.rpc("creator_overview") : { data:[] }, sb.rpc("all_suggestions"), sb.from("releases").select("*").order("id", { ascending:false }).limit(10) ]);
+  staffList = null;
   creatorData = { o: (o.data || [])[0] || null, s: s.data || [], r: r.data || [] };
   if(tab === "me" && meView === "creator") renderLog();
 }
 function renderCreator(el){
-  if(!creatorData){ el.innerHTML = `<p class="status">Loading creator tools…</p>`; loadCreator(); return; }
+  if(!creatorData){ el.innerHTML = `<p class="status">Loading tools…</p>`; loadCreator(); return; }
   const o = creatorData.o || {};
+  if(!isFounder()){
+    el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
+      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${suggestionsInboxHtml()}`;
+    return;
+  }
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Founder</div><h2>Founder tools</h2>
+    ${staffAccountsHtml()}
+    <h4><span>Overview</span></h4>
     <div class="stats four"><div class="stat"><b>${o.anglers ?? "–"}</b><span>anglers</span></div><div class="stat f"><b>${o.fish ?? "–"}</b><span>fish logged</span></div><div class="stat"><b>${o.tournaments ?? "–"}</b><span>tournaments</span></div><div class="stat"><b>${o.open_suggestions ?? "–"}</b><span>new suggestions</span></div></div>
     <p class="muted" style="margin:0 0 6px">${o.public_anglers ?? 0} public profiles · ${o.catches ?? 0} catches · ${o.trips ?? 0} trips</p>
     <h4><span>Post an announcement</span></h4>
@@ -1711,17 +1732,15 @@ function renderCreator(el){
       <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
       <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
     ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
-    <h4><span>Suggestions inbox</span><span>${creatorData.s.length}</span></h4>
-    ${creatorData.s.length ? `<div class="stack">${creatorData.s.map(s => `<div class="card"><p class="muted" style="font-size:12.5px">${esc(s.display_name)} · ${esc(fmtDate(s.created_at.slice(0,10)))} · ${esc(s.kind)}</p><p>${esc(s.body)}</p>
-      <div class="row2"><select data-sugstatus="${esc(s.id)}" aria-label="Status" style="width:auto">${Object.entries(SUG_STATUS).map(([k,l]) => `<option value="${k}" ${s.status===k?"selected":""}>${l}</option>`).join("")}</select></div>
-      <textarea data-sugreply="${esc(s.id)}" placeholder="Reply (the sender sees this)" maxlength="1000">${esc(s.reply || "")}</textarea>
-      <div class="row2"><button class="btn sm" type="button" data-sugsave="${esc(s.id)}">Save reply</button><button class="link danger" type="button" data-sugdel="${esc(s.id)}">Delete</button></div></div>`).join("")}</div>` : `<p class="muted">No suggestions yet.</p>`}
+    ${suggestionsInboxHtml()}
     <h4><span>Other founder powers</span></h4>
     <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
       <li>Feature anglers from Friends → Find anglers. Featured anglers show first with a badge.</li>
       <li>Hide any shared catch from feeds and tournaments with Hide from feeds in the Friends feed.</li>
       <li>Make tournaments open to everyone, and delete any tournament.</li>
+      <li>Make someone an Admin or Verified from Accounts above. Admins can approve accounts and answer suggestions.</li>
     </ul>`;
+  if(!$("relForm")) return;
   $("relForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("relMsg"); msg.className = "hint bad";
     const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
@@ -1859,6 +1878,184 @@ async function goTo(r){
 }
 
 
+/* ---------- accounts: agreements, approval, staff roles ---------- */
+const TERMS_VERSION = 1;
+const thisYear = new Date().getFullYear();
+const isFounder = () => profile?.role === "creator";
+const isStaff = () => profile?.role === "creator" || (profile?.role === "admin" && profile?.status === "approved");
+function checkBirthYear(v){
+  const y = +String(v || "").trim();
+  if(!/^\d{4}$/.test(String(v || "").trim()) || y < 1900 || y > thisYear) return "Enter the year you were born, like 1990.";
+  if(y > thisYear - 13) return "Coulee is for people 13 and older.";
+  return null;
+}
+function accountState(){
+  if(!profile) return "ok";
+  if(profile.status === "pending" || profile.status === "declined") return profile.status;
+  if(profile.terms_version != null && profile.terms_version < TERMS_VERSION) return "terms";
+  return "ok";
+}
+function applyGate(){
+  const s = accountState();
+  $("gate").hidden = !(s === "pending" || s === "declined");
+  $("terms").hidden = s !== "terms";
+  if(s === "pending") $("gateBody").innerHTML = `<h2 style="margin:0 0 8px">You're on the list</h2><p>Thanks for signing up, ${esc(profile.display_name || "angler")}. Coulee is invite-only for now, so the founder approves each new account.</p><p class="muted">You'll get in as soon as you're approved. Tap Check again, or reopen the app later.</p>`;
+  if(s === "declined") $("gateBody").innerHTML = `<h2 style="margin:0 0 8px">This account isn't active</h2><p>This account hasn't been approved for Coulee. If you think that's a mistake, contact the person who invited you.</p>`;
+  if(s === "terms"){ $("tYearRow").hidden = !!profile.birth_year; $("termsMsg").textContent = ""; }
+  return s === "ok";
+}
+$("gateCheck").onclick = async () => { $("gateCheck").disabled = true; await loadAll(); $("gateCheck").disabled = false; if(accountState() === "pending") toast("Still waiting for approval."); };
+$("gateOut").onclick = $("termsOut").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+$("termsOk").onclick = async () => {
+  const msg = $("termsMsg"); msg.className = "hint bad";
+  const upd = { terms_version:TERMS_VERSION, terms_at:new Date().toISOString() };
+  if(!profile.birth_year){ const e = checkBirthYear($("tYear").value); if(e){ msg.textContent = e; $("tYear").focus(); return; } upd.birth_year = +$("tYear").value.trim(); }
+  if(!$("tAgree").checked || !$("tRegs").checked){ msg.textContent = "Check both boxes to continue."; return; }
+  $("termsOk").disabled = true;
+  const { error } = await sb.from("profiles").update(upd).eq("id", me.id);
+  $("termsOk").disabled = false;
+  if(error){ msg.textContent = /13/.test(error.message) ? "Coulee is for people 13 and older." : "Couldn't save. Check your connection and try again."; return; }
+  profile = { ...profile, ...upd }; saveCache();
+  if(applyGate()){ if(!profile.onboarded) openGuide(); else checkWhatsNew(); }
+};
+
+/* staff: pending accounts, approvals and roles */
+let staffList = null, pendingCount = 0, acctQ = "";
+async function loadStaffList(){
+  if(!isStaff()) return;
+  const { data, error } = await sb.rpc("staff_people", { q: acctQ });
+  if(error) return;
+  staffList = data || [];
+  if(!acctQ) pendingCount = staffList.filter(p => p.status === "pending").length;
+  $("meDot").hidden = !pendingCount;
+  if(tab === "me") renderLog();
+}
+const ACCT_PILL = { pending:`<span class="pill want">Waiting</span>`, declined:`<span class="pill priv">Declined</span>` };
+function staffAccountsHtml(){
+  if(!staffList){ loadStaffList(); return `<h4><span>Accounts</span></h4><p class="status">Loading accounts…</p>`; }
+  return `<h4><span>Accounts</span><span>${pendingCount} waiting</span></h4>
+    <form id="acctForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="acctQ" value="${esc(acctQ)}" placeholder="Search by name${isFounder() ? " or email" : ""}" aria-label="Search accounts"><button class="btn" type="submit">Search</button></form>
+    ${staffList.length ? `<div class="stack" style="margin-top:10px">${staffList.map(p => {
+      const roleCtl = isFounder() && p.role !== "creator" && p.status === "approved"
+        ? `<div class="row2"><select data-acctrole="${esc(p.id)}" aria-label="Role" style="width:auto"><option value="angler" ${p.role==="angler"?"selected":""}>Member</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select>
+           <label class="check" style="margin:0"><input type="checkbox" data-acctver="${esc(p.id)}" ${p.verified?"checked":""}> Verified</label>
+           <button class="btn sm" type="button" data-acctsave="${esc(p.id)}">Save</button></div>` : "";
+      const statusCtl = p.role === "creator" ? "" : p.status === "pending"
+        ? `<button class="btn sm ink" type="button" data-acctset="${esc(p.id)}" data-to="approved">Approve</button><button class="btn sm" type="button" data-acctset="${esc(p.id)}" data-to="declined">Decline</button>`
+        : p.status === "declined" ? `<button class="btn sm" type="button" data-acctset="${esc(p.id)}" data-to="approved">Approve</button>`
+        : (p.role !== "admin" || isFounder()) ? `<button class="link danger" type="button" data-acctset="${esc(p.id)}" data-to="declined">Remove access</button>` : "";
+      return `<div class="card acct"><div class="acct-h">${avHtml(p.id, p.display_name, "", p.avatar_path)}<span class="t"><b class="wrap">${esc(p.display_name)} ${p.role==="creator"?`<span class="pill open">Founder</span>`:p.role==="admin"?`<span class="pill scouted">Admin</span>`:""}${p.verified?` <span class="pill fished">Verified</span>`:""} ${ACCT_PILL[p.status]||""}</b>
+        <small>${p.email ? esc(p.email) + " · " : ""}joined ${esc(fmtDate(p.created_at.slice(0,10)))}</small></span></div>
+        ${statusCtl ? `<div class="row2">${statusCtl}</div>` : ""}${roleCtl}</div>`; }).join("")}</div>` : `<p class="muted">No accounts match.</p>`}
+    <p class="note">${isFounder() ? "Admins can approve accounts and read suggestions. They never see emails, private spots or exact locations. Verified adds a badge." : "You can approve new accounts and answer suggestions."}</p>`;
+}
+$("log").addEventListener("submit", e => { if(e.target.id === "acctForm"){ e.preventDefault(); acctQ = $("acctQ").value.trim(); staffList = null; renderLog(); } });
+$("log").addEventListener("click", async ev => {
+  const st = ev.target.closest("[data-acctset]");
+  if(st){ st.disabled = true;
+    const { error } = await sb.rpc("set_account_status", { uid: st.dataset.acctset, new_status: st.dataset.to });
+    toast(error ? (error.message || "Couldn't update.") : st.dataset.to === "approved" ? "Approved. They can use Coulee now." : "Access removed.");
+    await loadStaffList(); return; }
+  const sv = ev.target.closest("[data-acctsave]");
+  if(sv){ const id = sv.dataset.acctsave; sv.disabled = true;
+    const role = $("log").querySelector(`[data-acctrole="${id}"]`).value, ver = $("log").querySelector(`[data-acctver="${id}"]`).checked;
+    const { error } = await sb.rpc("set_account_role", { uid:id, new_role:role, is_verified:ver });
+    toast(error ? (error.message || "Couldn't save.") : "Saved."); await loadStaffList(); }
+});
+
+/* ---------- profile pictures ---------- */
+const AV_BASE = CFG.supabaseUrl + "/storage/v1/object/public/avatars/";
+let avatars = lsGet("fl.avatars", {});
+function avHtml(id, name, cls = "", path){
+  const p = path !== undefined ? path : id === me?.id ? profile?.avatar_path : (avatars[id] || people[id]?.avatar_path);
+  const ini = esc(((name || "?").trim()[0] || "?").toUpperCase());
+  return p ? `<span class="av ${cls}"><img src="${AV_BASE}${p.split("/").map(encodeURIComponent).join("/")}" alt="" loading="lazy" onerror="this.remove()"></span>` : `<span class="av ${cls}" aria-hidden="true">${ini}</span>`;
+}
+async function loadAvatars(ids){
+  ids = [...new Set(ids.filter(id => id && id !== me?.id))];
+  if(!ids.length) return;
+  const { data, error } = await sb.from("profiles").select("id, avatar_path").in("id", ids.slice(0, 300));
+  if(error || !data) return;
+  for(const p of data) avatars[p.id] = p.avatar_path || "";
+  lsSet("fl.avatars", avatars);
+  if(tab === "friends") renderLog();
+}
+async function avatarBlob(file){
+  let bmp; try{ bmp = await createImageBitmap(file, { imageOrientation:"from-image" }); }catch(e){ bmp = null; }
+  if(!bmp) bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  const s = Math.min(bmp.width, bmp.height), N = 320;
+  const cv = document.createElement("canvas"); cv.width = cv.height = N;
+  cv.getContext("2d").drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, N, N);
+  return await new Promise(res => cv.toBlob(res, "image/jpeg", 0.85));
+}
+$("log").addEventListener("change", async e => {
+  if(e.target.id !== "avFile" || !e.target.files[0]) return;
+  if(!navigator.onLine){ toast("Connect to the internet to change your picture."); return; }
+  const file = e.target.files[0]; toast("Uploading your picture…");
+  try{
+    const blob = await avatarBlob(file), path = `${me.id}/${Date.now()}.jpg`, old = profile.avatar_path;
+    const up = await sb.storage.from("avatars").upload(path, blob, { contentType:"image/jpeg", cacheControl:"31536000" });
+    if(up.error) throw up.error;
+    const { error } = await sb.from("profiles").update({ avatar_path:path }).eq("id", me.id);
+    if(error) throw error;
+    profile = { ...profile, avatar_path:path }; saveCache(); renderLog(); toast("Picture saved.");
+    if(old) sb.storage.from("avatars").remove([old]);
+  }catch(err){ console.error(err); toast("Couldn't save that picture. Try a different photo."); }
+});
+$("log").addEventListener("click", async e => {
+  if(!e.target.closest('[data-a="avremove"]')) return;
+  const old = profile.avatar_path; if(!old) return;
+  const { error } = await sb.from("profiles").update({ avatar_path:null }).eq("id", me.id);
+  if(error){ toast("Couldn't remove it."); return; }
+  profile = { ...profile, avatar_path:null }; saveCache(); renderLog(); sb.storage.from("avatars").remove([old]);
+});
+
+/* ---------- map views: field map, satellite, topo ---------- */
+pane("tiles", 395, false);
+const VIEWS = {
+  field:{ label:"Map" },
+  sat:{ label:"Satellite", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}", credit:"Imagery: USGS The National Map" },
+  topo:{ label:"Topo", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}", credit:"Topo: USGS The National Map" }
+};
+let mapView = lsGet("fl.view", "field"), viewLayer = null, tileErrors = 0;
+const viewCtl = L.control({ position:"topright" });
+viewCtl.onAdd = () => {
+  const d = L.DomUtil.create("div", "viewsw");
+  d.setAttribute("role", "group"); d.setAttribute("aria-label", "Map style");
+  d.innerHTML = Object.entries(VIEWS).map(([k, v]) => `<button type="button" data-view="${k}" aria-pressed="${k === mapView}">${v.label}</button>`).join("") + `<small class="vcredit" id="viewCredit"></small>`;
+  L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+  d.addEventListener("click", e => { const b = e.target.closest("[data-view]"); if(b) setMapView(b.dataset.view); });
+  return d;
+};
+viewCtl.addTo(map);
+function setMapView(v){
+  if(!VIEWS[v]) v = "field";
+  mapView = v; lsSet("fl.view", v); tileErrors = 0;
+  if(viewLayer){ map.removeLayer(viewLayer); viewLayer = null; }
+  if(VIEWS[v].url){
+    viewLayer = L.tileLayer(VIEWS[v].url, { pane:"tiles", maxNativeZoom:16, maxZoom:16, crossOrigin:true });
+    viewLayer.on("tileerror", () => { if(++tileErrors === 6) toast(navigator.onLine ? `${VIEWS[v].label} tiles aren't loading right now.` : `${VIEWS[v].label} view needs a connection. Switch to Map for offline use.`); });
+    viewLayer.addTo(map);
+  }
+  map.getPane("water").style.display = v === "field" ? "" : "none";
+  document.getElementById("map").classList.toggle("imagery", v !== "field");
+  document.querySelectorAll(".viewsw [data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+  const c = $("viewCredit"); if(c) c.textContent = VIEWS[v].credit || "";
+}
+setMapView(mapView);
+
+/* ---------- update ready banner ---------- */
+let updateWaiting = false;
+function appBusy(){
+  const open = ["scrim", "tripScrim", "tourneyScrim", "guide", "terms"].some(id => $(id) && !$(id).hidden);
+  const a = document.activeElement, typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.value && a.type !== "checkbox" && a.id !== "q";
+  return open || typing || picking || offlineBusy;
+}
+function showUpdateReady(){ updateWaiting = true; $("updBar").hidden = false; }
+$("updGo").onclick = () => location.reload();
+$("updLater").onclick = () => { $("updBar").hidden = true; };
+
+
 /* ---------- collapsible panel: drag the handle down for a full-screen map ---------- */
 const mainEl = document.querySelector(".main");
 let panelCollapsed = lsGet("fl.collapsed", false);
@@ -1967,7 +2164,7 @@ let authMode = "in";
 function setAuthMode(m){
   authMode = m;
   $("authInTab").setAttribute("aria-pressed", m === "in"); $("authUpTab").setAttribute("aria-pressed", m === "up");
-  $("nameRow").hidden = m !== "up";
+  $("nameRow").hidden = $("yearRow").hidden = $("agreeRow").hidden = m !== "up";
   $("pwRow").hidden = m === "reset";
   $("aEmail").closest(".field").hidden = m === "newpw";
   $("aPw").autocomplete = m === "in" ? "current-password" : "new-password";
@@ -1995,6 +2192,8 @@ $("authForm").addEventListener("submit", async e => {
   if(authMode !== "newpw" && !/^\S+@\S+\.\S+$/.test(email)){ msg.textContent = "Enter your email address."; $("aEmail").focus(); return; }
   if(authMode !== "reset" && pw.length < 8){ msg.textContent = "Passwords need at least 8 characters."; $("aPw").focus(); return; }
   if(authMode === "up" && !$("aName").value.trim()){ msg.textContent = "Add your name so friends know who you are."; $("aName").focus(); return; }
+  if(authMode === "up"){ const ye = checkBirthYear($("aYear").value); if(ye){ msg.textContent = ye; $("aYear").focus(); return; }
+    if(!$("aAgree").checked || !$("aRegs").checked){ msg.textContent = "Check both boxes to create your account."; return; } }
   go.disabled = true;
   lsSet("fl.stay", $("aStay").checked);
   const redirect = location.origin + location.pathname;
@@ -2003,8 +2202,8 @@ $("authForm").addEventListener("submit", async e => {
       const { error } = await sb.auth.signInWithPassword({ email, password:pw });
       if(error) throw new Error(/confirm/i.test(error.message) ? "Confirm your email first. Check your inbox for the link." : "That email and password don't match.");
     } else if(authMode === "up"){
-      const { data, error } = await sb.auth.signUp({ email, password:pw, options:{ data:{ display_name:$("aName").value.trim() }, emailRedirectTo:redirect } });
-      if(error) throw new Error(/registered/i.test(error.message) ? "That email already has an account. Sign in instead." : error.message);
+      const { data, error } = await sb.auth.signUp({ email, password:pw, options:{ data:{ display_name:$("aName").value.trim(), birth_year:$("aYear").value.trim(), terms_version:String(TERMS_VERSION) }, emailRedirectTo:redirect } });
+      if(error) throw new Error(/registered/i.test(error.message) ? "That email already has an account. Sign in instead." : /database|saving new user/i.test(error.message) ? "Couldn't create the account. Coulee is for people 13 and older." : error.message);
       if(!data.session){ setAuthMode("in"); $("aEmail").value = email; msg.className = "hint ok"; msg.textContent = "Check your email and tap the confirmation link, then sign in here."; }
     } else if(authMode === "reset"){
       const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo:redirect });
@@ -2031,7 +2230,7 @@ async function startSession(user){
     for(const j of outbox) if(j.photo){ idb.get(j.photo).then(b => { if(b){ pendingPhotoUrls[j.photo] = URL.createObjectURL(b); renderAll(); } }).catch(()=>{}); } }
   loadState = navigator.onLine ? "loading" : "offline";
   if(!recoveryShown) $("auth").hidden = true; canWrite = true;
-  renderAll(); updateSync();
+  renderAll(); updateSync(); applyGate();
   await loadAll(); flush();
 }
 function showAuth(){ me = null; $("auth").hidden = false; setAuthMode("in"); }
@@ -2049,12 +2248,16 @@ if(session?.user) startSession(session.user);
 else { showAuth(); if(LINK_ERROR){ $("authMsg").className = "hint bad"; $("authMsg").textContent = /expired|invalid/i.test(decodeURIComponent(LINK_ERROR)) ? "That email link has expired or was already used. Request a new one." : decodeURIComponent(LINK_ERROR.replace(/\+/g, " ")); } }
 
 if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("sw.js").catch(e => console.warn("offline support unavailable", e));
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    // look for a new version whenever the app comes back to the front
+    document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") reg.update().catch(() => {}); });
+  }).catch(e => console.warn("offline support unavailable", e));
   let reloading = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if(reloading) return;
-    const busy = !$("scrim").hidden || !$("tripScrim").hidden || picking;
-    if(!busy){ reloading = true; location.reload(); }
+    if(reloading || !hadController) return;
+    // never pull the page out from under someone mid-entry: offer a refresh instead
+    if(appBusy()) showUpdateReady(); else { reloading = true; location.reload(); }
   });
 }
 })().catch(e => {

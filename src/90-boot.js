@@ -4,7 +4,7 @@ let authMode = "in";
 function setAuthMode(m){
   authMode = m;
   $("authInTab").setAttribute("aria-pressed", m === "in"); $("authUpTab").setAttribute("aria-pressed", m === "up");
-  $("nameRow").hidden = m !== "up";
+  $("nameRow").hidden = $("yearRow").hidden = $("agreeRow").hidden = m !== "up";
   $("pwRow").hidden = m === "reset";
   $("aEmail").closest(".field").hidden = m === "newpw";
   $("aPw").autocomplete = m === "in" ? "current-password" : "new-password";
@@ -32,6 +32,8 @@ $("authForm").addEventListener("submit", async e => {
   if(authMode !== "newpw" && !/^\S+@\S+\.\S+$/.test(email)){ msg.textContent = "Enter your email address."; $("aEmail").focus(); return; }
   if(authMode !== "reset" && pw.length < 8){ msg.textContent = "Passwords need at least 8 characters."; $("aPw").focus(); return; }
   if(authMode === "up" && !$("aName").value.trim()){ msg.textContent = "Add your name so friends know who you are."; $("aName").focus(); return; }
+  if(authMode === "up"){ const ye = checkBirthYear($("aYear").value); if(ye){ msg.textContent = ye; $("aYear").focus(); return; }
+    if(!$("aAgree").checked || !$("aRegs").checked){ msg.textContent = "Check both boxes to create your account."; return; } }
   go.disabled = true;
   lsSet("fl.stay", $("aStay").checked);
   const redirect = location.origin + location.pathname;
@@ -40,8 +42,8 @@ $("authForm").addEventListener("submit", async e => {
       const { error } = await sb.auth.signInWithPassword({ email, password:pw });
       if(error) throw new Error(/confirm/i.test(error.message) ? "Confirm your email first. Check your inbox for the link." : "That email and password don't match.");
     } else if(authMode === "up"){
-      const { data, error } = await sb.auth.signUp({ email, password:pw, options:{ data:{ display_name:$("aName").value.trim() }, emailRedirectTo:redirect } });
-      if(error) throw new Error(/registered/i.test(error.message) ? "That email already has an account. Sign in instead." : error.message);
+      const { data, error } = await sb.auth.signUp({ email, password:pw, options:{ data:{ display_name:$("aName").value.trim(), birth_year:$("aYear").value.trim(), terms_version:String(TERMS_VERSION) }, emailRedirectTo:redirect } });
+      if(error) throw new Error(/registered/i.test(error.message) ? "That email already has an account. Sign in instead." : /database|saving new user/i.test(error.message) ? "Couldn't create the account. Coulee is for people 13 and older." : error.message);
       if(!data.session){ setAuthMode("in"); $("aEmail").value = email; msg.className = "hint ok"; msg.textContent = "Check your email and tap the confirmation link, then sign in here."; }
     } else if(authMode === "reset"){
       const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo:redirect });
@@ -68,7 +70,7 @@ async function startSession(user){
     for(const j of outbox) if(j.photo){ idb.get(j.photo).then(b => { if(b){ pendingPhotoUrls[j.photo] = URL.createObjectURL(b); renderAll(); } }).catch(()=>{}); } }
   loadState = navigator.onLine ? "loading" : "offline";
   if(!recoveryShown) $("auth").hidden = true; canWrite = true;
-  renderAll(); updateSync();
+  renderAll(); updateSync(); applyGate();
   await loadAll(); flush();
 }
 function showAuth(){ me = null; $("auth").hidden = false; setAuthMode("in"); }
@@ -86,12 +88,16 @@ if(session?.user) startSession(session.user);
 else { showAuth(); if(LINK_ERROR){ $("authMsg").className = "hint bad"; $("authMsg").textContent = /expired|invalid/i.test(decodeURIComponent(LINK_ERROR)) ? "That email link has expired or was already used. Request a new one." : decodeURIComponent(LINK_ERROR.replace(/\+/g, " ")); } }
 
 if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("sw.js").catch(e => console.warn("offline support unavailable", e));
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    // look for a new version whenever the app comes back to the front
+    document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") reg.update().catch(() => {}); });
+  }).catch(e => console.warn("offline support unavailable", e));
   let reloading = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if(reloading) return;
-    const busy = !$("scrim").hidden || !$("tripScrim").hidden || picking;
-    if(!busy){ reloading = true; location.reload(); }
+    if(reloading || !hadController) return;
+    // never pull the page out from under someone mid-entry: offer a refresh instead
+    if(appBusy()) showUpdateReady(); else { reloading = true; location.reload(); }
   });
 }
 })().catch(e => {

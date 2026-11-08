@@ -70,7 +70,7 @@
         <button role="tab" data-tab="tourney" aria-selected="false" type="button">Tourneys<span class="dot" id="tDot" hidden></span></button>
         <button role="tab" data-tab="friends" aria-selected="false" type="button">Friends<span class="dot" id="reqDot" hidden></span></button>
         <button role="tab" data-tab="stats" aria-selected="false" type="button">Stats</button>
-        <button role="tab" data-tab="me" aria-selected="false" type="button">Me</button>
+        <button role="tab" data-tab="me" aria-selected="false" type="button">Me<span class="dot" id="meDot" hidden></span></button>
         <button class="panelhide" id="panelHide" type="button" aria-label="Hide panel" title="Hide panel">»</button>
       </nav>
       <div class="panel" id="log" aria-live="polite"></div>
@@ -91,8 +91,13 @@
     </div>
     <form id="authForm" novalidate>
       <div class="field" id="nameRow" hidden><label for="aName">Your name</label><input id="aName" autocomplete="nickname" placeholder="Adam" maxlength="40"></div>
+      <div class="field" id="yearRow" hidden><label for="aYear">Year you were born</label><input id="aYear" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="1990" autocomplete="bday-year"></div>
       <div class="field"><label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
       <div class="field" id="pwRow"><label for="aPw">Password</label><div class="pwwrap"><input id="aPw" type="password" autocomplete="current-password" placeholder="At least 8 characters" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="pwshow" type="button" id="pwShow" aria-pressed="false" aria-label="Show password">Show</button></div></div>
+      <div id="agreeRow" hidden class="agree">
+        <label class="check"><input type="checkbox" id="aAgree"><span>I'm 13 or older and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use and Privacy Policy</a>.</span></label>
+        <label class="check"><input type="checkbox" id="aRegs"><span>I understand the regulations shown may be out of date, the Wisconsin DNR's rules are what count, and I'll respect private land.</span></label>
+      </div>
       <label class="check" id="stayRow"><input type="checkbox" id="aStay" checked> Stay signed in on this device</label>
       <span class="hint" id="authMsg" role="alert"></span>
       <button class="btn fish wide" type="submit" id="authGo">Sign in</button>
@@ -257,6 +262,31 @@
     </div>
   </div>
 </div>
+
+<!-- agreements for existing accounts -->
+<div class="scrim guide" id="terms" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
+    <div class="eyebrow">Before you keep going</div>
+    <h3 id="termsTitle">New terms for Coulee</h3>
+    <p class="muted">Coulee now has Terms of Use and a Privacy Policy. Please read them and agree to keep using the app.</p>
+    <div class="field" id="tYearRow"><label for="tYear">Year you were born</label><input id="tYear" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="1990"></div>
+    <label class="check"><input type="checkbox" id="tAgree"><span>I'm 13 or older and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use and Privacy Policy</a>.</span></label>
+    <label class="check"><input type="checkbox" id="tRegs"><span>I understand the regulations shown may be out of date, the Wisconsin DNR's rules are what count, and I'll respect private land.</span></label>
+    <span class="hint" id="termsMsg" role="alert"></span>
+    <div class="actions" style="justify-content:space-between"><button class="link" type="button" id="termsOut">Sign out</button><button class="btn ink" type="button" id="termsOk">Agree and continue</button></div>
+  </div>
+</div>
+
+<!-- waiting for approval -->
+<div class="authwrap" id="gate" hidden>
+  <div class="authcard">
+    <div class="authhead"><h1>Coulee</h1></div>
+    <div id="gateBody"></div>
+    <div class="row2" style="margin-top:16px"><button class="btn ink" type="button" id="gateCheck">Check again</button><button class="btn" type="button" id="gateOut">Sign out</button></div>
+  </div>
+</div>
+
+<div class="updbar" id="updBar" hidden role="status"><span>A new version of Coulee is ready.</span><button class="btn sm ink" type="button" id="updGo">Refresh</button><button class="link" type="button" id="updLater">Later</button></div>
 
 <datalist id="speciesList">
   <option>Brook trout</option><option>Brown trout</option><option>Rainbow trout</option><option>Tiger trout</option>
