@@ -1554,6 +1554,8 @@ function renderFriendsTab(el){
     ${social ? "" : `<div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
+    <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search anglers by name" aria-label="Search anglers by name" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
+    ${nameResultsHtml()}
     <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}
     <div class="yearsel" style="margin-top:${social ? 6 : 14}px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
     <div style="margin-top:10px">${body}</div>`;
@@ -1562,6 +1564,7 @@ function renderFriendsTab(el){
     try{ const n = await addFriend($("friendCode").value); msg.className = "hint ok"; msg.textContent = `Request sent to ${n}. They'll see it in their Friends tab.`; $("friendCode").value = ""; }
     catch(err){ msg.className = "hint bad"; msg.textContent = err.message || "Couldn't add that friend."; }
   });
+  if($("nameSearchForm")) $("nameSearchForm").addEventListener("submit", e => { e.preventDefault(); searchPeople($("nameQ").value); });
   if($("findForm")) $("findForm").addEventListener("submit", e => { e.preventDefault(); findQ = $("findQ").value.trim(); findResults = null; renderLog(); });
   if($("showFriendsBox")) $("showFriendsBox").addEventListener("change", e => { showFriends = e.target.checked; lsSet("fl.showFriends", showFriends); renderAll(); });
 }
@@ -1586,6 +1589,41 @@ async function shareCode(){
   try{ await navigator.clipboard.writeText(text); toast("Invite copied. Paste it into a text to a friend."); }
   catch(e){ toast(`Your code is ${profile?.friend_code}`); }
 }
+
+/* ---------- find anglers by name to add as friends ---------- */
+let nameQ = "", nameResults = null, nameBusy = false;
+async function searchPeople(q){
+  nameQ = (q || "").trim();
+  if(nameQ.length < 2){ nameResults = nameQ ? "short" : null; renderLog(); return; }
+  nameBusy = true; renderLog();
+  const { data, error } = await sb.rpc("search_people", { q:nameQ });
+  nameBusy = false; nameResults = error ? "error" : (data || []);
+  if(Array.isArray(nameResults)) nameResults.forEach(p => { avatars[p.id] = p.avatar_path || ""; titles[p.id] = p.title || ""; });
+  renderLog(); setTimeout(() => $("nameResults")?.scrollIntoView({ block:"nearest", behavior:"smooth" }), 50);
+}
+function nameResultsHtml(){
+  if(nameBusy) return `<p class="status" id="nameResults">Searching…</p>`;
+  if(nameResults === null) return "";
+  if(nameResults === "short") return `<p class="hint" id="nameResults">Type at least 2 letters.</p>`;
+  if(nameResults === "error") return `<p class="hint bad" id="nameResults">Couldn't search right now. Try again.</p>`;
+  const rel = p => p.relation === "friend" ? `<span class="pill fished">Friends</span>` : p.relation === "sent" ? `<span class="pill">Request sent</span>`
+    : p.relation === "received" ? `<button class="btn sm ink" type="button" data-fview="people">Respond</button>` : `<button class="btn sm ink" type="button" data-addid="${esc(p.id)}">Add friend</button>`;
+  return `<div id="nameResults" style="margin-top:8px">${nameResults.length ? `<ul class="list">${nameResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name, "", p.avatar_path)}
+      <span class="t"><b class="wrap">${esc(p.display_name)}${p.title ? ` <span class="pill ttl">${esc(p.title)}</span>` : ""}</b><small>${+p.mutual ? `${p.mutual} mutual friend${+p.mutual === 1 ? "" : "s"}` : "Coulee angler"}</small></span>
+      <span class="num">${rel(p)}</span></li>`).join("")}</ul>` : `<p class="muted">No anglers named "${esc(nameQ)}". Check the spelling, or ask for their friend code.</p>`}
+    <button class="link" type="button" data-nameclear>Clear search</button></div>`;
+}
+$("log").addEventListener("click", async e => {
+  if(e.target.closest("[data-nameclear]")){ nameQ = ""; nameResults = null; renderLog(); return; }
+  const b = e.target.closest("[data-addid]"); if(!b) return;
+  b.disabled = true;
+  const p = Array.isArray(nameResults) && nameResults.find(x => x.id === b.dataset.addid);
+  const ins = await sb.from("friendships").insert({ addressee:b.dataset.addid });
+  if(ins.error && ins.error.code !== "23505"){ toast("Couldn't send the request. Try again."); b.disabled = false; return; }
+  if(p) p.relation = "sent";
+  toast(`Friend request sent${p ? ` to ${p.display_name}` : ""}. They'll see it in their Friends tab.`);
+  await loadAll(); renderLog();
+});
 
 
 /* ---------- stats ---------- */
@@ -1747,6 +1785,7 @@ function renderMeTab(el){
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
     <div class="card">
+      <label class="check"><input type="checkbox" id="meFindable" ${profile?.findable !== false ? "checked" : ""}> Let people find me by name to send friend requests</label>
       <label class="check"><input type="checkbox" id="mePublic" ${profile?.is_public ? "checked" : ""}> Let anyone find and follow me</label>
       <p class="muted">Followers see the catches you share (County only or Exact spot), the same as friends do. Catches set to Nothing stay private, and following doesn't let anyone into your tournaments or friend list.</p>
       <div class="field"><label for="meBio">Short bio</label><textarea id="meBio" maxlength="280" placeholder="Driftless brown trout nut. Mostly dries.">${esc(profile?.bio || "")}</textarea></div>
@@ -1829,7 +1868,8 @@ const HELP = [
     "Tournaments can be fly only. After a tournament ends, entries are locked: only its creator can change details or remove entries, and members are told about every change. Use Suggest a change to ask the creator.",
     "Photo tournaments only accept fish whose photo was taken during the tournament dates. The app reads the date stamp saved in the photo, so take photos with your phone's camera rather than screenshots."]],
   ["Friends and following", [
-    "Friends: share your 6-character friend code. Once they accept, you see each other's shared catches, trips and leaderboards, and can invite each other to tournaments.",
+    "Friends: search anglers by name in Friends → People and tap Add friend, or share your 6-character friend code. Once they accept, you see each other's shared catches, trips and leaderboards, and can invite each other to tournaments.",
+    "Don't want to be found by name? Turn off \"Let people find me by name\" in the Me tab. Friends can still add you with your code.",
     "Following: turn on a public profile in the Me tab to let anyone follow you. You can follow public anglers from Find anglers without their OK. Followers see your shared catches but aren't on your leaderboard."]],
   ["Location not filling in from photos", [
     "On iPhone: Settings → Privacy & Security → Location Services → Camera → While Using the App, with Precise Location on. New photos will then carry their location.",
@@ -1948,10 +1988,10 @@ $("log").addEventListener("click", async ev => {
   const a = t.closest("[data-a]"); if(!a) return;
   if(a.dataset.a === "guide") openGuide(true);
   if(a.dataset.a === "savepublic"){
-    const is_public = $("mePublic").checked, bio = $("meBio").value.trim() || null, msg = $("pubMsg");
-    const { error } = await sb.from("profiles").update({ is_public, bio }).eq("id", me.id);
+    const is_public = $("mePublic").checked, findable = $("meFindable").checked, bio = $("meBio").value.trim() || null, msg = $("pubMsg");
+    const { error } = await sb.from("profiles").update({ is_public, findable, bio }).eq("id", me.id);
     if(error){ msg.className = "hint bad"; msg.textContent = "Couldn't save. Try again."; return; }
-    profile = { ...profile, is_public, bio }; saveCache(); msg.className = "hint ok"; msg.textContent = is_public ? "Saved. Anyone can now find and follow you." : "Saved. Your profile is private.";
+    profile = { ...profile, is_public, findable, bio }; saveCache(); msg.className = "hint ok"; msg.textContent = is_public ? "Saved. Anyone can now find and follow you." : "Saved. Your profile is private.";
   }
 });
 $("log").addEventListener("click", async ev => {

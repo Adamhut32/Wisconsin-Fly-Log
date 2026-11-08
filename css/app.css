@@ -454,3 +454,4 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .factions{margin:0;gap:4px 14px}.factions .link{font-size:13px}
 .card.rep blockquote{margin:6px 0;padding:6px 10px;border-left:3px solid var(--line);background:var(--paper-2);border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
 .legend #terrainToggle{display:inline-block}.legend #terrainToggle[hidden]{display:none}
+.item .num .btn{font-family:var(--f-body)}

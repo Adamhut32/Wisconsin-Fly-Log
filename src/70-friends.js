@@ -92,6 +92,8 @@ function renderFriendsTab(el){
     ${social ? "" : `<div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
+    <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search anglers by name" aria-label="Search anglers by name" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
+    ${nameResultsHtml()}
     <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}
     <div class="yearsel" style="margin-top:${social ? 6 : 14}px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
     <div style="margin-top:10px">${body}</div>`;
@@ -100,6 +102,7 @@ function renderFriendsTab(el){
     try{ const n = await addFriend($("friendCode").value); msg.className = "hint ok"; msg.textContent = `Request sent to ${n}. They'll see it in their Friends tab.`; $("friendCode").value = ""; }
     catch(err){ msg.className = "hint bad"; msg.textContent = err.message || "Couldn't add that friend."; }
   });
+  if($("nameSearchForm")) $("nameSearchForm").addEventListener("submit", e => { e.preventDefault(); searchPeople($("nameQ").value); });
   if($("findForm")) $("findForm").addEventListener("submit", e => { e.preventDefault(); findQ = $("findQ").value.trim(); findResults = null; renderLog(); });
   if($("showFriendsBox")) $("showFriendsBox").addEventListener("change", e => { showFriends = e.target.checked; lsSet("fl.showFriends", showFriends); renderAll(); });
 }
@@ -124,3 +127,38 @@ async function shareCode(){
   try{ await navigator.clipboard.writeText(text); toast("Invite copied. Paste it into a text to a friend."); }
   catch(e){ toast(`Your code is ${profile?.friend_code}`); }
 }
+
+/* ---------- find anglers by name to add as friends ---------- */
+let nameQ = "", nameResults = null, nameBusy = false;
+async function searchPeople(q){
+  nameQ = (q || "").trim();
+  if(nameQ.length < 2){ nameResults = nameQ ? "short" : null; renderLog(); return; }
+  nameBusy = true; renderLog();
+  const { data, error } = await sb.rpc("search_people", { q:nameQ });
+  nameBusy = false; nameResults = error ? "error" : (data || []);
+  if(Array.isArray(nameResults)) nameResults.forEach(p => { avatars[p.id] = p.avatar_path || ""; titles[p.id] = p.title || ""; });
+  renderLog(); setTimeout(() => $("nameResults")?.scrollIntoView({ block:"nearest", behavior:"smooth" }), 50);
+}
+function nameResultsHtml(){
+  if(nameBusy) return `<p class="status" id="nameResults">Searching…</p>`;
+  if(nameResults === null) return "";
+  if(nameResults === "short") return `<p class="hint" id="nameResults">Type at least 2 letters.</p>`;
+  if(nameResults === "error") return `<p class="hint bad" id="nameResults">Couldn't search right now. Try again.</p>`;
+  const rel = p => p.relation === "friend" ? `<span class="pill fished">Friends</span>` : p.relation === "sent" ? `<span class="pill">Request sent</span>`
+    : p.relation === "received" ? `<button class="btn sm ink" type="button" data-fview="people">Respond</button>` : `<button class="btn sm ink" type="button" data-addid="${esc(p.id)}">Add friend</button>`;
+  return `<div id="nameResults" style="margin-top:8px">${nameResults.length ? `<ul class="list">${nameResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name, "", p.avatar_path)}
+      <span class="t"><b class="wrap">${esc(p.display_name)}${p.title ? ` <span class="pill ttl">${esc(p.title)}</span>` : ""}</b><small>${+p.mutual ? `${p.mutual} mutual friend${+p.mutual === 1 ? "" : "s"}` : "Coulee angler"}</small></span>
+      <span class="num">${rel(p)}</span></li>`).join("")}</ul>` : `<p class="muted">No anglers named "${esc(nameQ)}". Check the spelling, or ask for their friend code.</p>`}
+    <button class="link" type="button" data-nameclear>Clear search</button></div>`;
+}
+$("log").addEventListener("click", async e => {
+  if(e.target.closest("[data-nameclear]")){ nameQ = ""; nameResults = null; renderLog(); return; }
+  const b = e.target.closest("[data-addid]"); if(!b) return;
+  b.disabled = true;
+  const p = Array.isArray(nameResults) && nameResults.find(x => x.id === b.dataset.addid);
+  const ins = await sb.from("friendships").insert({ addressee:b.dataset.addid });
+  if(ins.error && ins.error.code !== "23505"){ toast("Couldn't send the request. Try again."); b.disabled = false; return; }
+  if(p) p.relation = "sent";
+  toast(`Friend request sent${p ? ` to ${p.display_name}` : ""}. They'll see it in their Friends tab.`);
+  await loadAll(); renderLog();
+});

@@ -158,6 +158,7 @@ function renderMeTab(el){
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
     <div class="card">
+      <label class="check"><input type="checkbox" id="meFindable" ${profile?.findable !== false ? "checked" : ""}> Let people find me by name to send friend requests</label>
       <label class="check"><input type="checkbox" id="mePublic" ${profile?.is_public ? "checked" : ""}> Let anyone find and follow me</label>
       <p class="muted">Followers see the catches you share (County only or Exact spot), the same as friends do. Catches set to Nothing stay private, and following doesn't let anyone into your tournaments or friend list.</p>
       <div class="field"><label for="meBio">Short bio</label><textarea id="meBio" maxlength="280" placeholder="Driftless brown trout nut. Mostly dries.">${esc(profile?.bio || "")}</textarea></div>
@@ -240,7 +241,8 @@ const HELP = [
     "Tournaments can be fly only. After a tournament ends, entries are locked: only its creator can change details or remove entries, and members are told about every change. Use Suggest a change to ask the creator.",
     "Photo tournaments only accept fish whose photo was taken during the tournament dates. The app reads the date stamp saved in the photo, so take photos with your phone's camera rather than screenshots."]],
   ["Friends and following", [
-    "Friends: share your 6-character friend code. Once they accept, you see each other's shared catches, trips and leaderboards, and can invite each other to tournaments.",
+    "Friends: search anglers by name in Friends → People and tap Add friend, or share your 6-character friend code. Once they accept, you see each other's shared catches, trips and leaderboards, and can invite each other to tournaments.",
+    "Don't want to be found by name? Turn off \"Let people find me by name\" in the Me tab. Friends can still add you with your code.",
     "Following: turn on a public profile in the Me tab to let anyone follow you. You can follow public anglers from Find anglers without their OK. Followers see your shared catches but aren't on your leaderboard."]],
   ["Location not filling in from photos", [
     "On iPhone: Settings → Privacy & Security → Location Services → Camera → While Using the App, with Precise Location on. New photos will then carry their location.",
@@ -359,10 +361,10 @@ $("log").addEventListener("click", async ev => {
   const a = t.closest("[data-a]"); if(!a) return;
   if(a.dataset.a === "guide") openGuide(true);
   if(a.dataset.a === "savepublic"){
-    const is_public = $("mePublic").checked, bio = $("meBio").value.trim() || null, msg = $("pubMsg");
-    const { error } = await sb.from("profiles").update({ is_public, bio }).eq("id", me.id);
+    const is_public = $("mePublic").checked, findable = $("meFindable").checked, bio = $("meBio").value.trim() || null, msg = $("pubMsg");
+    const { error } = await sb.from("profiles").update({ is_public, findable, bio }).eq("id", me.id);
     if(error){ msg.className = "hint bad"; msg.textContent = "Couldn't save. Try again."; return; }
-    profile = { ...profile, is_public, bio }; saveCache(); msg.className = "hint ok"; msg.textContent = is_public ? "Saved. Anyone can now find and follow you." : "Saved. Your profile is private.";
+    profile = { ...profile, is_public, findable, bio }; saveCache(); msg.className = "hint ok"; msg.textContent = is_public ? "Saved. Anyone can now find and follow you." : "Saved. Your profile is private.";
   }
 });
 $("log").addEventListener("click", async ev => {
