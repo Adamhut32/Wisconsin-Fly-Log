@@ -100,7 +100,7 @@ async function sendGift(rec, blob, friendId){
     if(up.error) throw up.error;
   }
   const catch_ = { species:rec.species, length_in:rec.length_in, count:rec.count, fly:rec.fly, method:rec.method, caught_on:rec.caught_on,
-    lat:rec.lat, lng:rec.lng, county:rec.county, notes:rec.notes, photo_taken_on:rec.photo_taken_on, photo_hash:rec.photo_hash, photo_meta:rec.photo_meta };
+    lat:rec.lat, lng:rec.lng, county:rec.county, notes:rec.notes, photo_taken_on:rec.photo_taken_on, photo_hash:rec.photo_hash, photo_meta:rec.photo_meta, water:rec.water };
   const { error } = await sb.from("catch_gifts").insert({ from_user:me.id, to_user:friendId, catch:catch_, photo_path });
   if(error){ if(photo_path) sb.storage.from("photos").remove([photo_path]); throw error; }
 }

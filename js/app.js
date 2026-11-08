@@ -490,7 +490,7 @@ function catchPopup(c){
   const spot = spots.find(s=>s.id===c.spot_id), trip = trips.find(t=>t.id===c.trip_id);
   const url = photoSrc(c.photo_path);
   const head = `${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}`;
-  return popupShell("catch", c, `<h3>${head}</h3><div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""}${spot?` · ${esc(spot.name)}`:""}</div>
+  return popupShell("catch", c, `<h3>${head}</h3>${c.water?`<div class="meta"><b>${esc(c.water)}</b></div>`:""}<div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""}${spot?` · ${esc(spot.name)}`:""}</div>
     ${trip?`<div class="meta">Trip: <button class="link" data-a="trip" data-id="${esc(trip.id)}">${esc(trip.name)}</button></div>`:""}
     ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
@@ -515,7 +515,7 @@ function thumb(c, cls){
   return url ? `<span class="th ${cls||""}" style="background-image:url('${url}')"></span>` : `<span class="th ${cls||""}">${icon("i-fish")}</span>`;
 }
 function itemCatch(c){
-  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc([fmtDate(c.caught_on), c.method && c.method !== "fly" ? METHODS[c.method] : "", c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
+  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc([fmtDate(c.caught_on), c.water, c.method && c.method !== "fly" ? METHODS[c.method] : "", c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
 }
 function itemSpot(s){
   const v = spotVisits(s);
@@ -594,7 +594,10 @@ $("log").addEventListener("click", ev => {
   const c = ev.target.closest("[data-county]"); if(c){ openCounty(c.dataset.county); return; }
   const w = ev.target.closest("[data-water]"); if(w){ flashWater(w.dataset.water); return; }
   if(ev.target.closest('[data-a="morewaters"]')){ showAllWaters = !showAllWaters; renderLog(); return; }
-  const g = ev.target.closest("[data-go]"); if(g && g.dataset.go){ focusMarker(g.dataset.go); }
+  const g = ev.target.closest("[data-go]");
+  if(g && g.dataset.go){
+    if(tab === "stats"){ const c = catches.find(x => "c:" + x.id === g.dataset.go); if(c && c.lat == null){ openForm("catch", c); return; } setTab("map"); }
+    focusMarker(g.dataset.go); }
 });
 function focusMarker(key){
   const m = markerIndex[key]; if(!m) return;
@@ -691,6 +694,7 @@ function coordHint(){
   h.className = cid ? "hint ok" : "hint bad";
   h.textContent = cid ? `In ${countyName(cid)}.` : "That point is outside Wisconsin. It will save, but won't count toward a county.";
   fillSpotOptions(c);
+  clearTimeout(updateWaterFromCoords._t); updateWaterFromCoords._t = setTimeout(updateWaterFromCoords, 150);
 }
 $("fCoords").addEventListener("input", coordHint);
 
@@ -755,6 +759,7 @@ function openForm(kind, rec, prefill){
   $("fName").value = r.name || ""; $("fWater").value = r.water || "Creek"; $("fClass").value = r.trout_class || ""; $("fTarget").value = r.target || ""; $("fStatus").value = r.status || "want";
   $("fSpecies").value = r.species || ""; $("fLen").value = r.length_in ?? ""; $("fCount").value = r.count ?? 1; $("fFly").value = r.fly || "";
   $("fDate").value = r.caught_on || todayStr(); $("fNotes").value = r.notes || "";
+  $("fWaterName").value = r.water || ""; waterTouched = !!(rec && rec.water); $("waterHint").textContent = ""; $("waterNear").innerHTML = "";
   $("fMethod").value = r.method || lsGet("fl.method", "fly"); updateFlyLabel(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
@@ -823,7 +828,7 @@ $("entryForm").addEventListener("submit", async ev => {
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
       rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
-        fly:$("fFly").value.trim() || null, method:$("fMethod").value, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
+        fly:$("fFly").value.trim() || null, method:$("fMethod").value, water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
         photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
@@ -868,7 +873,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
@@ -1031,7 +1036,7 @@ async function loadAll(){
     loadTournaments();
     if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
     if(isStaff()){ loadStaffList(); loadFlags(); }
-    loadInbox(); touchActive(); setTimeout(backfillHashes, 4000);
+    loadInbox(); touchActive(); setTimeout(backfillHashes, 4000); setTimeout(backfillWaters, 6000);
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
@@ -1584,7 +1589,8 @@ const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","
 function renderStatsTab(el){
   const years = [...new Set(catches.map(c => (c.caught_on||"").slice(0,4)).filter(Boolean))].sort().reverse();
   if(statYear !== "all" && !years.includes(statYear)) statYear = "all";
-  const cs = catches.filter(c => statYear === "all" || (c.caught_on||"").startsWith(statYear));
+  const inYear = catches.filter(c => statYear === "all" || (c.caught_on||"").startsWith(statYear));
+  const cs = inYear.filter(matchStatF);
   const withFish = cs.filter(c => fishOf(c) > 0);
   const fish = cs.reduce((a,c)=>a+fishOf(c),0);
   const days = new Set(cs.map(c=>c.caught_on)).size;
@@ -1606,16 +1612,110 @@ function renderStatsTab(el){
   const tripCount = trips.filter(t => statYear === "all" || t.start_date.startsWith(statYear) || t.end_date.startsWith(statYear)).length;
   el.innerHTML = `<div class="eyebrow">Stats</div><h2>${statYear === "all" ? "All time" : statYear}</h2>
     <div class="yearsel"><button type="button" data-year="all" aria-pressed="${statYear==="all"}">All time</button>${years.map(y => `<button type="button" data-year="${y}" aria-pressed="${statYear===y}">${y}</button>`).join("")}</div>
+    ${statFilterHtml(inYear)}
     <div class="stats four"><div class="stat f"><b>${fish}</b><span>fish</span></div><div class="stat"><b>${days}</b><span>days fished</span></div><div class="stat"><b>${sp.length}</b><span>species</span></div><div class="stat"><b>${tripCount}</b><span>trips</span></div></div>
     ${cs.length ? `<h4><span>Fish by month</span></h4>${chart}
     <h4><span>Species</span></h4><table class="tbl"><thead><tr><th>Species</th><th class="n">Fish</th><th class="n">Biggest</th></tr></thead><tbody>${sp.map(([k,v]) => `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${v.big ? lenTxt(v.big.length_in) : "–"}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Add species to your catches to see them here.</td></tr>`}</tbody></table>
+    ${(() => { const wt = {}; withFish.forEach(c => { if(c.water){ const k = c.water.toLowerCase(); (wt[k] ||= { name:c.water, n:0, days:new Set(), big:null }); wt[k].n += fishOf(c); wt[k].days.add(c.caught_on); if(c.length_in != null && (!wt[k].big || +c.length_in > +wt[k].big)) wt[k].big = +c.length_in; } });
+      const rows = Object.entries(wt).sort((a, b) => b[1].n - a[1].n).slice(0, 10);
+      return rows.length ? `<h4><span>Best water</span></h4><table class="tbl"><thead><tr><th>Creek or lake</th><th class="n">Fish</th><th class="n">Days</th><th class="n">Biggest</th></tr></thead><tbody>${rows.map(([k, v]) => `<tr><td><button class="link" type="button" data-sfwater="${esc(k)}">${esc(v.name)}</button></td><td class="n">${v.n}</td><td class="n">${v.days.size}</td><td class="n">${v.big != null ? lenTxt(v.big) : "–"}</td></tr>`).join("")}</tbody></table>` : ""; })()}
     ${titlesHtml()}
     <h4><span>${cs.some(c => c.method && c.method !== "fly") ? "Flies and lures that worked" : "Flies that worked"}</span></h4><table class="tbl"><thead><tr><th>Fly or lure</th><th class="n">Fish</th><th class="n">Best month</th></tr></thead><tbody>${fl.map(([k,v]) => { const bm = v.months.indexOf(Math.max(...v.months)); return `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${MON[bm]}</td></tr>`; }).join("") || `<tr><td colspan="3" class="muted">Add the fly to your catches to see what works.</td></tr>`}</tbody></table>
     ${bestByMonth.length ? `<h4><span>Best fly each month</span></h4><ul class="list">${bestByMonth.map(([m, [f, n]]) => `<li class="item" style="grid-template-columns:44px 1fr auto;cursor:default"><span class="muted" style="font-weight:700">${MON[m]}</span><span class="t"><b>${esc(f)}</b></span><span class="num">${n} fish</span></li>`).join("")}</ul>` : ""}
-    <h4><span>Spots</span></h4><p style="margin:0"><span class="pill want">${st.want} want to try</span> <span class="pill scouted">${st.scouted} scouted</span> <span class="pill fished">${st.fished} fished</span></p>`
-    : `${titlesHtml()}<div class="empty"><b>Nothing to count yet</b>Log a few catches with the species, length and fly, and this page fills in with your best months and flies.</div>`}`;
+    ${statCatchListHtml(cs)}
+    ${statFActive() ? "" : `<h4><span>Spots</span></h4><p style="margin:0"><span class="pill want">${st.want} want to try</span> <span class="pill scouted">${st.scouted} scouted</span> <span class="pill fished">${st.fished} fished</span></p>`}`
+    : catches.length ? `<div class="empty"><b>No catches match</b>Try a different year, or clear the filters.</div>` : `${titlesHtml()}<div class="empty"><b>Nothing to count yet</b>Log a few catches with the species, length and fly, and this page fills in with your best months and flies.</div>`}`;
+  restoreStatFocus();
 }
-$("log").addEventListener("click", ev => { const y = ev.target.closest("[data-year]"); if(y){ statYear = y.dataset.year; lsSet("fl.statYear", statYear); renderLog(); } });
+$("log").addEventListener("click", ev => { const y = ev.target.closest("[data-year]"); if(y){ statYear = y.dataset.year; lsSet("fl.statYear", statYear); statShown = 50; renderLog(); } });
+
+/* ---------- filter your catches ---------- */
+const STATF0 = { q:"", species:"", method:"", county:"", water:"", trip:"", photo:"", minLen:"", sort:"new" };
+let statF = { ...STATF0, ...lsGet("fl.statF", {}) }, statShown = 50, statFOpen = false, statFocus = null;
+const SP_GROUPS = { "group:trout":["Brook trout","Brown trout","Rainbow trout","Tiger trout","Steelhead","Lake trout","Splake"], "group:bass":["Smallmouth bass","Largemouth bass"],
+  "group:panfish":["Bluegill","Pumpkinseed","Crappie","Black crappie","White crappie","Yellow perch","Rock bass","Sunfish","Green sunfish"] };
+const statFActive = () => ["q","species","method","county","water","trip","photo","minLen"].some(k => statF[k]);
+function matchStatF(c){
+  const f = statF, sp = (c.species || "").toLowerCase();
+  if(f.species){ if(f.species === "none"){ if(sp) return false; }
+    else if(SP_GROUPS[f.species]){ if(!SP_GROUPS[f.species].some(s => s.toLowerCase() === sp)) return false; }
+    else if(sp !== f.species) return false; }
+  if(f.method && (c.method || "fly") !== f.method) return false;
+  if(f.county){ if(f.county === "out"){ if(c.county) return false; } else if(c.county !== f.county) return false; }
+  if(f.water && (c.water || "").toLowerCase() !== f.water) return false;
+  if(f.trip){ if(f.trip === "none"){ if(c.trip_id) return false; } else if(c.trip_id !== f.trip) return false; }
+  if(f.photo === "yes" && !c.photo_path) return false;
+  if(f.photo === "no" && c.photo_path) return false;
+  if(f.minLen && !(+c.length_in >= +f.minLen)) return false;
+  if(f.q){ const hay = [c.species, c.water, c.fly, c.notes, c.county ? countyName(c.county) : "", METHODS[c.method || "fly"], trips.find(t => t.id === c.trip_id)?.name].join(" ").toLowerCase();
+    if(!f.q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w))) return false; }
+  return true;
+}
+function statFilterHtml(pool){
+  const spMap = {}; pool.forEach(c => { const k = (c.species || "").toLowerCase(); if(k && !spMap[k]) spMap[k] = c.species; });
+  const sps = Object.entries(spMap).sort((a, b) => a[1].localeCompare(b[1]));
+  const methods = [...new Set(pool.map(c => c.method || "fly"))];
+  const cids = [...new Set(pool.map(c => c.county).filter(Boolean))].sort((a, b) => countyName(a).localeCompare(countyName(b)));
+  const wMap = {}; pool.forEach(c => { const k = (c.water || "").toLowerCase(); if(k && !wMap[k]) wMap[k] = c.water; });
+  const ws = Object.entries(wMap).sort((a, b) => a[1].localeCompare(b[1]));
+  const tr = trips.filter(t => pool.some(c => c.trip_id === t.id)).sort((a, b) => b.start_date.localeCompare(a.start_date));
+  const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`;
+  const chips = [];
+  if(statF.q) chips.push(["q", `"${statF.q}"`]);
+  if(statF.species) chips.push(["species", { "group:trout":"All trout", "group:bass":"All bass", "group:panfish":"All panfish", none:"No species" }[statF.species] || spMap[statF.species] || statF.species]);
+  if(statF.method) chips.push(["method", METHODS[statF.method]]);
+  if(statF.county) chips.push(["county", statF.county === "out" ? "Outside Wisconsin" : countyName(statF.county)]);
+  if(statF.water) chips.push(["water", wMap[statF.water] || statF.water]);
+  if(statF.trip) chips.push(["trip", statF.trip === "none" ? "Not on a trip" : (trips.find(t => t.id === statF.trip)?.name || "Trip")]);
+  if(statF.photo) chips.push(["photo", statF.photo === "yes" ? "With photo" : "No photo"]);
+  if(statF.minLen) chips.push(["minLen", `${statF.minLen}"+`]);
+  return `<div class="statf">
+    <div class="row2" style="flex-wrap:nowrap"><input id="sfQ" type="search" placeholder="Search creek, fly, notes…" aria-label="Search your catches" value="${esc(statF.q)}" autocomplete="off">
+      <button class="btn sm${statFOpen || statFActive() ? " ink" : ""}" type="button" data-sf="toggle" aria-expanded="${statFOpen}">Filters${chips.filter(c => c[0] !== "q").length ? ` (${chips.filter(c => c[0] !== "q").length})` : ""}</button></div>
+    ${statFOpen ? `<div class="sfgrid">
+      <div class="field"><label for="sfSpecies">Species</label><select id="sfSpecies" data-sfk="species">${opt("", "All species", statF.species)}${opt("group:trout", "All trout", statF.species)}${opt("group:bass", "All bass", statF.species)}${opt("group:panfish", "All panfish", statF.species)}${sps.map(([k, l]) => opt(k, l, statF.species)).join("")}${opt("none", "No species", statF.species)}</select></div>
+      <div class="field"><label for="sfMethod">Method</label><select id="sfMethod" data-sfk="method">${opt("", "Any method", statF.method)}${Object.entries(METHODS).filter(([k]) => methods.includes(k) || statF.method === k).map(([k, l]) => opt(k, l, statF.method)).join("")}</select></div>
+      <div class="field"><label for="sfCounty">Where</label><select id="sfCounty" data-sfk="county">${opt("", "Anywhere", statF.county)}${cids.map(id => opt(id, countyName(id), statF.county)).join("")}${opt("out", "Outside Wisconsin", statF.county)}</select></div>
+      <div class="field"><label for="sfWater">Water</label><select id="sfWater" data-sfk="water">${opt("", "Any water", statF.water)}${ws.map(([k, l]) => opt(k, l, statF.water)).join("")}</select></div>
+      <div class="field"><label for="sfTrip">Trip</label><select id="sfTrip" data-sfk="trip">${opt("", "Any trip", statF.trip)}${tr.map(t => opt(t.id, t.name, statF.trip)).join("")}${opt("none", "Not on a trip", statF.trip)}</select></div>
+      <div class="field"><label for="sfPhoto">Photo</label><select id="sfPhoto" data-sfk="photo">${opt("", "Any", statF.photo)}${opt("yes", "With photo", statF.photo)}${opt("no", "No photo", statF.photo)}</select></div>
+      <div class="field"><label for="sfLen">At least (in)</label><select id="sfLen" data-sfk="minLen">${opt("", "Any length", statF.minLen)}${["10","12","14","16","18","20","24","30","40"].map(v => opt(v, v + " in", statF.minLen)).join("")}</select></div>
+    </div>` : ""}
+    ${chips.length ? `<div class="sfchips">${chips.map(([k, l]) => `<button type="button" class="pill" data-sfx="${k}" aria-label="Remove filter ${esc(l)}">${esc(l)} ×</button>`).join("")}<button type="button" class="link" data-sf="clear">Clear all</button></div>` : ""}
+  </div>`;
+}
+function statCatchListHtml(cs){
+  const sorters = { new:byDateDesc, old:(a, b) => -byDateDesc(a, b), long:(a, b) => (+b.length_in || 0) - (+a.length_in || 0) || byDateDesc(a, b) };
+  const list = cs.slice().sort(sorters[statF.sort] || byDateDesc);
+  const fish = list.reduce((a, c) => a + fishOf(c), 0);
+  return `<h4 id="statList"><span>${statFActive() ? "Matching catches" : "All your catches"}</span><span>${list.length} · ${fish} fish</span></h4>
+    <div class="row2" style="justify-content:space-between;margin-bottom:6px"><select data-sfk="sort" aria-label="Sort" style="width:auto">${[["new","Newest first"],["old","Oldest first"],["long","Longest first"]].map(([v, l]) => `<option value="${v}" ${statF.sort === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <button class="link" type="button" data-sf="csv">Download these (CSV)</button></div>
+    <ul class="list">${list.slice(0, statShown).map(itemCatch).join("")}</ul>
+    ${list.length > statShown ? `<button class="btn sm" type="button" data-sf="more" style="margin-top:8px">Show ${Math.min(50, list.length - statShown)} more</button>` : ""}`;
+}
+function setStatF(k, v){ statF = { ...statF, [k]:v }; lsSet("fl.statF", statF); statShown = 50; renderLog(); }
+function restoreStatFocus(){ if(!statFocus) return; const el = $(statFocus.id); if(el){ el.focus({ preventScroll:true }); try{ el.setSelectionRange(statFocus.pos, statFocus.pos); }catch(e){} } statFocus = null; }
+let sfT;
+$("log").addEventListener("input", e => { if(e.target.id !== "sfQ") return; const v = e.target.value; clearTimeout(sfT);
+  sfT = setTimeout(() => { statFocus = { id:"sfQ", pos:e.target.selectionStart }; setStatF("q", v.trim()); }, 250); });
+$("log").addEventListener("change", e => { const k = e.target.dataset?.sfk; if(k) setStatF(k, e.target.value); });
+$("log").addEventListener("click", e => {
+  const x = e.target.closest("[data-sfx]"); if(x){ setStatF(x.dataset.sfx, ""); return; }
+  const sw = e.target.closest("[data-sfwater]"); if(sw){ setStatF("water", sw.dataset.sfwater); setTimeout(() => $("statList")?.scrollIntoView({ behavior:"smooth" }), 50); return; }
+  const b = e.target.closest("[data-sf]"); if(!b) return;
+  if(b.dataset.sf === "toggle"){ statFOpen = !statFOpen; renderLog(); }
+  if(b.dataset.sf === "clear"){ statF = { ...STATF0, sort:statF.sort }; lsSet("fl.statF", statF); statShown = 50; renderLog(); }
+  if(b.dataset.sf === "more"){ statShown += 50; renderLog(); }
+  if(b.dataset.sf === "csv"){
+    const cs = catches.filter(c => (statYear === "all" || (c.caught_on || "").startsWith(statYear)) && matchStatF(c)).sort(byDateDesc);
+    const q = v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+    const rows = [["Date","Species","Length (in)","Fish","Method","Fly or lure","Water","County","Trip","Latitude","Longitude","Notes","Photo"],
+      ...cs.map(c => [c.caught_on, c.species, c.length_in, fishOf(c), METHODS[c.method || "fly"], c.fly, c.water, c.county ? countyName(c.county) : (c.lat != null ? "Outside Wisconsin" : ""), trips.find(t => t.id === c.trip_id)?.name, c.lat, c.lng, c.notes, c.photo_path ? "yes" : ""])];
+    const blob = new Blob([rows.map(r => r.map(q).join(",")).join("\n")], { type:"text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `coulee-catches-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  }
+});
 
 /* ---------- me ---------- */
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -1679,6 +1779,12 @@ const HELP = [
     "Pick the method for each catch: Fly, Spinning, Baitcasting, Ice fishing, Trolling or Other. The Fly box becomes Lure or bait for the others.",
     "Species covers trout, bass, walleye, pike, musky, panfish, salmon, catfish and more. Type any other species too.",
     "Catches outside Wisconsin are kept with their exact location in an Outside Wisconsin list on the Log tab. They'll file into the right state when Coulee adds it."]],
+  ["Finding your catches", [
+    "The Stats tab lists every catch. Search by creek, fly or notes, or tap Filters to narrow by species (or all trout, bass or panfish), method, county, water, trip, photo or length. The numbers above the list follow the same filters.",
+    "Tap a creek in Best water to see just the fish from there. Download these saves the list as a spreadsheet file."]],
+  ["Which creek it was", [
+    "When a catch has a location, from the photo, the Here button or the map, Coulee fills in the creek, river or lake it's on if one is within about 650 feet (500 for lakes).",
+    "You can change it or type your own. Older catches are filled in automatically when the app opens."]],
   ["Logging a friend's fish", [
     "In Log a catch, change Whose fish? to a friend. They get it in their Log tab and choose Add to my log or Not mine.",
     "It only counts for them once they accept it, so nobody can add fish to someone else's log."]],
@@ -2313,7 +2419,7 @@ async function sendGift(rec, blob, friendId){
     if(up.error) throw up.error;
   }
   const catch_ = { species:rec.species, length_in:rec.length_in, count:rec.count, fly:rec.fly, method:rec.method, caught_on:rec.caught_on,
-    lat:rec.lat, lng:rec.lng, county:rec.county, notes:rec.notes, photo_taken_on:rec.photo_taken_on, photo_hash:rec.photo_hash, photo_meta:rec.photo_meta };
+    lat:rec.lat, lng:rec.lng, county:rec.county, notes:rec.notes, photo_taken_on:rec.photo_taken_on, photo_hash:rec.photo_hash, photo_meta:rec.photo_meta, water:rec.water };
   const { error } = await sb.from("catch_gifts").insert({ from_user:me.id, to_user:friendId, catch:catch_, photo_path });
   if(error){ if(photo_path) sb.storage.from("photos").remove([photo_path]); throw error; }
 }
@@ -2639,6 +2745,81 @@ function renderAnalytics(el){
 /* ---------- suggestion triage labels ---------- */
 const SUG_CAT = { bug:"Bug", idea:"Idea", question:"Question", other:"Other" };
 function triageHtml(s){ return s.category || s.triage_note ? `<p class="triage">${s.category ? `<span class="pill ${s.category === "bug" ? "want" : "scouted"}">${SUG_CAT[s.category]}</span> ` : ""}${s.triage_note ? esc(s.triage_note) : ""}</p>` : ""; }
+
+
+/* ---------- which creek or lake a catch came from, worked out from its location ---------- */
+const WATER_NEAR_M = 200, LAKE_NEAR_M = 150, SUGGEST_M = 1200;
+const countyBox = {};
+for(const f of counties){ let a = 90, b = -180, c = -90, d = 180; const g = f.geometry, polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  for(const p of polys) for(const [x, y] of p[0]){ if(y < a) a = y; if(y > c) c = y; if(x < d) d = x; if(x > b) b = x; }
+  countyBox[f.id] = [a - .006, d - .008, c + .006, b + .008]; }
+// metres from a point to a segment, on a flat local projection (fine at creek scale)
+function segDistM(lat, lng, p, q){
+  const k = Math.cos(lat * Math.PI / 180) * 111320, m = 110540;
+  const ax = (p[0] - lng) * k, ay = (p[1] - lat) * m, bx = (q[0] - lng) * k, by = (q[1] - lat) * m;
+  const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+  const t = L ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0;
+  return Math.hypot(ax + t * dx, ay + t * dy);
+}
+async function watersNear(lat, lng){
+  if(lat == null || lng == null) return [];
+  const ids = counties.map(f => f.id).filter(id => { const [a, d, c, b] = countyBox[id]; return lat >= a && lat <= c && lng >= d && lng <= b; });
+  const best = {};
+  const note = (name, kind, dist) => { if(!name) return; const k = name.toLowerCase(); if(!best[k] || dist < best[k].dist) best[k] = { name, kind, dist }; };
+  for(const id of ids){
+    let w; try{ w = await getJSON(waterCache, dataUrl("water/" + id + ".json"), id); }catch(e){ continue; }
+    for(const [name, , paths] of w.s || []) for(const path of paths) for(let i = 1; i < path.length; i++){
+      const p = path[i - 1], q = path[i];
+      if(Math.abs(p[1] - lat) > .02 && Math.abs(q[1] - lat) > .02) continue;
+      const d = segDistM(lat, lng, p, q); if(d < SUGGEST_M) note(name, /river/i.test(name) ? "River" : "Creek", d);
+    }
+    for(const [name, , rings] of w.l || []){
+      for(const ring of rings){
+        if(ring.length > 2 && pipRing(lng, lat, ring)){ note(name, waterType(name), 0); continue; }
+        for(let i = 1; i < ring.length; i++){ const p = ring[i - 1], q = ring[i];
+          if(Math.abs(p[1] - lat) > .02) continue;
+          const d = segDistM(lat, lng, p, q); if(d < SUGGEST_M) note(name, waterType(name), d); }
+      }
+    }
+  }
+  return Object.values(best).sort((a, b) => a.dist - b.dist);
+}
+// the water to label the catch with: the nearest one, if it's close enough
+function pickWater(list){ const w = list[0]; if(!w) return null; return w.dist <= (/creek|river/i.test(w.kind) ? WATER_NEAR_M : LAKE_NEAR_M) ? w : null; }
+const distTxt = m => m < 15 ? "right on it" : m < 300 ? `about ${Math.round(m * 3.281 / 10) * 10} ft away` : `about ${(m / 1609).toFixed(1)} mi away`;
+
+/* catch form: fill Water whenever the location changes, unless the angler typed their own */
+let waterTouched = false, waterReq = 0;
+$("fWaterName").addEventListener("input", () => { waterTouched = true; $("waterHint").textContent = ""; });
+async function updateWaterFromCoords(){
+  if(formKind !== "catch") return;
+  const c = parseCoords($("fCoords").value), my = ++waterReq;
+  if(!c){ $("waterNear").innerHTML = ""; if(!waterTouched) $("waterHint").textContent = ""; return; }
+  const list = await watersNear(c.lat, c.lng);
+  if(my !== waterReq) return;
+  $("waterNear").innerHTML = list.slice(0, 8).map(w => `<option value="${esc(w.name)}">${esc(w.kind)} · ${esc(distTxt(w.dist))}</option>`).join("");
+  if(waterTouched) return;
+  const w = pickWater(list), h = $("waterHint");
+  if(w){ $("fWaterName").value = w.name; h.className = "hint ok"; h.textContent = `From the location: ${w.dist < 15 ? "on" : distTxt(w.dist).replace("away", "from")} ${w.name}.`; }
+  else { $("fWaterName").value = ""; h.className = "hint"; h.textContent = list.length ? `Nearest named water is ${list[0].name}, ${distTxt(list[0].dist)}. Type it in if that's where you were.` : countyAt(c.lat, c.lng) ? "No named creek or lake right here. Type one in if you like." : ""; }
+}
+$("fCoords").addEventListener("input", () => { clearTimeout(updateWaterFromCoords._t); updateWaterFromCoords._t = setTimeout(updateWaterFromCoords, 300); });
+
+/* older catches get their water filled in quietly, a few at a time */
+let waterBackfilling = false;
+async function backfillWaters(){
+  if(waterBackfilling || !me) return; waterBackfilling = true;
+  try{
+    const done = lsGet("fl.waterTried", {});
+    const todo = catches.filter(c => !c.water && c.lat != null && c.county && !done[c.id] && !c._pending).slice(0, 15);
+    for(const c of todo){
+      done[c.id] = 1;
+      const w = pickWater(await watersNear(+c.lat, +c.lng));
+      if(w) await saveRecord("catches", { ...c, water:w.name }, null, true);
+    }
+    lsSet("fl.waterTried", done);
+  }catch(e){ console.warn("waters", e); } finally { waterBackfilling = false; }
+}
 
 
 /* ---------- sign in ---------- */
