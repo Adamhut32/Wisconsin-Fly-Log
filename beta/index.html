@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Coulee</title>
+<meta name="description" content="Fly fishing spots, catches and trips across Wisconsin's counties.">
+<script>try{var t=JSON.parse(localStorage.getItem("fl.theme")||'"auto"');if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
+<meta name="theme-color" content="#FAF6EB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1F1E19" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Coulee">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rokkitt:wght@500;700&family=Crimson+Pro:ital,wght@1,500;1,600&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="../vendor/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-fish" viewBox="0 0 24 24"><path fill="currentColor" d="M2.5 12c2.2-3.6 5.6-5.5 9.6-5.5 3.3 0 5.8 1.4 7.6 3.4l2.8-2.2v8.6l-2.8-2.2c-1.8 2-4.3 3.4-7.6 3.4-4 0-7.4-1.9-9.6-5.5zm13.3-1.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5a6.8 6.8 0 0 0-6.8 6.8c0 5 6.8 12.2 6.8 12.2s6.8-7.2 6.8-12.2A6.8 6.8 0 0 0 12 2.5zm0 9.3a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path fill="currentColor" d="M14.6 5.4 16 6.8 10.8 12l5.2 5.2-1.4 1.4L8 12z"/></symbol>
+  <symbol id="i-gps" viewBox="0 0 24 24"><path fill="currentColor" d="M11 1h2v3.1A8 8 0 0 1 19.9 11H23v2h-3.1A8 8 0 0 1 13 19.9V23h-2v-3.1A8 8 0 0 1 4.1 13H1v-2h3.1A8 8 0 0 1 11 4.1zm1 5a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path fill="currentColor" d="M10 3a7 7 0 0 1 5.6 11.2l4.6 4.6-1.4 1.4-4.6-4.6A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path fill="currentColor" d="M3.3 2 22 20.7 20.7 22l-2.1-2.1H6.5A5 5 0 0 1 5.8 10 2 2 0 0 1 6 9.3L2 5.3zm4.3 9.4A3 3 0 0 0 6.5 18h10l-9-9zm3-5.8a7 7 0 0 1 8.2 5.5 4.3 4.3 0 0 1 2.4 7.5l-1.4-1.4A2.3 2.3 0 0 0 18.4 13h-1.5l-.2-1.4A5 5 0 0 0 12 7.5a5 5 0 0 0-1.9.4z"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><h1>Coulee</h1><span class="sub">Wisconsin fly fishing</span><span class="pill testpill" id="testPill" hidden>Test</span></div>
+    <span class="sync" id="sync" hidden></span>
+    <div class="tally" aria-live="polite">
+      <span class="t-spot"><b id="tSpots">0</b>spots</span>
+      <span class="t-fish"><b id="tFish">0</b>fish</span>
+      <span class="t-cty"><b id="tCounties">0</b>counties</span>
+    </div>
+  </header>
+  <div class="main">
+    <div class="mapwrap">
+      <div id="map" role="region" aria-label="Map of Wisconsin counties"></div>
+      <div class="crumb">
+        <div class="search"><svg><use href="#i-search"/></svg><input id="q" type="search" placeholder="Find a creek or lake" autocomplete="off" aria-label="Find a creek or lake"><ul id="qres" hidden></ul></div>
+        <button class="btn" id="backBtn" type="button" hidden><svg><use href="#i-back"/></svg>All of Wisconsin</button>
+      </div>
+      <div class="pickbar" id="pickbar" hidden><span>Tap the map to place it</span><button id="pickCancel" type="button">Cancel</button></div>
+      <div class="legend" id="legend">
+        <span><i style="background:var(--spot)"></i>Spot</span><span><i style="background:var(--fish)"></i>Catch</span>
+        <span class="fl"><i style="background:var(--friend)"></i>Friends</span>
+        <span class="tl"><i style="background:var(--t1)"></i>Class I</span><span class="tl"><i style="background:var(--t2)"></i>Class II</span><span class="tl"><i style="background:var(--t3)"></i>Class III</span>
+        <span class="al"><i class="sq" style="background:var(--pub)"></i>Public land</span>
+        <button class="lgbtn" id="accessToggle" type="button" aria-pressed="true">Public land on</button>
+        <button class="lgbtn" id="terrainToggle" type="button" aria-pressed="true">Terrain on</button>
+      </div>
+      <button class="btn panelshow" id="panelShow" type="button" hidden>« Show panel</button>
+      <div class="fab" id="fab">
+        <button class="btn spot" id="addSpotBtn" type="button"><svg><use href="#i-pin"/></svg>Add spot</button>
+        <button class="btn fish" id="addCatchBtn" type="button"><svg><use href="#i-fish"/></svg>Log a catch</button>
+      </div>
+    </div>
+    <aside class="log">
+      <button class="grab" id="grab" type="button" aria-label="Hide or show the panel" aria-expanded="true"><i></i><span id="grabLabel">Pull up for your log</span></button>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button role="tab" data-tab="map" aria-selected="true" type="button">Log</button>
+        <button role="tab" data-tab="trips" aria-selected="false" type="button">Trips</button>
+        <button role="tab" data-tab="tourney" aria-selected="false" type="button">Tourneys<span class="dot" id="tDot" hidden></span></button>
+        <button role="tab" data-tab="friends" aria-selected="false" type="button">Friends<span class="dot" id="reqDot" hidden></span></button>
+        <button role="tab" data-tab="stats" aria-selected="false" type="button">Stats</button>
+        <button role="tab" data-tab="me" aria-selected="false" type="button">Me<span class="dot" id="meDot" hidden></span></button>
+        <button class="panelhide" id="panelHide" type="button" aria-label="Hide panel" title="Hide panel">»</button>
+      </nav>
+      <div class="panel" id="log" aria-live="polite"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- sign in -->
+<div class="authwrap" id="auth" hidden>
+  <div class="authcard">
+    <div class="authhead">
+      <h1>Coulee</h1>
+      <p>Map your water, log your fish, and see what your friends are catching.</p>
+    </div>
+    <div class="seg" role="group" aria-label="Sign in or create account">
+      <button type="button" class="ink" id="authInTab" aria-pressed="true">Sign in</button>
+      <button type="button" class="ink" id="authUpTab" aria-pressed="false">Create account</button>
+    </div>
+    <form id="authForm" novalidate>
+      <div class="field" id="nameRow" hidden><label for="aName">Your name</label><input id="aName" autocomplete="nickname" placeholder="Adam" maxlength="40"></div>
+      <div class="field" id="yearRow" hidden><label for="aYear">Year you were born</label><input id="aYear" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="1990" autocomplete="bday-year"></div>
+      <div class="field"><label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <div class="field" id="pwRow"><label for="aPw">Password</label><div class="pwwrap"><input id="aPw" type="password" autocomplete="current-password" placeholder="At least 8 characters" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="pwshow" type="button" id="pwShow" aria-pressed="false" aria-label="Show password">Show</button></div></div>
+      <div id="agreeRow" hidden class="agree">
+        <label class="check"><input type="checkbox" id="aAgree"><span>I'm 13 or older and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use and Privacy Policy</a>.</span></label>
+        <label class="check"><input type="checkbox" id="aRegs"><span>I understand the regulations shown may be out of date, the Wisconsin DNR's rules are what count, and I'll respect private land.</span></label>
+      </div>
+      <label class="check" id="stayRow"><input type="checkbox" id="aStay" checked> Stay signed in on this device</label>
+      <span class="hint" id="authMsg" role="alert"></span>
+      <button class="btn fish wide" type="submit" id="authGo">Sign in</button>
+      <button class="link" type="button" id="forgotBtn">Forgot your password?</button>
+    </form>
+  </div>
+</div>
+
+<!-- entry sheet (catch / spot) -->
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+    <h3 id="formTitle">Log a catch</h3>
+    <div class="seg" role="group" aria-label="Entry type">
+      <button type="button" class="fish" id="segFish" aria-pressed="true">Catch</button>
+      <button type="button" class="spot" id="segSpot" aria-pressed="false">Spot</button>
+    </div>
+    <form id="entryForm" novalidate>
+      <div id="catchFields">
+        <label class="photo" id="photoBox">
+          <span class="pv" id="photoPv"><svg><use href="#i-fish"/></svg></span>
+          <span class="pt"><b id="photoTitle">Add a photo</b><small id="photoSub">Location and date fill in from the photo when it has them</small></span>
+          <input type="file" id="fPhoto" accept="image/*">
+        </label>
+        <button class="link camfix" type="button" id="camFixBtn" data-camhelp hidden>No location in the photo? Here's how to fix it</button>
+      </div>
+      <div class="field" id="nameField" hidden>
+        <label for="fName">Spot name</label>
+        <input id="fName" placeholder="Timber Coulee at Bohemian Valley Rd">
+      </div>
+      <div class="field">
+        <label for="fCoords">Location</label>
+        <div class="loc">
+          <input id="fCoords" inputmode="decimal" placeholder="43.6120, -90.9081" autocomplete="off">
+          <button class="btn" type="button" id="gpsBtn"><svg><use href="#i-gps"/></svg>Here</button>
+          <button class="btn" type="button" id="pickBtn"><svg><use href="#i-pin"/></svg>Map</button>
+        </div>
+        <span class="hint" id="coordHint">Use your location, pick on the map, or paste coordinates.</span>
+      </div>
+
+      <div id="catchFields2">
+        <div class="grid2" style="margin-bottom:12px">
+          <div class="field"><label for="fMethod">Method</label>
+            <select id="fMethod"><option value="fly">Fly</option><option value="spin">Spinning</option><option value="baitcast">Baitcasting</option><option value="ice">Ice fishing</option><option value="trolling">Trolling</option><option value="other">Other</option></select></div>
+          <div class="field" id="fForRow"><label for="fFor">Whose fish?</label><select id="fFor"><option value="">Mine</option></select></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label for="fSpecies">Species</label><input id="fSpecies" list="speciesList" placeholder="Brown trout"></div>
+          <div class="field"><label for="fLen">Length (in)</label><input id="fLen" inputmode="decimal" placeholder="14"></div>
+          <div class="field"><label for="fCount">Fish</label><input id="fCount" type="number" min="0" value="1"></div>
+        </div>
+        <div class="field" id="fWtRow" style="margin-top:12px" hidden><label for="fWt">Weight (lb)</label><input id="fWt" inputmode="decimal" placeholder="3.5, or 3 lb 8 oz" autocomplete="off"><span class="hint" id="fWtHint"></span></div>
+        <button class="link" type="button" id="fWtAdd" style="margin-top:6px">+ Add weight</button>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="fFly" id="fFlyLbl">Fly</label><input id="fFly" list="flyList" placeholder="#16 Elk Hair Caddis"></div>
+          <div class="field"><label for="fDate">Date</label><input id="fDate" type="date"></div>
+        </div>
+        <div class="field" style="margin-top:12px"><label for="fWaterName">Water</label><input id="fWaterName" list="waterNear" maxlength="120" placeholder="Fills in from the location" autocomplete="off"><datalist id="waterNear"></datalist>
+          <span class="hint" id="waterHint"></span></div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="fTrip">Trip</label><select id="fTrip"><option value="">No trip</option></select></div>
+          <div class="field"><label for="fSpotLink">At spot</label><select id="fSpotLink"><option value="">None</option></select></div>
+        </div>
+      </div>
+
+      <div id="spotFields" hidden>
+        <div class="grid2">
+          <div class="field"><label for="fWater">Water type</label>
+            <select id="fWater"><option>Creek</option><option>River</option><option>Spring pond</option><option>Lake</option><option>Flowage</option></select></div>
+          <div class="field"><label for="fClass">Trout class</label>
+            <select id="fClass"><option value="">Not set</option><option>Class I</option><option>Class II</option><option>Class III</option></select></div>
+        </div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="fTarget">Target species</label><input id="fTarget" list="speciesList" placeholder="Brook trout"></div>
+          <div class="field"><label for="fStatus">Status</label>
+            <select id="fStatus"><option value="want">Want to try</option><option value="scouted">Scouted</option><option value="fished">Fished</option></select></div>
+        </div>
+      </div>
+
+      <div class="field"><label for="fNotes">Notes</label><textarea id="fNotes" placeholder="Water level, hatch, access, parking"></textarea></div>
+      <div class="field">
+        <label>Friends see</label>
+        <div class="seg vis" role="group" aria-label="What friends can see" id="visSeg">
+          <button type="button" data-v="exact" aria-pressed="false">Exact spot</button>
+          <button type="button" data-v="county" aria-pressed="true">County only</button>
+          <button type="button" data-v="private" aria-pressed="false">Nothing</button>
+        </div>
+      </div>
+      <span class="hint" id="formErr" role="alert"></span>
+      <div class="actions">
+        <button class="btn" type="button" id="cancelBtn">Cancel</button>
+        <button class="btn fish" type="submit" id="saveBtn">Save catch</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- trip sheet -->
+<div class="scrim" id="tripScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="tripTitle">
+    <h3 id="tripTitle">New trip</h3>
+    <form id="tripForm" novalidate>
+      <div class="field"><label for="tName">Trip name</label><input id="tName" placeholder="Driftless, Memorial Day" maxlength="80"></div>
+      <div class="grid2">
+        <div class="field"><label for="tStart">First day</label><input id="tStart" type="date"></div>
+        <div class="field"><label for="tEnd">Last day</label><input id="tEnd" type="date"></div>
+      </div>
+      <div class="field"><label for="tBase">Home base</label><input id="tBase" placeholder="Westby campground"></div>
+      <div class="field"><label for="tNotes">Notes</label><textarea id="tNotes" placeholder="Who came, water conditions, what worked"></textarea></div>
+      <label class="check"><input type="checkbox" id="tShared" checked> Friends can see this trip</label>
+      <span class="hint" id="tripErr" role="alert"></span>
+      <div class="actions">
+        <button class="btn" type="button" id="tripCancel">Cancel</button>
+        <button class="btn ink" type="submit" id="tripSave">Save trip</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- tournament sheet -->
+<div class="scrim" id="tourneyScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="tfTitle">
+    <h3 id="tfTitle">New tournament</h3>
+    <form id="tourneyForm" novalidate>
+      <div class="field"><label for="tfName">Name</label><input id="tfName" maxlength="80" placeholder="Opening weekend brown trout"></div>
+      <div class="field"><label for="tfDesc">Description</label><textarea id="tfDesc" maxlength="1000" placeholder="Prize, house rules, where to meet"></textarea></div>
+      <div class="grid2">
+        <div class="field"><label for="tfStart">Starts</label><input id="tfStart" type="date"></div>
+        <div class="field"><label for="tfEnd">Ends</label><input id="tfEnd" type="date"></div>
+      </div>
+      <div class="field"><label for="tfArea">Area</label>
+        <select id="tfArea"><option value="any">Anywhere in Wisconsin</option><option>Driftless Area</option><option>Northwoods</option><option>Central Sands</option><option value="pick">Pick counties</option></select></div>
+      <div class="card" id="tfCountyBox" hidden>
+        <div class="row2" style="justify-content:space-between"><input id="tfCountyQ" placeholder="Filter counties" aria-label="Filter counties" style="flex:1 1 160px"><span class="muted" id="tfCountyCount">0 selected</span></div>
+        <div id="tfCountyList" style="max-height:180px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="tfSpecies">Species</label>
+          <select id="tfSpecies"><option value="any">Any species</option><option value="trout">Trout only</option><option>Brown trout</option><option>Brook trout</option><option>Rainbow trout</option><option value="bass">Bass (any)</option><option>Smallmouth bass</option><option>Largemouth bass</option><option>Northern pike</option><option>Musky</option><option>Walleye</option><option value="panfish">Panfish (any)</option><option>Bluegill</option><option>Yellow perch</option><option>Crappie</option></select></div>
+        <div class="field"><label for="tfScoring">Scoring</label>
+          <select id="tfScoring"><option value="biggest">Biggest fish</option><option value="top3">Top 3 total length</option><option value="most">Most fish</option><option value="species">Most species</option></select></div>
+      </div>
+      <div class="field"><label for="tfMethod">Method</label><select id="tfMethod"><option value="any">Any method</option><option value="fly">Fly only</option><option value="nofly">Spin, bait and ice only</option></select></div>
+      <label class="check"><input type="checkbox" id="tfPhoto" checked> Require a photo taken during the tournament</label>
+      <label class="check" id="tfOpenRow" hidden><input type="checkbox" id="tfOpen"> Open to everyone (anyone can join)</label>
+      <div class="field"><label>Invite friends</label><div id="tfInvite" class="stack" style="gap:4px"></div></div>
+      <span class="hint" id="tfErr" role="alert"></span>
+      <div class="actions">
+        <button class="btn" type="button" id="tfCancel">Cancel</button>
+        <button class="btn ink" type="submit" id="tfSave">Create tournament</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- what's new -->
+<div class="scrim guide" id="news" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="newsTitle">
+    <div class="eyebrow">What's new</div>
+    <h3 id="newsTitle">Updates to Coulee</h3>
+    <div id="newsBody" class="gbody"></div>
+    <div class="actions"><button class="btn ink" type="button" id="newsOk">Got it</button></div>
+  </div>
+</div>
+
+<!-- setup guide -->
+<div class="scrim guide" id="guide" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <div class="gsteps" id="guideDots" aria-hidden="true"></div>
+    <div id="guideBody"></div>
+    <div class="actions" style="justify-content:space-between">
+      <button class="link" type="button" id="guideSkip">Skip guide</button>
+      <span class="row2"><button class="btn" type="button" id="guideBack">Back</button><button class="btn ink" type="button" id="guideNext">Next</button></span>
+    </div>
+  </div>
+</div>
+
+<div class="coachRing" id="coachRing" hidden></div>
+<!-- agreements for existing accounts -->
+<div class="scrim guide" id="terms" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
+    <div class="eyebrow">Before you keep going</div>
+    <h3 id="termsTitle">New terms for Coulee</h3>
+    <p class="muted">Coulee now has Terms of Use and a Privacy Policy. Please read them and agree to keep using the app.</p>
+    <div class="field" id="tYearRow"><label for="tYear">Year you were born</label><input id="tYear" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="1990"></div>
+    <label class="check"><input type="checkbox" id="tAgree"><span>I'm 13 or older and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use and Privacy Policy</a>.</span></label>
+    <label class="check"><input type="checkbox" id="tRegs"><span>I understand the regulations shown may be out of date, the Wisconsin DNR's rules are what count, and I'll respect private land.</span></label>
+    <span class="hint" id="termsMsg" role="alert"></span>
+    <div class="actions" style="justify-content:space-between"><button class="link" type="button" id="termsOut">Sign out</button><button class="btn ink" type="button" id="termsOk">Agree and continue</button></div>
+  </div>
+</div>
+
+<!-- waiting for approval -->
+<div class="authwrap" id="gate" hidden>
+  <div class="authcard">
+    <div class="authhead"><h1>Coulee</h1></div>
+    <div id="gateBody"></div>
+    <div class="row2" style="margin-top:16px"><button class="btn ink" type="button" id="gateCheck">Check again</button><button class="btn" type="button" id="gateOut">Sign out</button></div>
+  </div>
+</div>
+
+<!-- camera location help -->
+<div class="scrim guide camhelp" id="camHelp" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="camTitle">
+    <div class="eyebrow">Photo locations</div>
+    <h3 id="camTitle">Let your camera save where you were</h3>
+    <p class="muted" style="margin:0 0 8px">Then Coulee can drop each catch on the map, and name the creek, from the photo alone.</p>
+    <div class="seg" role="group" aria-label="Phone" id="camOs"><button type="button" class="ink" data-os="ios" aria-pressed="true">iPhone</button><button type="button" class="ink" data-os="android" aria-pressed="false">Android</button></div>
+    <div id="camSteps"></div>
+    <h4><span>Check a photo</span></h4>
+    <p class="muted" style="margin:0 0 8px">Take a quick photo with your camera, then pick it here. Coulee tells you whether it has a location and date. Nothing is uploaded.</p>
+    <label class="btn" id="camTestLbl">Test a photo<input type="file" id="camTest" accept="image/*" class="vh"></label>
+    <div id="camResult" role="status"></div>
+    <div class="actions"><button class="btn ink" type="button" id="camDone">Done</button></div>
+  </div>
+</div>
+
+<div class="updbar" id="updBar" hidden role="status"><span>A new version of Coulee is ready.</span><button class="btn sm ink" type="button" id="updGo">Refresh</button><button class="link" type="button" id="updLater">Later</button></div>
+
+<datalist id="speciesList">
+  <option>Brook trout</option><option>Brown trout</option><option>Rainbow trout</option><option>Tiger trout</option>
+  <option>Smallmouth bass</option><option>Largemouth bass</option><option>Northern pike</option><option>Musky</option>
+  <option>Bluegill</option><option>Pumpkinseed</option><option>Crappie</option><option>Rock bass</option><option>Yellow perch</option><option>White bass</option>
+  <option>Walleye</option><option>Sauger</option><option>Lake trout</option><option>Splake</option><option>Chinook salmon</option><option>Coho salmon</option><option>Steelhead</option>
+  <option>Channel catfish</option><option>Flathead catfish</option><option>Bullhead</option><option>Lake sturgeon</option><option>Bowfin</option><option>Freshwater drum</option><option>Common carp</option><option>White sucker</option>
+</datalist>
+<datalist id="flyList">
+  <option>Elk Hair Caddis</option><option>Parachute Adams</option><option>Pheasant Tail Nymph</option><option>Hare's Ear Nymph</option>
+  <option>Copper John</option><option>Woolly Bugger</option><option>Scud</option><option>Zebra Midge</option><option>Hopper</option><option>Clouser Minnow</option><option>Sulphur</option><option>Blue-winged Olive</option>
+</datalist>
+
+<div class="toast" id="toast" hidden></div>
+<div class="cheer" id="cheer" hidden role="status"></div>
+
+<script src="../vendor/leaflet.js"></script>
+<script src="../vendor/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
