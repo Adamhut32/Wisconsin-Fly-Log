@@ -2034,6 +2034,7 @@ const GUIDE = () => [
   { t:"Allow location for the Here button", b:`<p>When you tap <b>Here</b> while logging a catch, your phone asks to share your location with the app. Tap <b>Allow</b>.</p>
       <p>Tapped Don't Allow by mistake? Go to <b>Settings → Privacy &amp; Security → Location Services → Safari Websites</b> and choose <b>While Using the App</b>.</p>
       <div class="row2"><button class="btn sm" type="button" id="guideGps">${icon("i-gps")}Try it now</button><span class="hint" id="guideGpsMsg"></span></div>` },
+  { t:"Turn on notifications", b:notifyStepHtml() },
   { t:"The map", at:"#map", b:`<p><b>Tap a county</b> to see every named creek, river and lake in it. Colored bands are DNR trout classes (green Class I, gold II, rust III), and green shading is public land.</p><p class="muted">Tap any creek for its name, season and the nearest regulation.</p>` },
   { t:"Search", at:".search", b:`<p>Type any creek or lake name to jump straight to it.</p>` },
   { t:"Where am I", at:".locbtn", b:`<p>Shows where you're standing and the creek you're on. From there, <b>Add spot here</b> or <b>Log a catch here</b> in one tap.</p>` },
@@ -2045,6 +2046,15 @@ const GUIDE = () => [
   { t:"Me", at:'.tabs [data-tab="me"]', open:true, b:`<p>Turn on <b>notifications</b>, tell Coulee <b>how you fish</b>, add a profile picture, and find Help and Suggestions.</p>` },
   { t:"You're set", b:`<p>Tap a county to start exploring, or log your first fish.</p><p class="muted">Help and Suggestions are in the Me tab. Suggestions go straight to the founder.</p>` }
 ];
+function notifyStepHtml(){
+  const intro = `<p>Get a notification when a friend adds you, sends a message, invites you to a tournament or logs a fish for you.</p>`;
+  if(!pushSupported()) return intro + (isIOS && !isStandalone
+    ? `<p>On iPhone this works once Coulee is on your Home Screen (iOS 16.4 or newer). Add it, open Coulee from the icon, then turn them on in <b>Me → Notifications</b>.</p>`
+    : `<p class="muted">This browser can't show notifications. On iPhone, open Coulee from the Home Screen icon. On Android, use Chrome. You can turn them on later in <b>Me → Notifications</b>.</p>`);
+  if(Notification.permission === "denied") return intro + `<p>Notifications are blocked for Coulee right now. Turn them on in <b>Settings → Notifications → Coulee</b> (iPhone) or your browser's site settings, then tap below.</p>` + notifyBtn();
+  return intro + `<p class="muted">Your phone will ask once. Tap <b>Allow</b>. You can pick which ones you get, or turn them off, in <b>Me → Notifications</b>.</p>` + notifyBtn();
+}
+const notifyBtn = () => `<div class="row2"><button class="btn sm ink" type="button" id="guideNotif">${icon("i-bell")}Turn on notifications</button><span class="hint" id="guideNotifMsg"></span></div>`;
 let guideStep = 0, guideSteps = [];
 function openGuide(replay){
   if(!$("guide").hidden) return;
@@ -2058,6 +2068,14 @@ function renderGuide(){
   $("guideBack").hidden = guideStep === 0;
   $("guideNext").textContent = guideStep === guideSteps.length - 1 ? "Start fishing" : "Next";
   $("guideSkip").hidden = guideStep === guideSteps.length - 1;
+  const n = $("guideNotif");
+  if(n){ refreshPushState().then(() => { if(pushStateV === "on" && $("guideNotif")){ $("guideNotif").hidden = true; $("guideNotifMsg").className = "hint ok"; $("guideNotifMsg").textContent = "Notifications are already on for this phone."; } });
+    n.onclick = async () => {
+      const m = $("guideNotifMsg"); n.disabled = true; m.className = "hint"; m.textContent = "Asking your phone…";
+      await enablePush(); await refreshPushState();
+      if(pushStateV === "on"){ n.hidden = true; m.className = "hint ok"; m.textContent = "Notifications are on. A test is on its way."; }
+      else { n.disabled = false; m.className = "hint bad"; m.textContent = pushStateV === "denied" ? "Blocked. Use Settings → Notifications → Coulee, then try again." : "Not turned on. You can do it later in Me → Notifications."; }
+    }; }
   const g = $("guideGps");
   if(g) g.onclick = () => {
     const m = $("guideGpsMsg"); m.className = "hint"; m.textContent = "Asking for your location…";
