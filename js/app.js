@@ -26,6 +26,7 @@ let showFriends = lsGet("fl.showFriends", true);
 let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
+let mapPerson = null; // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me
 let tripOpen = null;           // trip id shown in Trips tab
@@ -57,7 +58,13 @@ const lenTxt = v => v == null || v === "" ? "" : `${+v}″`;
 
 /* ---------- derived numbers ---------- */
 function countyStats(id){
-  let s=0,f=0; for(const x of spots) if(x.county===id) s++; for(const c of catches) if(c.county===id) f+=fishOf(c);
+  let s=0,f=0;
+  if(mapPerson){ // looking at a friend's map: count what they share
+    for(const x of friendSpots) if(x.user_id===mapPerson && x.county===id) s++;
+    for(const c of friendCatches) if(c.user_id===mapPerson && c.county===id) f+=fishOf(c);
+    return { spots:s, fish:f };
+  }
+  for(const x of spots) if(x.county===id) s++; for(const c of catches) if(c.county===id) f+=fishOf(c);
   return { spots:s, fish:f };
 }
 function totals(){
@@ -65,7 +72,7 @@ function totals(){
   return { spots:spots.length, fish:catches.reduce((a,c)=>a+fishOf(c),0), counties:ids.size };
 }
 
-const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:16, zoomSnap:0.25, preferCanvas:false });
+const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:18, zoomSnap:0.25, preferCanvas:false });
 map.zoomControl.setPosition("topright");
 const wiBounds = L.geoJSON(GEO.counties).getBounds();
 map.setMaxBounds(wiBounds.pad(0.6));
@@ -134,6 +141,18 @@ function setMask(id){
 /* ---------- detailed creeks, lakes and trout water, one file per county ---------- */
 const waterCache = {}, troutCache = {};
 let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], detailLabelsExtra = [];
+/* the creek data has a point every ~60 m, so lines look jagged up close; round the corners (Chaikin) so they read like water */
+function smoothPath(pts, n = 2){
+  if(pts.length < 3) return pts;
+  for(let k = 0; k < n; k++){
+    const out = [pts[0]];
+    for(let i = 0; i < pts.length - 1; i++){ const a = pts[i], b = pts[i+1];
+      out.push([a[0]*.75 + b[0]*.25, a[1]*.75 + b[1]*.25], [a[0]*.25 + b[0]*.75, a[1]*.25 + b[1]*.75]); }
+    out.push(pts[pts.length - 1]); pts = out;
+  }
+  return pts;
+}
+const llPaths = paths => paths.map(pa => smoothPath(pa.map(q => [q[1], q[0]])));
 function streamWeight(o){ return o >= 6 ? 3 : o >= 5 ? 2.5 : o >= 4 ? 2 : o >= 3 ? 1.6 : o >= 2 ? 1.25 : 0.95; }
 const TROUT = { 1:{ label:"Class I", tok:"--t1" }, 2:{ label:"Class II", tok:"--t2" }, 3:{ label:"Class III", tok:"--t3" } };
 async function getJSON(cache, path, id){
@@ -189,7 +208,7 @@ async function loadDetail(id){
   catch(e){ if(detailFor===id) toast("Couldn't load creeks for this county."); return; }
   if(detailFor !== id) return;
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
-  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6 }); // a fresh canvas per county
+  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:.6 });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
     const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1 });
     if(name && name !== "Unnamed"){ p.on("click", e => openWaterPopup(e, name, waterType(name))); detailLakes.push({ name, poly:p }); }
@@ -203,7 +222,7 @@ async function loadDetail(id){
   /* trout class bands sit under the creek line, like a highlighter on a paper map */
   if(t) for(const [name, c, mi, orw, paths] of t.t){
     if(!TROUT[c]) continue;
-    const band = L.polyline(paths.map(pa=>pa.map(q=>[q[1],q[0]])), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round" });
+    const band = L.polyline(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
     g.addLayer(band);
@@ -211,10 +230,10 @@ async function loadDetail(id){
   for(const [name, order, raw] of w.s){
     const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
     if(!paths.length) continue;
-    const ll = paths.map(pa=>pa.map(q=>[q[1],q[0]]));
+    const ll = llPaths(paths);
     const wgt = streamWeight(order);
-    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85 }));
-    const line = L.polyline(ll, { renderer:R, color:css("--stream"), weight:wgt, opacity:1 });
+    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
+    const line = L.polyline(ll, { renderer:R, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
     const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
     line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null));
     line.on("mouseover", () => setHover(name)); line.on("mouseout", () => setHover(null));
@@ -236,15 +255,15 @@ async function loadNearby(id){
   const lb = {}; countyLayer.eachLayer(l => lb[l.feature.id] = l.getBounds());
   const around = lb[id].pad(0.35);
   const ids = Object.keys(lb).filter(k => k !== id && around.intersects(lb[k]));
-  const R = nearbyRenderer = L.canvas({ pane:"nearby" });
+  const R = nearbyRenderer = L.canvas({ pane:"nearby", padding:.6 });
   const layer = nearbyLayer = L.layerGroup().addTo(map);
   await Promise.all(ids.map(async k => {
     let w, t;
     try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + k + ".json"), k), getJSON(troutCache, dataUrl("water/trout/" + k + ".json"), k).catch(()=>null) ]); }catch(e){ return; }
     if(detailFor !== id || nearbyLayer !== layer) return;
     for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1 }));
-    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(L.polyline(paths.map(pa=>pa.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css(TROUT[c].tok), weight:5, opacity:.3 }));
-    for(const [name, order, paths] of w.s) layer.addLayer(L.polyline(paths.map(pa=>pa.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order) }));
+    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), weight:5, opacity:.3, lineJoin:"round" }));
+    for(const [name, order, paths] of w.s) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order), lineJoin:"round" }));
   }));
 }
 function clearDetail(){
@@ -416,12 +435,12 @@ function renderBadges(){
 const markerIndex = {};
 function renderMarkers(){
   markerLayer.clearLayers(); friendLayer.clearLayers();
-  for(const s of spots){
+  for(const s of (mapPerson ? [] : spots)){
     const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot ${esc(s.status)}"></div>`, iconSize:[0,0] }), riseOnHover:true, title:s.name||"Spot" });
     m.bindPopup(() => spotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });
     markerLayer.addLayer(m); markerIndex["s:"+s.id] = m;
   }
-  for(const c of catches){
+  for(const c of (mapPerson ? [] : catches)){
     if(c.lat == null) continue;
     const url = photoSrc(c.photo_path);
     const bg = url ? `style="background-image:url('${url}')"` : "";
@@ -431,20 +450,27 @@ function renderMarkers(){
     markerLayer.addLayer(m); markerIndex["c:"+c.id] = m;
   }
   for(const c of friendCatches){
-    if(c.lat == null) continue;
+    if(c.lat == null || (mapPerson && c.user_id !== mapPerson)) continue;
     const first = (c.display_name || "Friend").split(" ")[0];
-    const html = `<div class="mk-fish friend">${icon("i-fish")}<span class="mk-name">${esc(first)}</span></div>`;
+    const url = photoSrc(c.photo_path);
+    const html = `<div class="mk-fish friend${url ? " ph" : ""}" ${url ? `style="background-image:url('${url}')"` : ""}>${url ? "" : icon("i-fish")}${fishOf(c)>1?`<span class="n">${fishOf(c)}</span>`:""}${mapPerson ? "" : `<span class="mk-name">${esc(first)}</span>`}</div>`;
     const m = L.marker([c.lat,c.lng], { icon:L.divIcon({ className:"", html, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:300, title:`${c.display_name}: ${c.species||"Catch"}` });
     m.bindPopup(() => friendCatchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
     friendLayer.addLayer(m); markerIndex["f:"+c.id] = m;
   }
-  $("legend").classList.toggle("friends-on", showFriends && friendCatches.some(c => c.lat != null));
+  for(const s of friendSpots){
+    if(s.lat == null || (mapPerson ? s.user_id !== mapPerson : !showFriends)) continue;
+    const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot friend ${esc(s.status || "")}"></div>`, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:200, title:`${s.display_name}: ${s.name || "Spot"}` });
+    m.bindPopup(() => friendSpotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });
+    friendLayer.addLayer(m); markerIndex["fs:"+s.id] = m;
+  }
+  $("legend").classList.toggle("friends-on", !!mapPerson || (showFriends && (friendCatches.some(c => c.lat != null) || friendSpots.some(s => s.lat != null))));
 }
 function updateZoomLayers(){
   const z = map.getZoom();
   const detail = z >= DETAIL_ZOOM;
   const want = (l, on) => { if(on && !map.hasLayer(l)) map.addLayer(l); if(!on && map.hasLayer(l)) map.removeLayer(l); };
-  want(badgeLayer, !detail); want(markerLayer, detail); want(nameLayer, detail); want(friendLayer, detail && showFriends);
+  want(badgeLayer, !detail); want(markerLayer, detail); want(nameLayer, detail); want(friendLayer, detail && (showFriends || !!mapPerson));
   const showRegions = z < 8.6 && !currentCounty;
   [regionLayer, regionNames].forEach(l => want(l, showRegions));
   want(neighborNames, z < 8);
@@ -478,7 +504,7 @@ function spotPopup(s){
   const v = spotVisits(s);
   const bits = [s.water, s.trout_class, s.target ? "for " + s.target : ""].filter(Boolean).join(" · ");
   const div = popupShell("spot", s, `<h3>${esc(s.name||"Unnamed spot")}</h3>
-    <div class="row2" style="margin:2px 0 4px"><span class="pill ${esc(s.status)}">${STATUS[s.status]||"Want to try"}</span>${s.visibility==="private"?`<span class="pill priv">Private</span>`:""}</div>
+    <div class="row2" style="margin:2px 0 4px"><span class="pill ${esc(s.status)}">${STATUS[s.status]||"Want to try"}</span>${s.visibility==="private"?`<span class="pill priv">Private</span>`:s.share_with?.length?`<span class="pill" title="${esc(s.share_with.map(id => people[id]?.display_name || "Friend").join(", "))}">Shared with ${esc(s.share_with.length === 1 ? (people[s.share_with[0]]?.display_name || "1 friend") : s.share_with.length + " friends")}</span>`:""}</div>
     <div class="meta">${esc(bits)}</div>
     <div class="meta">${v.last ? `Last fished ${esc(fmtDate(v.last))} · ${v.fish} fish over ${v.days} day${v.days===1?"":"s"}` : "No catches logged here yet"}</div>
     <div data-season></div>
@@ -505,7 +531,7 @@ function friendCatchPopup(c){
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
     ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
-    ${c.lat!=null?`<div class="row"><a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div>`:""}`;
+    <div class="row">${c.lat!=null?`<a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
   return div;
 }
 
@@ -673,7 +699,23 @@ function setKind(k){
 }
 $("segFish").onclick = () => setKind("catch");
 $("segSpot").onclick = () => setKind("spot");
-function setVis(v){ visibility = v; $("visSeg").querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v)); }
+function setVis(v){ visibility = v; $("visSeg").querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v)); renderShareRow(); }
+/* spots can go to only some friends */
+let shareWith = null; // null = all friends, otherwise a Set of friend ids
+function myFriends(){ return friendships.filter(f => f.status === "accepted").map(f => f.requester === me?.id ? f.addressee : f.requester).map(id => ({ id, name:people[id]?.display_name || "Friend" })).sort((a, b) => a.name.localeCompare(b.name)); }
+function renderShareRow(){
+  const el = $("shareRow"); if(!el) return;
+  const fr = myFriends();
+  if(formKind !== "spot" || visibility === "private" || !fr.length){ el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<div class="seg vis sm" role="group" aria-label="Which friends"><button type="button" data-sw="all" aria-pressed="${!shareWith}">All friends</button><button type="button" data-sw="some" aria-pressed="${!!shareWith}">Only some</button></div>
+    ${shareWith ? `<div class="chips">${fr.map(f => `<button type="button" class="chip" data-swid="${esc(f.id)}" aria-pressed="${shareWith.has(f.id)}">${esc(f.name)}</button>`).join("")}</div>
+    <small class="hint">${shareWith.size ? `Only ${shareWith.size === 1 ? "this friend sees" : `these ${shareWith.size} friends see`} it. Followers don't.` : "Pick at least one friend, or nobody sees it."}</small>` : ""}`;
+}
+$("shareRow").addEventListener("click", e => {
+  const a = e.target.closest("[data-sw]"); if(a){ shareWith = a.dataset.sw === "some" ? new Set(shareWith || []) : null; renderShareRow(); return; }
+  const c = e.target.closest("[data-swid]"); if(c){ shareWith.has(c.dataset.swid) ? shareWith.delete(c.dataset.swid) : shareWith.add(c.dataset.swid); renderShareRow(); }
+});
 $("visSeg").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if(b) setVis(b.dataset.v); });
 
 function parseCoords(s){
@@ -765,7 +807,8 @@ function openForm(kind, rec, prefill){
   $("fWt").value = r.weight_lb ? String(+r.weight_lb) : ""; $("fWtHint").textContent = r.weight_lb ? wtTxt(r.weight_lb) : ""; syncWeightRow(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
-  if(rec) setVis(rec.visibility);
+  shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
+  if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path);
   if(r.photo_path) setPhotoPreview(url, "Photo saved", "Choose another to replace it");
   else setPhotoPreview(null, "Add a photo", "Location and date fill in from the photo when it has them");
@@ -838,7 +881,8 @@ $("entryForm").addEventListener("submit", async ev => {
       if($("fCount").value === "") rec.count = 1;
     } else {
       table = "spots";
-      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value };
+      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value, share_with: visibility !== "private" && shareWith ? [...shareWith] : null };
+      if(rec.share_with && !rec.share_with.length){ err.textContent = "Pick at least one friend to share this spot with, or choose All friends."; btn.disabled = false; btn.textContent = label; return; }
     }
     const wasEditing = !!editing;
     if(table === "catches") lsSet("fl.method", rec.method);
@@ -876,7 +920,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
   catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb"],
-  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
+  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
 const pick = (table, r) => { const o = {}; for(const k of COLS[table]) if(k in r) o[k] = r[k] === undefined ? null : r[k]; return o; };
@@ -1513,7 +1557,7 @@ function renderFriendsTab(el){
   const incoming = friendships.filter(f => f.status === "pending" && f.addressee === me?.id);
   const outgoing = friendships.filter(f => f.status === "pending" && f.requester === me?.id);
   const other = f => people[f.requester === me?.id ? f.addressee : f.requester] || { display_name:"Someone" };
-  const views = [["feed","Feed"],["messages","Messages"],["forums","Forums"],["board","Leaderboard"],["people","People"],["find","Find anglers"]];
+  const views = [["feed","Feed"],["people","Friends"],["messages","Messages"],["board","Leaderboard"],["forums","Forums"],["find","Find anglers"]];
   let body = "";
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
@@ -1521,7 +1565,7 @@ function renderFriendsTab(el){
       <div class="pb"><span class="who">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}${titlePill(c.user_id)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
       <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
-      : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Share your friend code above, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
+      : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Tap Friends above to add people by friend code or name, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
     if(announcements.length) body = announcements.slice(0, 2).map(a => `<div class="card notice" style="margin-bottom:10px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the founder · ${esc(fmtDate(a.created_at.slice(0,10)))}</p><p>${esc(a.body)}</p></div>`).join("") + body;
   } else if(friendsView === "board"){
     const b = leaderboards(boardPeriod);
@@ -1535,11 +1579,10 @@ function renderFriendsTab(el){
       ${boardHtml("Most counties fished", b.counties, "", "No counties logged in this period.")}
       </div><p class="note">Boards count your catches and what friends share with you. Private catches don't count toward anyone else's view.</p>`;
   } else {
-    body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.requester, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
-      <h4><span>Friends</span><span>${accepted.length}</span></h4>
-      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+    body = `<h4><span>Friends</span><span>${accepted.length}</span></h4>
+      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc((f.requester === me.id ? f.addressee : f.requester))}">Map</button><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
       <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
-      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
+      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc(f.user_id)}">Map</button><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></span></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
       <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
       ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.addressee, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
   }
@@ -1553,14 +1596,14 @@ function renderFriendsTab(el){
   }
   const social = friendsView === "messages" || friendsView === "forums";
   el.innerHTML = `<div class="eyebrow">Friends</div><h2>${friendsView === "forums" ? "Forums" : friendsView === "messages" ? "Messages" : "Fishing friends"}</h2>
-    ${social ? "" : `<div class="code" style="margin:10px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
+    ${requestsBannerHtml()}
+    <div class="yearsel subnav" style="margin-top:6px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
+    <div style="margin-top:10px">${friendsView !== "people" ? "" : `<div class="code" style="margin:4px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
     <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search anglers by name" aria-label="Search anglers by name" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
     ${nameResultsHtml()}
-    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}
-    <div class="yearsel" style="margin-top:${social ? 6 : 14}px">${views.map(([k,l]) => `<button type="button" data-fview="${k}" aria-pressed="${friendsView===k}">${l}${k==="people"&&incoming.length?` (${incoming.length})`:""}${k==="messages"&&unreadTotal?` (${unreadTotal})`:""}</button>`).join("")}</div>
-    <div style="margin-top:10px">${body}</div>`;
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}${body}</div>`;
   if($("addFriendForm")) $("addFriendForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("friendMsg"); msg.className = "hint"; msg.textContent = "Sending…";
     try{ const n = await addFriend($("friendCode").value); msg.className = "hint ok"; msg.textContent = `Request sent to ${n}. They'll see it in their Friends tab.`; $("friendCode").value = ""; }
@@ -1626,6 +1669,35 @@ $("log").addEventListener("click", async e => {
   toast(`Friend request sent${p ? ` to ${p.display_name}` : ""}. They'll see it in their Friends tab.`);
   await loadAll(); renderLog();
 });
+
+/* ---------- friend requests show up quickly: check every 30 s while the app is open ---------- */
+const friendKey = list => (list || []).map(f => f.id + f.status).sort().join(",");
+let friendPollBusy = false;
+async function pollFriends(){
+  if(friendPollBusy || !me || !navigator.onLine || document.visibilityState !== "visible" || accountState() !== "ok") return;
+  friendPollBusy = true;
+  try{
+    const { data, error } = await sb.from("friendships").select("id, status");
+    if(!error && friendKey(data) !== friendKey(friendships)){
+      const before = new Set(friendships.filter(f => f.status === "pending" && f.addressee === me.id).map(f => f.id));
+      await loadAll();
+      const fresh = friendships.filter(f => f.status === "pending" && f.addressee === me.id && !before.has(f.id));
+      if(fresh.length) toast(`${people[fresh[0].requester]?.display_name || "Someone"} sent you a friend request. Open Friends to accept.`);
+    }
+  }catch(e){}
+  friendPollBusy = false;
+}
+setInterval(pollFriends, 30000);
+
+/* requests sit at the top of the Friends tab, whatever view is open */
+function requestsBannerHtml(){
+  const incoming = friendships.filter(f => f.status === "pending" && f.addressee === me?.id);
+  if(!incoming.length) return "";
+  const nm = f => people[f.requester]?.display_name || "Someone";
+  return `<div class="reqbox"><div class="reqhead">${incoming.length === 1 ? "Friend request" : `${incoming.length} friend requests`}</div>
+    ${incoming.map(f => `<div class="reqrow">${avHtml(f.requester, nm(f))}<span class="t"><b class="wrap">${esc(nm(f))}</b><small>Wants to be fishing friends</small></span>
+      <span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></div>`).join("")}</div>`;
+}
 
 
 /* ---------- stats ---------- */
@@ -2294,8 +2366,10 @@ $("log").addEventListener("click", async e => {
 pane("tiles", 395, false);
 const VIEWS = {
   field:{ label:"Map" },
-  sat:{ label:"Satellite", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}", credit:"Imagery: USGS The National Map" },
-  topo:{ label:"Topo", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}", credit:"Topo: USGS The National Map" }
+  // Esri imagery is sharp to zoom 19; USGS imagery stops at 16 and goes soft up close
+  sat:{ label:"Satellite", url:"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", native:19, credit:"Imagery: Esri, Maxar, Earthstar Geographics" },
+  // USGS topo tiles stop at 16; on sharp phone screens ask for one level finer so contours stay crisp
+  topo:{ label:"Topo", url:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}", native:16, retina:true, credit:"Topo: USGS The National Map" }
 };
 let mapView = lsGet("fl.view", "field"), viewLayer = null, tileErrors = 0;
 const viewCtl = L.control({ position:"topright" });
@@ -2313,7 +2387,9 @@ function setMapView(v){
   mapView = v; lsSet("fl.view", v); tileErrors = 0;
   if(viewLayer){ map.removeLayer(viewLayer); viewLayer = null; }
   if(VIEWS[v].url){
-    viewLayer = L.tileLayer(VIEWS[v].url, { pane:"tiles", maxNativeZoom:16, maxZoom:16, crossOrigin:true });
+    // retina: Leaflet asks for zoom+1 and lowers maxZoom by one, so offset both to stay within the tile cache and keep zoom 18
+    const ret = !!VIEWS[v].retina && L.Browser.retina;
+    viewLayer = L.tileLayer(VIEWS[v].url, { pane:"tiles", maxNativeZoom:VIEWS[v].native - (ret ? 1 : 0), maxZoom:ret ? 19 : 18, crossOrigin:true, detectRetina:ret, updateWhenIdle:false, keepBuffer:4 });
     viewLayer.on("tileerror", () => { if(++tileErrors === 6) toast(navigator.onLine ? `${VIEWS[v].label} tiles aren't loading right now.` : `${VIEWS[v].label} view needs a connection. Switch to Map for offline use.`); });
     viewLayer.addTo(map);
   }
@@ -2335,6 +2411,10 @@ function appBusy(){
 function showUpdateReady(){ updateWaiting = true; $("updBar").hidden = false; }
 $("updGo").onclick = () => location.reload();
 $("updLater").onclick = () => { $("updBar").hidden = true; };
+
+/* the map style switch sat on top of creek cards: tuck it away while a card is open */
+map.on("popupopen", () => document.getElementById("map").classList.add("popopen"));
+map.on("popupclose", () => document.getElementById("map").classList.remove("popopen"));
 
 
 /* ---------- collapsible panel: drag the handle down for a full-screen map ---------- */
@@ -2838,6 +2918,42 @@ $("log").addEventListener("click", async e => {
 });
 
 
+/* ---------- a friend's map: only what they share with you, in friend blue ---------- */
+
+function personName(id){ return people[id]?.display_name || friendCatches.find(c => c.user_id === id)?.display_name || friendSpots.find(s => s.user_id === id)?.display_name || follows.find(f => f.user_id === id)?.display_name || "Friend"; }
+function friendSpotPopup(s){
+  const div = document.createElement("div"); div.className = "pop";
+  div.innerHTML = `<div class="meta" style="color:var(--friend);font-weight:700">${esc(s.display_name)}'s spot</div>
+    <h3>${esc(s.name || "Spot")}</h3>
+    <div class="meta">${esc([s.water, s.trout_class, s.status === "want" ? "Wants to fish" : s.status === "scouted" ? "Scouted" : s.status === "fished" ? "Fished" : "", countyName(s.county)].filter(Boolean).join(" · "))}</div>
+    <div class="row"><a class="link" href="${gmaps(s.lat, s.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(s.user_id)}">See ${esc((s.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
+  return div;
+}
+function openPersonMap(id){
+  mapPerson = id; map.closePopup();
+  document.getElementById("map").classList.add("personmode");
+  setTab("map"); if(typeof setCollapsed === "function") setCollapsed(true);
+  renderAll(); countyLayer.setStyle(countyStyle); personBar();
+  const items = [...friendCatches, ...friendSpots].filter(x => x.user_id === id && x.lat != null);
+  const pts = items.map(x => [x.lat, x.lng]), cids = [...new Set(items.map(x => x.county).filter(Boolean))];
+  if(cids.length === 1){ // all in one county: open it so the creeks are there, then frame their fish
+    openCounty(cids[0]); setTimeout(() => map.fitBounds(L.latLngBounds(pts).pad(.3), { maxZoom:13, padding:[60,60] }), 700);
+  } else { backToState(); if(pts.length) setTimeout(() => map.fitBounds(L.latLngBounds(pts).pad(.2), { maxZoom:9, padding:[60,60] }), 300); }
+}
+function closePersonMap(){
+  mapPerson = null; document.getElementById("map").classList.remove("personmode"); $("personBar").hidden = true; renderAll(); countyLayer.setStyle(countyStyle);
+}
+function personBar(){
+  const b = $("personBar"); if(!mapPerson){ b.hidden = true; return; }
+  const fc = friendCatches.filter(c => c.user_id === mapPerson), fs = friendSpots.filter(s => s.user_id === mapPerson);
+  const fish = fc.reduce((a, c) => a + fishOf(c), 0), onMap = fc.filter(c => c.lat != null).length + fs.filter(s => s.lat != null).length;
+  const byCounty = fc.length + fs.length - onMap;
+  b.innerHTML = `${avHtml(mapPerson, personName(mapPerson), "sm")}<span class="t"><b>${esc(personName(mapPerson))}'s map</b><small>${fish} fish · ${fs.length} spot${fs.length === 1 ? "" : "s"} shared with you${byCounty ? ` · ${byCounty} by county only` : ""}</small></span><button class="btn sm" type="button" id="personDone">Done</button>`;
+  b.hidden = false; $("personDone").onclick = closePersonMap;
+}
+document.addEventListener("click", e => { const p = e.target.closest("[data-pmap]"); if(p){ e.preventDefault(); openPersonMap(p.dataset.pmap); } });
+
+
 /* ---------- where am I: show your position and mark a spot or catch right there ---------- */
 pane("me", 640, true);
 let hereLayer = null, hereFix = null;
@@ -3033,7 +3149,7 @@ function triageHtml(s){ return s.category || s.triage_note ? `<p class="triage">
 /* ---------- terrain shading: soft hillshade under the field map, so coulees and ridges show ---------- */
 pane("hill", 396, false);
 const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
-  { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:16, crossOrigin:true });
+  { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4 });
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){
   const on = terrainOn && mapView === "field";
@@ -3048,7 +3164,7 @@ syncTerrain();
 
 /* ---------- moving water: a slow drift along trout streams when zoomed in close ---------- */
 pane("flow", 433, false);
-const flowRenderer = L.svg({ pane:"flow", padding:.3 });
+const flowRenderer = L.svg({ pane:"flow", padding:.5 });
 let flowLayer = null, flowKey = "";
 function updateFlow(){
   const z = map.getZoom(), t = detailFor && troutCache[detailFor];
@@ -3061,7 +3177,7 @@ function updateFlow(){
   for(const [, c, , , paths] of t.t){
     if(!TROUT[c]) continue;
     for(const pa of paths){
-      const ll = pa.map(q => [q[1], q[0]]);
+      const ll = smoothPath(pa.map(q => [q[1], q[0]]));
       if(ll.length < 2 || !ll.some(p => b.contains(p))) continue;
       g.addLayer(L.polyline(ll, { renderer:flowRenderer, interactive:false, className:"flow", color:"#fff", weight:z >= 15 ? 2.4 : 1.8, opacity:.8, lineCap:"round" }));
     }
@@ -3182,7 +3298,7 @@ $("log").addEventListener("click", async e => {
 });
 
 /* ---------- push notifications ---------- */
-const PUSH_CATS = [["friends","Friend requests"],["messages","Messages"],["tourneys","Tournament invites and changes"],["fish","Fish logged for you, fair-play notices"],["forum","Replies to your forum threads"]];
+const PUSH_CATS = [["catches","Friends' catches"],["friends","Friend requests"],["messages","Messages"],["tourneys","Tournament invites, changes and catches"],["fish","Fish logged for you, fair-play notices"],["forum","Replies to your forum threads"]];
 let pushStateV = null;
 const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
@@ -3224,7 +3340,10 @@ function notifyCardHtml(){
         ${isStaff() ? `<label class="check"><input type="checkbox" data-pushpref="staff" ${p.staff !== false ? "checked" : ""}> New accounts, reports and flagged photos</label>` : ""}
         <div class="row2" style="margin-top:8px"><button class="btn sm" type="button" data-push="test">Send a test</button><button class="link" type="button" data-push="off">Turn off on this device</button></div>`
     : `<p>Get a notification for friend requests, messages, tournament invites and more.</p><div class="row2"><button class="btn sm ink" type="button" data-push="on">Turn on notifications</button></div>`;
-  return `<h4><span>Notifications</span></h4><div class="card">${body}</div>`;
+  const tell = p.tell_friends !== false;
+  const share = `<div class="card"><label class="check"><input type="checkbox" data-pushpref="tell_friends" ${tell ? "checked" : ""}> Tell friends when I log a catch</label>
+    <p class="muted" style="margin:4px 0 0">${tell ? "Friends who can see a catch get a notification about it." : "Friends can still see your catches in their feed, but won't get a notification."} Fish entered in a tournament always notify the other anglers in it.</p></div>`;
+  return `<h4><span>Notifications</span></h4><div class="card">${body}</div>${share}`;
 }
 $("log").addEventListener("click", async e => {
   const b = e.target.closest("[data-push]"); if(!b) return;
@@ -3238,12 +3357,14 @@ $("log").addEventListener("change", async e => {
   const { error } = await sb.from("profiles").update({ push_prefs }).eq("id", me.id);
   if(error){ toast("Couldn't save."); e.target.checked = !e.target.checked; return; }
   profile = { ...profile, push_prefs }; saveCache();
+  if(k === "tell_friends"){ renderLog(); toast(e.target.checked ? "Friends will hear about your catches." : "Friends won't get notified of your catches."); }
 });
 // a tapped notification opens the right screen
 function openDeepLink(h){
   if(!h || !me) return false;
   const [k, id] = h.replace(/^#/, "").split(":");
   if(k === "friends"){ friendsView = "people"; setTab("friends"); }
+  else if(k === "feed"){ friendsView = "feed"; setTab("friends"); }
   else if(k === "tourney" && id){ setTab("tourney"); openTourney(id); }
   else if(k === "log"){ setTab("map"); }
   else if(k === "messages"){ friendsView = "messages"; chatWith = id || null; setTab("friends"); }
@@ -3254,7 +3375,7 @@ function openDeepLink(h){
   return true;
 }
 navigator.serviceWorker?.addEventListener("message", e => { if(e.data?.type === "open") openDeepLink(e.data.url); });
-let pendingDeepLink = /^#(friends|tourney|log|messages|forum|staff|me)\b/.test(location.hash) ? location.hash : null;
+let pendingDeepLink = /^#(friends|feed|tourney|log|messages|forum|staff|me)\b/.test(location.hash) ? location.hash : null;
 if(pendingDeepLink) history.replaceState(null, "", location.pathname + location.search);
 
 /* ---------- messages ---------- */
