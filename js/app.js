@@ -733,6 +733,7 @@ $("fPhoto").addEventListener("change", async () => {
   setPhotoPreview(photoPreviewUrl, file.name || "Photo",
     (found.length ? `Filled ${found.join(" and ")} from the photo.` : "No location in this photo. Tap Here or Map below.") + (photoDate ? "" : " It has no date stamp, so it can't count in photo tournaments."));
   $("photoSub").style.color = found.includes("location") ? "var(--spot)" : "var(--danger)";
+  $("camFixBtn").hidden = found.includes("location");
 });
 
 /* phone GPS */
@@ -752,7 +753,7 @@ $("gpsBtn").onclick = () => {
 
 function openForm(kind, rec, prefill){
   if(!canWrite){ toast("Sign in to save entries."); return; }
-  editing = rec || null; photoFile = null; photoDate = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = "";
+  editing = rec || null; photoFile = null; photoDate = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = ""; $("camFixBtn").hidden = true;
   setKind(kind);
   const r = rec || prefill || {};
   $("fCoords").value = (r.lat != null) ? `${(+r.lat).toFixed(5)}, ${(+r.lng).toFixed(5)}` : "";
@@ -1781,6 +1782,7 @@ function renderMeTab(el){
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
       <button class="btn sm" type="button" data-a="guide">Setup guide</button>
+      <button class="btn sm" type="button" data-camhelp>Photo location help</button>
       ${isStaff() ? `<button class="btn sm ink" type="button" data-me="creator">${isFounder() ? "Founder tools" : "Admin tools"}</button>` : ""}
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
@@ -1872,6 +1874,7 @@ const HELP = [
     "Don't want to be found by name? Turn off \"Let people find me by name\" in the Me tab. Friends can still add you with your code.",
     "Following: turn on a public profile in the Me tab to let anyone follow you. You can follow public anglers from Find anglers without their OK. Followers see your shared catches but aren't on your leaderboard."]],
   ["Location not filling in from photos", [
+    "Tap Photo location help in the Me tab for picture-by-picture steps and a quick photo test.",
     "On iPhone: Settings → Privacy & Security → Location Services → Camera → While Using the App, with Precise Location on. New photos will then carry their location.",
     "Some ways of choosing a photo strip the location. If it doesn't fill in, tap Here while you're at the spot, or Map."]],
   ["Phone location for the Here button", [
@@ -2016,7 +2019,8 @@ const GUIDE = () => [
     : `<p>Open your browser's menu and choose <b>Install app</b> or <b>Add to Home screen</b>. Then open it from the icon.</p>` }] : []),
   { t:"Let your camera save locations", b:`<p>Photos can fill in where you caught a fish, but only if your camera saves the location.</p>
       <ol class="steps"><li>Open the iPhone <b>Settings</b> app.</li><li>Tap <b>Privacy &amp; Security</b>, then <b>Location Services</b>.</li><li>Make sure <b>Location Services</b> is on.</li><li>Tap <b>Camera</b> and choose <b>While Using the App</b>.</li><li>Turn on <b>Precise Location</b>.</li></ol>
-      <p class="muted">Photos you take after this carry their location. If a photo still doesn't fill it in, tap <b>Here</b> while you're at the water.</p>` },
+      <p class="muted">Photos you take after this carry their location. If a photo still doesn't fill it in, tap <b>Here</b> while you're at the water.</p>
+      <div class="row2"><button class="btn sm ink" type="button" data-camhelp>Show me with pictures</button><span class="hint">and test a photo</span></div>` },
   { t:"Allow location for the Here button", b:`<p>When you tap <b>Here</b> while logging a catch, your phone asks to share your location with the app. Tap <b>Allow</b>.</p>
       <p>Tapped Don't Allow by mistake? Go to <b>Settings → Privacy &amp; Security → Location Services → Safari Websites</b> and choose <b>While Using the App</b>.</p>
       <div class="row2"><button class="btn sm" type="button" id="guideGps">${icon("i-gps")}Try it now</button><span class="hint" id="guideGpsMsg"></span></div>` },
@@ -2674,6 +2678,60 @@ function outsideHtml(){
     ${Object.entries(by).sort((a, b) => b[1].length - a[1].length).map(([st, cs]) => `<p class="muted" style="margin:8px 0 4px;font-weight:700">${esc(st)}</p><ul class="list">${cs.sort(byDateDesc).map(itemCatch).join("")}</ul>`).join("")}
     <p class="note">These are saved with their exact location. When Coulee adds more states, they'll file into the right state and county on their own.</p>`;
 }
+
+
+/* ---------- step-by-step help for saving photo locations, with a photo checker ---------- */
+const CAM_PATH = { ios:"Settings → Privacy & Security → Location Services → Camera → While Using the App, and turn on Precise Location",
+  android:"Camera app → Settings (gear) → Location tags (or Save location) → On" };
+// a small drawing of each settings screen, with the row to tap marked
+const phone = (title, rows) => `<div class="phone"><div class="ph-top"><span>${esc(title)}</span></div>${rows.map(([t, o = {}]) =>
+  `<div class="ph-row${o.hit ? " hit" : ""}${o.dim ? " dim" : ""}"><span>${o.check ? "✓ " : ""}${esc(t)}</span>${o.toggle != null ? `<i class="tg${o.toggle ? " on" : ""}"></i>` : o.value ? `<em>${esc(o.value)}</em>` : o.check || (o.dim && title === "Camera") ? "" : `<b>›</b>`}</div>`).join("")}</div>`;
+const CAM_STEPS = {
+  ios: [
+    ["Open the Settings app", "It's the gray gear on your Home Screen. Scroll down to <b>Privacy &amp; Security</b> and tap it.",
+      phone("Settings", [["Screen Time"], ["General"], ["Privacy & Security", { hit:true }], ["App Store", { dim:true }]])],
+    ["Tap Location Services", "It's the first row. Make sure the switch at the top of the next screen is <b>on</b>.",
+      phone("Privacy & Security", [["Location Services", { hit:true, value:"On" }], ["Tracking", { dim:true }], ["Contacts", { dim:true }]])],
+    ["Find Camera in the list", "Scroll down the list of apps and tap <b>Camera</b>.",
+      phone("Location Services", [["Location Services", { toggle:true }], ["Calendar", { dim:true, value:"Never" }], ["Camera", { hit:true, value:"Never" }], ["Clock", { dim:true, value:"Never" }]])],
+    ["Choose While Using the App", "Then turn on <b>Precise Location</b> so it pins the exact bend in the creek, not just the area.",
+      phone("Camera", [["Never", { dim:true }], ["Ask Next Time", { dim:true }], ["While Using the App", { hit:true, check:true }], ["Precise Location", { hit:true, toggle:true }]])]
+  ],
+  android: [
+    ["Open your Camera app", "Tap the <b>gear</b> (Settings) in the camera. On some phones it's under the ☰ or ⋮ menu.",
+      phone("Camera", [["Photo", { dim:true }], ["Settings", { hit:true }]])],
+    ["Turn on location", "Look for <b>Location tags</b>, <b>Save location</b> or <b>Geotag</b> and switch it on.",
+      phone("Camera settings", [["Grid lines", { dim:true, toggle:false }], ["Location tags", { hit:true, toggle:true }], ["Shutter sound", { dim:true, toggle:true }]])],
+    ["Allow location for the camera", "If your phone asks, allow location <b>While using the app</b>, with precise location on.", ""]
+  ]
+};
+let camOs = isIOS ? "ios" : /android/i.test(navigator.userAgent) ? "android" : "ios";
+function renderCamSteps(){
+  $("camOs").querySelectorAll("[data-os]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.os === camOs)));
+  $("camSteps").innerHTML = `<ol class="camsteps">${CAM_STEPS[camOs].map(([t, d, pic]) => `<li><b>${t}</b><p>${d}</p>${pic}</li>`).join("")}</ol>
+    <div class="campath"><small>${esc(CAM_PATH[camOs])}</small><button class="btn sm" type="button" id="camCopy">Copy steps</button></div>
+    <p class="muted" style="font-size:13px;margin:6px 0 0">Your phone won't let apps open these settings for you, so switch to Settings, follow the steps, then come back.${camOs === "ios" ? " Photos you already took won't gain a location; new ones will." : ""}</p>`;
+}
+function openCamHelp(){ renderCamSteps(); $("camResult").innerHTML = ""; $("camTest").value = ""; $("camHelp").hidden = false; $("camHelp").querySelector(".sheet").scrollTop = 0; }
+$("camOs").addEventListener("click", e => { const b = e.target.closest("[data-os]"); if(b){ camOs = b.dataset.os; renderCamSteps(); } });
+$("camDone").onclick = () => { $("camHelp").hidden = true; };
+$("camHelp").addEventListener("click", async e => {
+  if(e.target === $("camHelp")) $("camHelp").hidden = true;
+  if(e.target.id === "camCopy"){ try{ await navigator.clipboard.writeText(CAM_PATH[camOs]); toast("Copied. Open Settings and follow along."); }catch(_){ toast(CAM_PATH[camOs]); } }
+});
+document.addEventListener("click", e => { if(e.target.closest("[data-camhelp]")){ e.preventDefault(); openCamHelp(); } });
+$("camTest").addEventListener("change", async () => {
+  const f = $("camTest").files[0], out = $("camResult"); if(!f) return;
+  let ex = null; try{ ex = readExif(await f.arrayBuffer()); }catch(e){}
+  const gps = ex && ex.lat != null, date = ex && ex.date;
+  const where = gps ? countyAt(ex.lat, ex.lng) : null;
+  const line = (ok, t) => `<li class="${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"} ${t}</li>`;
+  out.innerHTML = `<ul class="camcheck">${line(gps, gps ? `Location saved${where ? ` (${esc(countyName(where))})` : ""}` : "No location in this photo")}${line(!!date, date ? "Date saved" : "No date in this photo")}</ul>
+    <p style="margin:6px 0 0">${gps && date ? "You're all set. Catches logged with photos like this fill in on their own."
+      : gps ? "The location works. The missing date usually means a screenshot or an edited copy, so use the original photo."
+      : date ? "Your camera isn't saving locations yet. Follow the steps above, take a new photo, and test again. If the setting is already on and this still says no location, your phone may be removing it when the photo is picked; tap <b>Here</b> at the water instead."
+      : "This photo has no camera data at all. Screenshots, downloads and photos sent through some apps lose it. Test a photo taken with your Camera app."}</p>`;
+});
 
 
 /* ---------- photo fingerprints: a 64-bit "difference hash" that survives resizing and re-saving ---------- */

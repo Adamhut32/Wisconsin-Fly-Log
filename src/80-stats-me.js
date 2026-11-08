@@ -154,6 +154,7 @@ function renderMeTab(el){
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
       <button class="btn sm" type="button" data-a="guide">Setup guide</button>
+      <button class="btn sm" type="button" data-camhelp>Photo location help</button>
       ${isStaff() ? `<button class="btn sm ink" type="button" data-me="creator">${isFounder() ? "Founder tools" : "Admin tools"}</button>` : ""}
     </div>
     <h4><span>Public profile</span><span>${followers} follower${followers===1?"":"s"}</span></h4>
@@ -245,6 +246,7 @@ const HELP = [
     "Don't want to be found by name? Turn off \"Let people find me by name\" in the Me tab. Friends can still add you with your code.",
     "Following: turn on a public profile in the Me tab to let anyone follow you. You can follow public anglers from Find anglers without their OK. Followers see your shared catches but aren't on your leaderboard."]],
   ["Location not filling in from photos", [
+    "Tap Photo location help in the Me tab for picture-by-picture steps and a quick photo test.",
     "On iPhone: Settings → Privacy & Security → Location Services → Camera → While Using the App, with Precise Location on. New photos will then carry their location.",
     "Some ways of choosing a photo strip the location. If it doesn't fill in, tap Here while you're at the spot, or Map."]],
   ["Phone location for the Here button", [

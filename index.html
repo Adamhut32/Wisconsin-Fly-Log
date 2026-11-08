@@ -123,6 +123,7 @@
           <span class="pt"><b id="photoTitle">Add a photo</b><small id="photoSub">Location and date fill in from the photo when it has them</small></span>
           <input type="file" id="fPhoto" accept="image/*">
         </label>
+        <button class="link camfix" type="button" id="camFixBtn" data-camhelp hidden>No location in the photo? Here's how to fix it</button>
       </div>
       <div class="field" id="nameField" hidden>
         <label for="fName">Spot name</label>
@@ -293,6 +294,22 @@
     <div class="authhead"><h1>Coulee</h1></div>
     <div id="gateBody"></div>
     <div class="row2" style="margin-top:16px"><button class="btn ink" type="button" id="gateCheck">Check again</button><button class="btn" type="button" id="gateOut">Sign out</button></div>
+  </div>
+</div>
+
+<!-- camera location help -->
+<div class="scrim guide camhelp" id="camHelp" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="camTitle">
+    <div class="eyebrow">Photo locations</div>
+    <h3 id="camTitle">Let your camera save where you were</h3>
+    <p class="muted" style="margin:0 0 8px">Then Coulee can drop each catch on the map, and name the creek, from the photo alone.</p>
+    <div class="seg" role="group" aria-label="Phone" id="camOs"><button type="button" class="ink" data-os="ios" aria-pressed="true">iPhone</button><button type="button" class="ink" data-os="android" aria-pressed="false">Android</button></div>
+    <div id="camSteps"></div>
+    <h4><span>Check a photo</span></h4>
+    <p class="muted" style="margin:0 0 8px">Take a quick photo with your camera, then pick it here. Coulee tells you whether it has a location and date. Nothing is uploaded.</p>
+    <label class="btn" id="camTestLbl">Test a photo<input type="file" id="camTest" accept="image/*" class="vh"></label>
+    <div id="camResult" role="status"></div>
+    <div class="actions"><button class="btn ink" type="button" id="camDone">Done</button></div>
   </div>
 </div>
 

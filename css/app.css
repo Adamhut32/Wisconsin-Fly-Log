@@ -455,3 +455,25 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .card.rep blockquote{margin:6px 0;padding:6px 10px;border-left:3px solid var(--line);background:var(--paper-2);border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
 .legend #terrainToggle{display:inline-block}.legend #terrainToggle[hidden]{display:none}
 .item .num .btn{font-family:var(--f-body)}
+
+/* ---------- camera location help ---------- */
+.camhelp{z-index:1600}
+.camfix{display:block;margin:6px 0 0;font-size:13.5px;text-align:left}
+.camsteps{margin:12px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:14px}
+.camsteps li b{font-size:15.5px}.camsteps li p{margin:2px 0 8px}
+.phone{max-width:280px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--paper-2);font:14px/1.2 -apple-system,system-ui,sans-serif}
+.ph-top{padding:9px 12px;font-weight:700;text-align:center;border-bottom:1px solid var(--line);background:var(--panel)}
+.ph-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--line);background:var(--panel)}
+.ph-row:first-of-type{border-top:0}
+.ph-row.dim{color:var(--muted)}
+.ph-row.hit{outline:2.5px solid var(--fish);outline-offset:-3px;border-radius:8px;font-weight:700;position:relative}
+.ph-row.hit::after{content:"Tap";position:absolute;right:-4px;top:-9px;background:var(--fish);color:#fff;font:700 10px/1 var(--f-body);padding:3px 6px;border-radius:999px}
+.ph-row em{font-style:normal;color:var(--muted);font-size:13px}.ph-row b{color:var(--muted);font-weight:400}
+.tg{width:34px;height:20px;border-radius:999px;background:var(--line);position:relative;flex:none}
+.tg::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.tg.on{background:#34C759}.tg.on::after{left:16px}
+.campath{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px}
+.campath small{font-size:12.5px;color:var(--muted)}
+#camTestLbl{position:relative;cursor:pointer}
+.camcheck{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-weight:700}
+.camcheck .ok{color:var(--spot)}.camcheck .bad{color:var(--danger)}

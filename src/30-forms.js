@@ -112,6 +112,7 @@ $("fPhoto").addEventListener("change", async () => {
   setPhotoPreview(photoPreviewUrl, file.name || "Photo",
     (found.length ? `Filled ${found.join(" and ")} from the photo.` : "No location in this photo. Tap Here or Map below.") + (photoDate ? "" : " It has no date stamp, so it can't count in photo tournaments."));
   $("photoSub").style.color = found.includes("location") ? "var(--spot)" : "var(--danger)";
+  $("camFixBtn").hidden = found.includes("location");
 });
 
 /* phone GPS */
@@ -131,7 +132,7 @@ $("gpsBtn").onclick = () => {
 
 function openForm(kind, rec, prefill){
   if(!canWrite){ toast("Sign in to save entries."); return; }
-  editing = rec || null; photoFile = null; photoDate = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = "";
+  editing = rec || null; photoFile = null; photoDate = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = ""; $("camFixBtn").hidden = true;
   setKind(kind);
   const r = rec || prefill || {};
   $("fCoords").value = (r.lat != null) ? `${(+r.lat).toFixed(5)}, ${(+r.lng).toFixed(5)}` : "";
