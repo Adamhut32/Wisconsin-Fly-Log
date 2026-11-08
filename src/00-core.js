@@ -8,7 +8,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const dataUrl = p => "data/" + p + "?v=" + CFG.dataVersion;
+const dataUrl = p => (CFG.dataBase || "data/") + p + "?v=" + CFG.dataVersion;
 const DETAIL_ZOOM = 9;
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
 const todayStr = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; };

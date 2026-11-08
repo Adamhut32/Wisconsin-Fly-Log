@@ -1,13 +1,13 @@
 // Offline support: the app itself is fetched fresh when online (falling back to the
 // saved copy offline); map data is kept once loaded, so opened counties work offline.
-const VERSION = "flylog-v14";
+const VERSION = "flylog-v15";
 const SHELL = ["./", "index.html", "css/app.css", "js/config.js", "js/app.js", "vendor/leaflet.js", "vendor/leaflet.css", "vendor/supabase.js",
   "manifest.webmanifest", "icons/icon-192.png", "icons/apple-touch-icon.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION + "-shell").then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => !k.startsWith(VERSION) && !k.startsWith("flylog-data")).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(VERSION.replace(/\d+$/, "")) && !k.startsWith(VERSION)).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener("fetch", e => {
   const req = e.request;

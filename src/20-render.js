@@ -87,7 +87,7 @@ function spotPopup(s){
 function catchPopup(c){
   const spot = spots.find(s=>s.id===c.spot_id), trip = trips.find(t=>t.id===c.trip_id);
   const url = photoSrc(c.photo_path);
-  const head = `${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}`;
+  const head = `${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}`;
   return popupShell("catch", c, `<h3>${head}</h3>${c.water?`<div class="meta"><b>${esc(c.water)}</b></div>`:""}<div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""}${spot?` · ${esc(spot.name)}`:""}</div>
     ${trip?`<div class="meta">Trip: <button class="link" data-a="trip" data-id="${esc(trip.id)}">${esc(trip.name)}</button></div>`:""}
     ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
@@ -98,7 +98,7 @@ function friendCatchPopup(c){
   const div = document.createElement("div"); div.className = "pop";
   const url = photoSrc(c.photo_path);
   div.innerHTML = `<div class="meta" style="color:var(--friend);font-weight:700">${esc(c.display_name)}</div>
-    <h3>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</h3>
+    <h3>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</h3>
     <div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""} · ${esc(countyName(c.county))}</div>
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
     ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
@@ -113,7 +113,7 @@ function thumb(c, cls){
   return url ? `<span class="th ${cls||""}" style="background-image:url('${url}')"></span>` : `<span class="th ${cls||""}">${icon("i-fish")}</span>`;
 }
 function itemCatch(c){
-  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc([fmtDate(c.caught_on), c.water, c.method && c.method !== "fly" ? METHODS[c.method] : "", c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
+  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${beforeJoin(c)?` <span class="pill hist">Before Coulee</span>`:""}</b><small>${esc([fmtDate(c.caught_on), c.water, c.method && c.method !== "fly" ? METHODS[c.method] : "", c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
 }
 function itemSpot(s){
   const v = spotVisits(s);

@@ -101,11 +101,11 @@ function statFilterHtml(pool){
   </div>`;
 }
 function statCatchListHtml(cs){
-  const sorters = { new:byDateDesc, old:(a, b) => -byDateDesc(a, b), long:(a, b) => (+b.length_in || 0) - (+a.length_in || 0) || byDateDesc(a, b) };
+  const sorters = { new:byDateDesc, old:(a, b) => -byDateDesc(a, b), long:(a, b) => (+b.length_in || 0) - (+a.length_in || 0) || byDateDesc(a, b), heavy:(a, b) => (+b.weight_lb || 0) - (+a.weight_lb || 0) || byDateDesc(a, b) };
   const list = cs.slice().sort(sorters[statF.sort] || byDateDesc);
   const fish = list.reduce((a, c) => a + fishOf(c), 0);
   return `<h4 id="statList"><span>${statFActive() ? "Matching catches" : "All your catches"}</span><span>${list.length} · ${fish} fish</span></h4>
-    <div class="row2" style="justify-content:space-between;margin-bottom:6px"><select data-sfk="sort" aria-label="Sort" style="width:auto">${[["new","Newest first"],["old","Oldest first"],["long","Longest first"]].map(([v, l]) => `<option value="${v}" ${statF.sort === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <div class="row2" style="justify-content:space-between;margin-bottom:6px"><select data-sfk="sort" aria-label="Sort" style="width:auto">${[["new","Newest first"],["old","Oldest first"],["long","Longest first"],["heavy","Heaviest first"]].map(([v, l]) => `<option value="${v}" ${statF.sort === v ? "selected" : ""}>${l}</option>`).join("")}</select>
       <button class="link" type="button" data-sf="csv">Download these (CSV)</button></div>
     <ul class="list">${list.slice(0, statShown).map(itemCatch).join("")}</ul>
     ${list.length > statShown ? `<button class="btn sm" type="button" data-sf="more" style="margin-top:8px">Show ${Math.min(50, list.length - statShown)} more</button>` : ""}`;
@@ -126,8 +126,8 @@ $("log").addEventListener("click", e => {
   if(b.dataset.sf === "csv"){
     const cs = catches.filter(c => (statYear === "all" || (c.caught_on || "").startsWith(statYear)) && matchStatF(c)).sort(byDateDesc);
     const q = v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
-    const rows = [["Date","Species","Length (in)","Fish","Method","Fly or lure","Water","County","Trip","Latitude","Longitude","Notes","Photo"],
-      ...cs.map(c => [c.caught_on, c.species, c.length_in, fishOf(c), METHODS[c.method || "fly"], c.fly, c.water, c.county ? countyName(c.county) : (c.lat != null ? "Outside Wisconsin" : ""), trips.find(t => t.id === c.trip_id)?.name, c.lat, c.lng, c.notes, c.photo_path ? "yes" : ""])];
+    const rows = [["Date","Species","Length (in)","Weight (lb)","Fish","Method","Fly or lure","Water","County","Trip","Latitude","Longitude","Notes","Photo"],
+      ...cs.map(c => [c.caught_on, c.species, c.length_in, c.weight_lb, fishOf(c), METHODS[c.method || "fly"], c.fly, c.water, c.county ? countyName(c.county) : (c.lat != null ? "Outside Wisconsin" : ""), trips.find(t => t.id === c.trip_id)?.name, c.lat, c.lng, c.notes, c.photo_path ? "yes" : ""])];
     const blob = new Blob([rows.map(r => r.map(q).join(",")).join("\n")], { type:"text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `coulee-catches-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
   }
@@ -168,6 +168,7 @@ function renderMeTab(el){
     ${!isStandalone ? `<h4><span>Put it on your home screen</span></h4><div class="card">${isIOS
       ? `<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p class="muted">It opens full screen like an app and keeps your counties for offline use.</p>`
       : `<p>In your browser's menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`}</div>` : ""}
+    ${prefsHtml()}
     ${notifyCardHtml()}
     ${themeHtml()}
     ${offlineBlock(null)}
@@ -212,6 +213,11 @@ const HELP = [
   ["Map style", [
     "Terrain shading shows coulees and ridges on the map; turn it off with Terrain in the legend. Zoom in close on a trout stream and the water drifts along it.",
     "Me → Appearance switches between Auto, Light and Dark. Dark is easier on the eyes at dawn and dusk."]],
+  ["Where am I", [
+    "Tap the target button under the zoom buttons to see where you are and which creek you're on, then Add spot here or Log a catch here.",
+    "If it says location is off: Settings → Privacy & Security → Location Services → Safari Websites (or Coulee) → While Using the App."]],
+  ["Catches from before you joined", [
+    "Log as much of your history as you like. Fish caught before you joined are marked Before Coulee: they count in your own stats and log, but not toward titles or friend leaderboards."]],
   ["Finding your catches", [
     "The Stats tab lists every catch. Search by creek, fly or notes, or tap Filters to narrow by species (or all trout, bass or panfish), method, county, water, trip, photo or length. The numbers above the list follow the same filters.",
     "Tap a creek in Best water to see just the fish from there. Download these saves the list as a spreadsheet file."]],
@@ -304,11 +310,12 @@ function renderCreator(el){
   const o = creatorData.o || {};
   if(!isFounder()){
     el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
-      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${reportQueueHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
+      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${channelHtml()}${staffAccountsHtml()}${reportQueueHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
     return;
   }
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Founder</div><h2>Founder tools</h2>
+    ${channelHtml()}
     <div class="row2" style="margin:0 0 6px"><button class="btn sm ink" type="button" data-me="analytics">Analytics</button></div>
     ${staffAccountsHtml()}
     ${reportQueueHtml()}
@@ -323,8 +330,10 @@ function renderCreator(el){
     <p class="muted" style="margin:0 0 6px">Everyone sees this once, the next time they open the app.</p>
     <form id="relForm" novalidate><input id="relTitle" maxlength="80" placeholder="Hatch chart and faster maps" aria-label="Update title">
       <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
+      <label class="check"><input type="checkbox" id="relStaff"> Only for founder and admins (tools and behind-the-scenes changes)</label>
+      <p class="muted" style="font-size:12.5px;margin:2px 0 0">Keep notes to the big things people will notice. They show to each person once their app has this build (${CFG.build || "?"}).</p>
       <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
-    ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
+    ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}${r.audience === "staff" ? " · founder & admins only" : ""}${r.build ? ` · build ${r.build}` : ""}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
     ${suggestionsInboxHtml()}
     <h4><span>Other founder powers</span></h4>
     <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
@@ -339,7 +348,7 @@ function renderCreator(el){
     const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
     if(title.length < 2){ msg.textContent = "Add a title."; return; }
     if(!items.length || items.length > 12){ msg.textContent = "Add 1 to 12 changes, one per line."; return; }
-    const { error } = await sb.from("releases").insert({ title, items });
+    const { error } = await sb.from("releases").insert({ title, items, build:CFG.build || null, audience: $("relStaff")?.checked ? "staff" : "all" });
     if(error){ msg.textContent = "Couldn't publish it. Try again."; return; }
     toast("Published. Everyone sees it next time they open the app."); loadCreator();
   });

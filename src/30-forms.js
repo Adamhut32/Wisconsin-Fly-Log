@@ -140,7 +140,8 @@ function openForm(kind, rec, prefill){
   $("fSpecies").value = r.species || ""; $("fLen").value = r.length_in ?? ""; $("fCount").value = r.count ?? 1; $("fFly").value = r.fly || "";
   $("fDate").value = r.caught_on || todayStr(); $("fNotes").value = r.notes || "";
   $("fWaterName").value = r.water || ""; waterTouched = !!(rec && rec.water); $("waterHint").textContent = ""; $("waterNear").innerHTML = "";
-  $("fMethod").value = r.method || lsGet("fl.method", "fly"); updateFlyLabel(); fillForOptions(); $("fFor").value = "";
+  $("fMethod").value = r.method || defaultMethod(); updateFlyLabel();
+  $("fWt").value = r.weight_lb ? String(+r.weight_lb) : ""; $("fWtHint").textContent = r.weight_lb ? wtTxt(r.weight_lb) : ""; syncWeightRow(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
   if(rec) setVis(rec.visibility);
@@ -208,7 +209,7 @@ $("entryForm").addEventListener("submit", async ev => {
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
       rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
-        fly:$("fFly").value.trim() || null, method:$("fMethod").value, water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
+        fly:$("fFly").value.trim() || null, method:$("fMethod").value, weight_lb:(w => w == null || Number.isNaN(w) ? null : w)(parseWeight($("fWt").value)), water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
         photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };

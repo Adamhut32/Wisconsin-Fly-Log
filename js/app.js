@@ -8,7 +8,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const dataUrl = p => "data/" + p + "?v=" + CFG.dataVersion;
+const dataUrl = p => (CFG.dataBase || "data/") + p + "?v=" + CFG.dataVersion;
 const DETAIL_ZOOM = 9;
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
 const todayStr = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; };
@@ -489,7 +489,7 @@ function spotPopup(s){
 function catchPopup(c){
   const spot = spots.find(s=>s.id===c.spot_id), trip = trips.find(t=>t.id===c.trip_id);
   const url = photoSrc(c.photo_path);
-  const head = `${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}`;
+  const head = `${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}`;
   return popupShell("catch", c, `<h3>${head}</h3>${c.water?`<div class="meta"><b>${esc(c.water)}</b></div>`:""}<div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""}${spot?` · ${esc(spot.name)}`:""}</div>
     ${trip?`<div class="meta">Trip: <button class="link" data-a="trip" data-id="${esc(trip.id)}">${esc(trip.name)}</button></div>`:""}
     ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
@@ -500,7 +500,7 @@ function friendCatchPopup(c){
   const div = document.createElement("div"); div.className = "pop";
   const url = photoSrc(c.photo_path);
   div.innerHTML = `<div class="meta" style="color:var(--friend);font-weight:700">${esc(c.display_name)}</div>
-    <h3>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</h3>
+    <h3>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</h3>
     <div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""} · ${esc(countyName(c.county))}</div>
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
     ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
@@ -515,7 +515,7 @@ function thumb(c, cls){
   return url ? `<span class="th ${cls||""}" style="background-image:url('${url}')"></span>` : `<span class="th ${cls||""}">${icon("i-fish")}</span>`;
 }
 function itemCatch(c){
-  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc([fmtDate(c.caught_on), c.water, c.method && c.method !== "fly" ? METHODS[c.method] : "", c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
+  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${beforeJoin(c)?` <span class="pill hist">Before Coulee</span>`:""}</b><small>${esc([fmtDate(c.caught_on), c.water, c.method && c.method !== "fly" ? METHODS[c.method] : "", c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
 }
 function itemSpot(s){
   const v = spotVisits(s);
@@ -761,7 +761,8 @@ function openForm(kind, rec, prefill){
   $("fSpecies").value = r.species || ""; $("fLen").value = r.length_in ?? ""; $("fCount").value = r.count ?? 1; $("fFly").value = r.fly || "";
   $("fDate").value = r.caught_on || todayStr(); $("fNotes").value = r.notes || "";
   $("fWaterName").value = r.water || ""; waterTouched = !!(rec && rec.water); $("waterHint").textContent = ""; $("waterNear").innerHTML = "";
-  $("fMethod").value = r.method || lsGet("fl.method", "fly"); updateFlyLabel(); fillForOptions(); $("fFor").value = "";
+  $("fMethod").value = r.method || defaultMethod(); updateFlyLabel();
+  $("fWt").value = r.weight_lb ? String(+r.weight_lb) : ""; $("fWtHint").textContent = r.weight_lb ? wtTxt(r.weight_lb) : ""; syncWeightRow(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
   if(rec) setVis(rec.visibility);
@@ -829,7 +830,7 @@ $("entryForm").addEventListener("submit", async ev => {
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
       rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
-        fly:$("fFly").value.trim() || null, method:$("fMethod").value, water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
+        fly:$("fFly").value.trim() || null, method:$("fMethod").value, weight_lb:(w => w == null || Number.isNaN(w) ? null : w)(parseWeight($("fWt").value)), water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
         photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
@@ -874,7 +875,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
@@ -1033,9 +1034,9 @@ async function loadAll(){
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
     if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
-    loadState = "ready"; saveCache(); renderAll();
+    loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
-    if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(applyGate()){ routeChannel(); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
@@ -1484,7 +1485,7 @@ function everyone(){
   return [...mine, ...friendCatches.filter(c => c.rel !== "following")];
 }
 function leaderboards(p){
-  const all = everyone().filter(c => inPeriod(c.caught_on, p) && fishOf(c) > 0);
+  const all = everyone().filter(c => inPeriod(c.caught_on, p) && fishOf(c) > 0 && !beforeJoin(c));
   const by = {}; const name = {};
   for(const c of all){ (by[c.user_id] ||= []).push(c); name[c.user_id] = c.display_name; }
   if(me && !by[me.id]){ by[me.id] = []; name[me.id] = profile?.display_name || "You"; }
@@ -1729,11 +1730,11 @@ function statFilterHtml(pool){
   </div>`;
 }
 function statCatchListHtml(cs){
-  const sorters = { new:byDateDesc, old:(a, b) => -byDateDesc(a, b), long:(a, b) => (+b.length_in || 0) - (+a.length_in || 0) || byDateDesc(a, b) };
+  const sorters = { new:byDateDesc, old:(a, b) => -byDateDesc(a, b), long:(a, b) => (+b.length_in || 0) - (+a.length_in || 0) || byDateDesc(a, b), heavy:(a, b) => (+b.weight_lb || 0) - (+a.weight_lb || 0) || byDateDesc(a, b) };
   const list = cs.slice().sort(sorters[statF.sort] || byDateDesc);
   const fish = list.reduce((a, c) => a + fishOf(c), 0);
   return `<h4 id="statList"><span>${statFActive() ? "Matching catches" : "All your catches"}</span><span>${list.length} · ${fish} fish</span></h4>
-    <div class="row2" style="justify-content:space-between;margin-bottom:6px"><select data-sfk="sort" aria-label="Sort" style="width:auto">${[["new","Newest first"],["old","Oldest first"],["long","Longest first"]].map(([v, l]) => `<option value="${v}" ${statF.sort === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <div class="row2" style="justify-content:space-between;margin-bottom:6px"><select data-sfk="sort" aria-label="Sort" style="width:auto">${[["new","Newest first"],["old","Oldest first"],["long","Longest first"],["heavy","Heaviest first"]].map(([v, l]) => `<option value="${v}" ${statF.sort === v ? "selected" : ""}>${l}</option>`).join("")}</select>
       <button class="link" type="button" data-sf="csv">Download these (CSV)</button></div>
     <ul class="list">${list.slice(0, statShown).map(itemCatch).join("")}</ul>
     ${list.length > statShown ? `<button class="btn sm" type="button" data-sf="more" style="margin-top:8px">Show ${Math.min(50, list.length - statShown)} more</button>` : ""}`;
@@ -1754,8 +1755,8 @@ $("log").addEventListener("click", e => {
   if(b.dataset.sf === "csv"){
     const cs = catches.filter(c => (statYear === "all" || (c.caught_on || "").startsWith(statYear)) && matchStatF(c)).sort(byDateDesc);
     const q = v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
-    const rows = [["Date","Species","Length (in)","Fish","Method","Fly or lure","Water","County","Trip","Latitude","Longitude","Notes","Photo"],
-      ...cs.map(c => [c.caught_on, c.species, c.length_in, fishOf(c), METHODS[c.method || "fly"], c.fly, c.water, c.county ? countyName(c.county) : (c.lat != null ? "Outside Wisconsin" : ""), trips.find(t => t.id === c.trip_id)?.name, c.lat, c.lng, c.notes, c.photo_path ? "yes" : ""])];
+    const rows = [["Date","Species","Length (in)","Weight (lb)","Fish","Method","Fly or lure","Water","County","Trip","Latitude","Longitude","Notes","Photo"],
+      ...cs.map(c => [c.caught_on, c.species, c.length_in, c.weight_lb, fishOf(c), METHODS[c.method || "fly"], c.fly, c.water, c.county ? countyName(c.county) : (c.lat != null ? "Outside Wisconsin" : ""), trips.find(t => t.id === c.trip_id)?.name, c.lat, c.lng, c.notes, c.photo_path ? "yes" : ""])];
     const blob = new Blob([rows.map(r => r.map(q).join(",")).join("\n")], { type:"text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `coulee-catches-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
   }
@@ -1796,6 +1797,7 @@ function renderMeTab(el){
     ${!isStandalone ? `<h4><span>Put it on your home screen</span></h4><div class="card">${isIOS
       ? `<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p class="muted">It opens full screen like an app and keeps your counties for offline use.</p>`
       : `<p>In your browser's menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`}</div>` : ""}
+    ${prefsHtml()}
     ${notifyCardHtml()}
     ${themeHtml()}
     ${offlineBlock(null)}
@@ -1840,6 +1842,11 @@ const HELP = [
   ["Map style", [
     "Terrain shading shows coulees and ridges on the map; turn it off with Terrain in the legend. Zoom in close on a trout stream and the water drifts along it.",
     "Me → Appearance switches between Auto, Light and Dark. Dark is easier on the eyes at dawn and dusk."]],
+  ["Where am I", [
+    "Tap the target button under the zoom buttons to see where you are and which creek you're on, then Add spot here or Log a catch here.",
+    "If it says location is off: Settings → Privacy & Security → Location Services → Safari Websites (or Coulee) → While Using the App."]],
+  ["Catches from before you joined", [
+    "Log as much of your history as you like. Fish caught before you joined are marked Before Coulee: they count in your own stats and log, but not toward titles or friend leaderboards."]],
   ["Finding your catches", [
     "The Stats tab lists every catch. Search by creek, fly or notes, or tap Filters to narrow by species (or all trout, bass or panfish), method, county, water, trip, photo or length. The numbers above the list follow the same filters.",
     "Tap a creek in Best water to see just the fish from there. Download these saves the list as a spreadsheet file."]],
@@ -1932,11 +1939,12 @@ function renderCreator(el){
   const o = creatorData.o || {};
   if(!isFounder()){
     el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
-      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${staffAccountsHtml()}${reportQueueHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
+      <div class="eyebrow">Admin</div><h2>Admin tools</h2>${channelHtml()}${staffAccountsHtml()}${reportQueueHtml()}${flagQueueHtml()}${suggestionsInboxHtml()}`;
     return;
   }
   el.innerHTML = `<button class="link backlink" data-me="main" type="button">${icon("i-back")}Account</button>
     <div class="eyebrow">Founder</div><h2>Founder tools</h2>
+    ${channelHtml()}
     <div class="row2" style="margin:0 0 6px"><button class="btn sm ink" type="button" data-me="analytics">Analytics</button></div>
     ${staffAccountsHtml()}
     ${reportQueueHtml()}
@@ -1951,8 +1959,10 @@ function renderCreator(el){
     <p class="muted" style="margin:0 0 6px">Everyone sees this once, the next time they open the app.</p>
     <form id="relForm" novalidate><input id="relTitle" maxlength="80" placeholder="Hatch chart and faster maps" aria-label="Update title">
       <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
+      <label class="check"><input type="checkbox" id="relStaff"> Only for founder and admins (tools and behind-the-scenes changes)</label>
+      <p class="muted" style="font-size:12.5px;margin:2px 0 0">Keep notes to the big things people will notice. They show to each person once their app has this build (${CFG.build || "?"}).</p>
       <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
-    ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
+    ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}${r.audience === "staff" ? " · founder & admins only" : ""}${r.build ? ` · build ${r.build}` : ""}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
     ${suggestionsInboxHtml()}
     <h4><span>Other founder powers</span></h4>
     <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
@@ -1967,7 +1977,7 @@ function renderCreator(el){
     const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
     if(title.length < 2){ msg.textContent = "Add a title."; return; }
     if(!items.length || items.length > 12){ msg.textContent = "Add 1 to 12 changes, one per line."; return; }
-    const { error } = await sb.from("releases").insert({ title, items });
+    const { error } = await sb.from("releases").insert({ title, items, build:CFG.build || null, audience: $("relStaff")?.checked ? "staff" : "all" });
     if(error){ msg.textContent = "Couldn't publish it. Try again."; return; }
     toast("Published. Everyone sees it next time they open the app."); loadCreator();
   });
@@ -2024,10 +2034,15 @@ const GUIDE = () => [
   { t:"Allow location for the Here button", b:`<p>When you tap <b>Here</b> while logging a catch, your phone asks to share your location with the app. Tap <b>Allow</b>.</p>
       <p>Tapped Don't Allow by mistake? Go to <b>Settings → Privacy &amp; Security → Location Services → Safari Websites</b> and choose <b>While Using the App</b>.</p>
       <div class="row2"><button class="btn sm" type="button" id="guideGps">${icon("i-gps")}Try it now</button><span class="hint" id="guideGpsMsg"></span></div>` },
-  { t:"Find water", b:`<ul class="steps"><li><b>Tap a county</b> to see every named creek, river and lake in it.</li><li><b>Colored bands</b> are DNR trout classes: green Class I, gold Class II, rust Class III.</li><li><b>Tap a creek</b> for its name, the trout season status and the nearest regulation.</li><li><b>Green shading</b> is public land and fishing easements.</li><li><b>Search</b> any creek or lake by name at the top of the map.</li></ul>` },
-  { t:"Log spots and catches", b:`<ul class="steps"><li><b>Add spot</b> saves water to try. Mark it Want to try, Scouted or Fished.</li><li><b>Log a catch</b> with a photo, species, length and fly.</li><li><b>Friends see</b> lets you choose Exact spot, County only or Nothing for every entry. Spots start private.</li><li>No signal? Log anyway. It syncs when you're back in range.</li></ul>` },
-  { t:"Trips and tournaments", b:`<ul class="steps"><li><b>Trips</b>: set the dates and every catch from those days joins the trip, with a recap at the end.</li><li><b>Tournaments</b>: pick dates, an area, species and scoring, and invite friends. Fish that fit are entered automatically. Photo tournaments only accept photos taken during the tournament.</li></ul>` },
-  { t:"Friends and following", b:`<ul class="steps"><li><b>Friends</b>: share your friend code${profile?.friend_code ? ` (<b style="font-family:var(--f-data);letter-spacing:.1em">${esc(profile.friend_code)}</b>)` : ""}. Friends see each other's shared catches and leaderboards.</li><li><b>Following</b>: follow anglers with public profiles without needing their OK. Turn on your own public profile in the Me tab if you want followers.</li></ul>` },
+  { t:"The map", at:"#map", b:`<p><b>Tap a county</b> to see every named creek, river and lake in it. Colored bands are DNR trout classes (green Class I, gold II, rust III), and green shading is public land.</p><p class="muted">Tap any creek for its name, season and the nearest regulation.</p>` },
+  { t:"Search", at:".search", b:`<p>Type any creek or lake name to jump straight to it.</p>` },
+  { t:"Where am I", at:".locbtn", b:`<p>Shows where you're standing and the creek you're on. From there, <b>Add spot here</b> or <b>Log a catch here</b> in one tap.</p>` },
+  { t:"Spots and catches", at:"#addCatchBtn", also:"#addSpotBtn", b:`<p><b>Add spot</b> saves water to try. <b>Log a catch</b> takes a photo, species, length or weight, and the fly or lure; the photo fills in where and when.</p><p class="muted">No signal? Log anyway. It syncs later.</p>` },
+  { t:"Trips", at:'.tabs [data-tab="trips"]', open:true, b:`<p>Set dates and every catch from those days joins the trip. Plan ahead by adding creeks and lakes you want to hit.</p>` },
+  { t:"Tournaments", at:'.tabs [data-tab="tourney"]', open:true, b:`<p>Make a tournament with friends: dates, area, species and scoring. Fish that fit are entered on their own.</p>` },
+  { t:"Friends", at:'.tabs [data-tab="friends"]', open:true, b:`<p>Find friends by name or friend code${profile?.friend_code ? ` (yours is <b style="font-family:var(--f-data);letter-spacing:.1em">${esc(profile.friend_code)}</b>)` : ""}. Messages and Forums are in here too.</p>` },
+  { t:"Your stats", at:'.tabs [data-tab="stats"]', open:true, b:`<p>Every catch you've logged, with filters, your best water, and the titles you're working toward.</p>` },
+  { t:"Me", at:'.tabs [data-tab="me"]', open:true, b:`<p>Turn on <b>notifications</b>, tell Coulee <b>how you fish</b>, add a profile picture, and find Help and Suggestions.</p>` },
   { t:"You're set", b:`<p>Tap a county to start exploring, or log your first fish.</p><p class="muted">Help and Suggestions are in the Me tab. Suggestions go straight to the founder.</p>` }
 ];
 let guideStep = 0, guideSteps = [];
@@ -2037,6 +2052,7 @@ function openGuide(replay){
 }
 function renderGuide(){
   const s = guideSteps[guideStep];
+  placeCoach(s);
   $("guideDots").innerHTML = guideSteps.map((_, i) => `<i class="${i === guideStep ? "on" : i < guideStep ? "done" : ""}"></i>`).join("");
   $("guideBody").innerHTML = `<div class="eyebrow">Step ${guideStep + 1} of ${guideSteps.length}</div><h3 id="guideTitle">${esc(s.t)}</h3><div class="gbody">${s.b}</div>`;
   $("guideBack").hidden = guideStep === 0;
@@ -2051,13 +2067,34 @@ function renderGuide(){
   };
 }
 async function finishGuide(){
-  $("guide").hidden = true;
+  $("guide").hidden = true; $("coachRing").hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
   if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
     await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
 }
 $("guideNext").onclick = () => { if(guideStep < guideSteps.length - 1){ guideStep++; renderGuide(); $("guide").querySelector(".sheet").scrollTop = 0; } else finishGuide(); };
 $("guideBack").onclick = () => { if(guideStep > 0){ guideStep--; renderGuide(); } };
 $("guideSkip").onclick = finishGuide;
+
+/* coach marks: point at the real thing on screen */
+function placeCoach(s){
+  const g = $("guide"), ring = $("coachRing"), sheet = g.querySelector(".sheet");
+  const el = s.at && document.querySelector(s.at);
+  if(!el){ g.classList.remove("coach"); ring.hidden = true; sheet.style.cssText = ""; return; }
+  if(s.open && typeof panelCollapsed !== "undefined" && panelCollapsed) setCollapsed(false, false);
+  if(s.at === "#map" || s.at === ".search" || s.at === ".locbtn" || s.at === "#addCatchBtn"){ if(tab !== "map") setTab("map"); }
+  g.classList.add("coach");
+  requestAnimationFrame(() => setTimeout(() => {
+    const r = el.getBoundingClientRect(), r2 = s.also ? document.querySelector(s.also)?.getBoundingClientRect() : null;
+    const box = r2 ? { left:Math.min(r.left, r2.left), top:Math.min(r.top, r2.top), right:Math.max(r.right, r2.right), bottom:Math.max(r.bottom, r2.bottom) } : r;
+    const pad = s.at === "#map" ? -12 : 6, vw = innerWidth, vh = innerHeight;
+    Object.assign(ring.style, { left:box.left - pad + "px", top:box.top - pad + "px", width:(box.right - box.left) + pad * 2 + "px", height:(box.bottom - box.top) + pad * 2 + "px" });
+    ring.hidden = false;
+    const w = Math.min(340, vw - 32), cy = (box.top + box.bottom) / 2;
+    const below = s.at === "#map" ? false : cy < vh / 2;
+    sheet.style.cssText = `position:fixed;width:${w}px;left:${Math.max(16, Math.min(vw - w - 16, (box.left + box.right) / 2 - w / 2))}px;${below ? `top:${Math.min(vh - 220, box.bottom + pad + 12)}px` : `bottom:${Math.max(16, vh - (s.at === "#map" ? box.bottom - 24 : box.top - pad - 12))}px`};max-height:${Math.round(vh * .5)}px`;
+  }, 280));
+}
+window.addEventListener("resize", () => { if(!$("guide").hidden) placeCoach(guideSteps[guideStep]); });
 
 
 /* ---------- creek & lake search ---------- */
@@ -2319,7 +2356,7 @@ setCollapsed(panelCollapsed, false);
 /* ---------- what's new after an update ---------- */
 async function checkWhatsNew(){
   if(!me || !profile || !profile.onboarded || !$("guide").hidden || !$("news").hidden) return;
-  const { data, error } = await sb.from("releases").select("*").gt("id", profile.last_seen_release || 0).order("id", { ascending:false }).limit(5);
+  const { data, error } = await sb.from("releases").select("*").gt("id", profile.last_seen_release || 0).or(`build.is.null,build.lte.${CFG.build || 0}`).order("id", { ascending:false }).limit(5);
   if(error || !data || !data.length) return;
   $("newsTitle").textContent = data.length === 1 ? data[0].title : "Updates to Coulee";
   $("newsBody").innerHTML = data.map(r => `<div class="news-rel">${data.length > 1 ? `<h5>${esc(r.title)}</h5>` : ""}<small>${esc(fmtDate(r.published_at.slice(0,10)))}</small><ul class="steps">${r.items.map(i => `<li>${esc(i)}</li>`).join("")}</ul></div>`).join("");
@@ -2333,7 +2370,7 @@ async function markNewsSeen(id){
 }
 $("newsOk").onclick = () => { $("news").hidden = true; markNewsSeen(+$("news").dataset.latest); };
 $("news").addEventListener("click", e => { if(e.target === $("news")) $("newsOk").click(); });
-async function latestReleaseId(){ const { data } = await sb.from("releases").select("id").order("id", { ascending:false }).limit(1); return data && data[0] ? data[0].id : 0; }
+async function latestReleaseId(){ const { data } = await sb.from("releases").select("id").or(`build.is.null,build.lte.${CFG.build || 0}`).order("id", { ascending:false }).limit(1); return data && data[0] ? data[0].id : 0; }
 
 /* ---------- save counties for offline use ---------- */
 const OFFLINE_CACHE = "flylog-data";
@@ -2357,6 +2394,8 @@ async function saveCountiesOffline(ids, onProgress){
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();
+  const rec = lsGet("fl.offlineIds", { v:CFG.dataVersion, ids:[] });
+  lsSet("fl.offlineIds", { v:CFG.dataVersion, ids:[...new Set([...(rec.v === CFG.dataVersion ? rec.ids : []), ...ids])] });
   return failed;
 }
 async function offlineAction(which){
@@ -2364,8 +2403,9 @@ async function offlineAction(which){
   if(!navigator.onLine){ toast("Connect to the internet to save counties."); return; }
   offlineBusy = true;
   try{ await navigator.storage?.persist?.(); }catch(e){}
-  const ids = which === "all" ? counties.map(f => f.id) : [which];
-  const label = which === "all" ? "Wisconsin" : countyName(which);
+  const old = lsGet("fl.offlineIds", null);
+  const ids = which === "all" ? counties.map(f => f.id) : which === "refresh" ? (old?.ids || []) : [which];
+  const label = which === "all" ? "Wisconsin" : which === "refresh" ? `${ids.length} saved counties` : countyName(which);
   const failed = await saveCountiesOffline(ids, (d, n) => { const el = $("offlineProg"); if(el) el.textContent = `Saving ${d} of ${n} counties…`; });
   offlineBusy = false;
   toast(failed ? `Saved most of ${label}. A few files didn't download; try again on Wi-Fi.` : `${label} is saved for offline use.`);
@@ -2377,8 +2417,10 @@ function offlineBlock(cid){
   if(offlineSaved === null){ countSavedCounties().then(() => renderLog()); return ""; }
   if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations and public land work without signal.</p>`
     : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
-  const n = offlineSaved.size;
+  const n = offlineSaved.size, old = lsGet("fl.offlineIds", null);
+  const stale = old && old.v !== CFG.dataVersion && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
   return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
+    ${stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>The map data was updated.</b> ${stale} of your saved counties need a refresh to keep working offline.</p><div class="row2"><button class="btn sm ink" type="button" data-offline="refresh">Refresh saved counties</button></div></div>` : ""}
     <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically. Your catches still log offline and sync later.</p>
     <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 50 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
@@ -2426,7 +2468,7 @@ const BADGES = [
   { id:"ice", name:"Hard Water", desc:"Catch a fish ice fishing.", goal:1, val:s => s.cs.some(c => c.method === "ice" && fishOf(c) > 0) ? 1 : 0 }
 ];
 function badgeStats(cs = catches){
-  const withFish = cs.filter(c => fishOf(c) > 0);
+  const withFish = cs.filter(c => fishOf(c) > 0 && countsForTitles(c));
   const byDay = {}; withFish.forEach(c => (byDay[c.caught_on] ||= new Set()).add((c.species || "").toLowerCase()));
   return { cs: withFish, fish: withFish.reduce((a, c) => a + fishOf(c), 0),
     species: new Set(withFish.map(c => (c.species || "").toLowerCase()).filter(Boolean)).size,
@@ -2436,9 +2478,12 @@ function badgeStats(cs = catches){
 function badges(cs){ const s = badgeStats(cs); return BADGES.map(b => { const v = Math.min(b.goal, b.val(s)); return { ...b, v, earned: v >= b.goal }; }); }
 function titlesHtml(){
   const list = badges(); const got = list.filter(b => b.earned);
-  const next = list.filter(b => !b.earned).sort((a, b) => b.v / b.goal - a.v / a.goal).slice(0, 6);
+  const focus = new Set((fprefs().targets || []).flatMap(t => TARGET_BADGES[t] || []));
+  const next = list.filter(b => !b.earned).sort((a, b) => (focus.has(b.id) - focus.has(a.id)) || (b.v / b.goal - a.v / a.goal)).slice(0, 6);
+  const hist = catches.filter(beforeJoin).length;
   return `<h4><span>Titles</span><span>${got.length}/${list.length}</span></h4>
     ${got.length ? `<div class="badges">${got.map(b => `<span class="badge on" title="${esc(b.desc)}"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span>`).join("")}</div>` : `<p class="muted" style="margin:0 0 8px">Log fish to earn titles like Bass Master and Brookie Hunter.</p>`}
+    ${hist ? `<p class="note">${hist} catch${hist === 1 ? "" : "es"} from before you joined Coulee ${hist === 1 ? "is" : "are"} in your log and stats, but titles and friend leaderboards only count fish caught since you joined.</p>` : ""}
     ${next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}`;
 }
 function titlePickerHtml(){
@@ -2734,6 +2779,105 @@ $("camTest").addEventListener("change", async () => {
 });
 
 
+/* ---------- test versions: the founder and admins get new builds first; the founder releases them ---------- */
+const CHANNEL = CFG.channel || "stable", BUILD = CFG.build || 0;
+let liveBuild = CHANNEL === "stable" ? BUILD : null, betaBuild = CHANNEL === "beta" ? BUILD : null, gateBuild = null;
+async function readBuild(base){ try{ const r = await fetch(base + "build.json?t=" + Date.now(), { cache:"no-store" }); return r.ok ? (await r.json()).build : null; }catch(e){ return null; } }
+const wantsBeta = () => isStaff() && lsGet("fl.useBeta", true);
+async function routeChannel(){
+  if(!profile || accountState() !== "ok" || !navigator.onLine) return;
+  if(CHANNEL === "stable" && wantsBeta()){
+    betaBuild = await readBuild("beta/");
+    if(betaBuild && betaBuild > BUILD){ location.replace("beta/" + location.hash); return; }
+  }
+  if(CHANNEL === "beta" && !wantsBeta()){ location.replace("../" + location.hash); return; }
+  if(CHANNEL === "beta"){
+    liveBuild = await readBuild("../");
+    const { data } = await sb.from("release_gate").select("approved_build").eq("id", 1).maybeSingle(); gateBuild = data?.approved_build ?? null;
+    $("testPill").hidden = false; $("testPill").textContent = `Test · build ${BUILD}`;
+    if(tab === "me") renderLog();
+  }
+}
+function channelHtml(){
+  const opt = `<label class="check" style="margin-top:8px"><input type="checkbox" id="useBeta" ${lsGet("fl.useBeta", true) ? "checked" : ""}> Get new versions before everyone else</label>`;
+  if(CHANNEL !== "beta") return `<h4><span>Updates</span><span>build ${BUILD}</span></h4><div class="card"><p style="margin:0">You're on the same version as everyone${betaBuild && betaBuild > BUILD ? `. A test version (build ${betaBuild}) is ready.` : ". No test version is waiting."}</p>${opt}</div>`;
+  const ahead = liveBuild != null && BUILD > liveBuild, approved = gateBuild != null && gateBuild >= BUILD;
+  return `<h4><span>Test version</span><span>build ${BUILD}</span></h4><div class="card notice">
+    <p style="margin:0 0 6px"><b>${ahead ? `You're trying build ${BUILD}. Everyone else has build ${liveBuild}.` : "This test version matches what everyone has."}</b></p>
+    ${ahead ? (approved ? `<p class="muted" style="margin:0">Approved. It reaches everyone within about 15 minutes, and their app updates the next time they open it.</p>`
+      : isFounder() ? `<p class="muted" style="margin:0 0 8px">Try it out. When you're happy, release it. Until then only you and admins have it.</p><div class="row2"><button class="btn sm ink" type="button" data-approve="${BUILD}">Release build ${BUILD} to everyone</button></div>`
+      : `<p class="muted" style="margin:0">Only the founder can release it to everyone.</p>`) : ""}
+    ${opt}</div>`;
+}
+$("log").addEventListener("change", e => { if(e.target.id === "useBeta"){ lsSet("fl.useBeta", e.target.checked); toast(e.target.checked ? "You'll get new versions first." : "You'll get updates with everyone else."); setTimeout(routeChannel, 300); } });
+$("log").addEventListener("click", async e => {
+  const a = e.target.closest("[data-approve]"); if(!a) return;
+  if(a.dataset.sure !== "1"){ a.dataset.sure = "1"; a.textContent = "Tap again to release to everyone"; return; }
+  a.disabled = true;
+  const { error } = await sb.rpc("approve_build", { b:+a.dataset.approve });
+  if(error){ toast(error.message || "Couldn't approve."); a.disabled = false; return; }
+  gateBuild = +a.dataset.approve; toast("Released. Everyone gets it within about 15 minutes."); renderLog();
+});
+
+
+/* ---------- where am I: show your position and mark a spot or catch right there ---------- */
+pane("me", 640, true);
+let hereLayer = null, hereFix = null;
+const locateCtl = L.control({ position:"topright" });
+locateCtl.onAdd = () => {
+  const b = L.DomUtil.create("button", "locbtn");
+  b.type = "button"; b.title = "Show where I am"; b.setAttribute("aria-label", "Show where I am");
+  b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="currentColor"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1.5v3.5M12 19v3.5M1.5 12h3.5M19 12h3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+  L.DomEvent.disableClickPropagation(b);
+  b.addEventListener("click", locateMe);
+  return b;
+};
+locateCtl.addTo(map);
+// keep the location button under the zoom buttons and above the map style switch
+setTimeout(() => { const z = document.querySelector(".leaflet-control-zoom"), lb = document.querySelector(".locbtn"); if(z && lb) z.after(lb); }, 0);
+
+function hereHtml(fix, near){
+  const w = pickWater(near);
+  return `<div class="pop"><h3>You're here</h3>
+    <div class="meta">${w ? `<b>${esc(w.name)}</b> · ${esc(distTxt(w.dist))}` : near[0] ? `Nearest named water: ${esc(near[0].name)}, ${esc(distTxt(near[0].dist))}` : "No named water close by"}</div>
+    <div class="meta">${fix.cid ? esc(countyName(fix.cid)) : "Outside Wisconsin"} · accurate to about ${Math.max(10, Math.round(fix.acc * 3.281 / 10) * 10)} ft</div>
+    ${canWrite ? `<div class="row"><button class="btn sm" type="button" data-here="spot">${icon("i-pin")}Add spot here</button><button class="btn sm" type="button" data-here="catch">${icon("i-fish")}Log a catch here</button></div>` : ""}</div>`;
+}
+function locateMe(){
+  const b = document.querySelector(".locbtn");
+  if(!navigator.geolocation){ toast("This phone can't share its location with Coulee."); return; }
+  b?.classList.add("busy");
+  navigator.geolocation.getCurrentPosition(async pos => {
+    b?.classList.remove("busy");
+    const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy || 30;
+    hereFix = { lat, lng, acc, cid:countyAt(lat, lng) };
+    if(hereLayer) map.removeLayer(hereLayer);
+    hereLayer = L.layerGroup([
+      L.circle([lat, lng], { radius:acc, pane:"me", color:"#2F7BF5", weight:1, fillColor:"#2F7BF5", fillOpacity:.12, interactive:false }),
+      L.marker([lat, lng], { pane:"me", icon:L.divIcon({ className:"", html:`<div class="hereDot"></div>`, iconSize:[18,18], iconAnchor:[9,9] }), keyboard:false })
+    ]).addTo(map);
+    if(hereFix.cid && currentCounty !== hereFix.cid) openCounty(hereFix.cid);
+    map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration:.7 });
+    const near = await watersNear(lat, lng).catch(() => []);
+    const pop = L.popup({ className:"hpop", offset:[0, -6], maxWidth:300, autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 90) }).setLatLng([lat, lng]).setContent(hereHtml(hereFix, near));
+    setTimeout(() => pop.openOn(map), 750);
+    hereLayer.eachLayer(l => l instanceof L.Marker && l.on("click", () => pop.openOn(map)));
+  }, err => {
+    b?.classList.remove("busy");
+    if(err.code === 1) toast(isIOS ? "Location is off for Coulee. Settings → Privacy & Security → Location Services → Safari Websites (or Coulee) → While Using." : "Location is blocked. Allow it in your browser's site settings.");
+    else toast("Couldn't get a fix. Try again with a clearer view of the sky.");
+  }, { enableHighAccuracy:true, timeout:20000, maximumAge:15000 });
+}
+document.addEventListener("click", async e => {
+  const h = e.target.closest("[data-here]"); if(!h || !hereFix) return;
+  map.closePopup();
+  const near = await watersNear(hereFix.lat, hereFix.lng).catch(() => []), w = pickWater(near);
+  const t = w && hereFix.cid && troutCache[hereFix.cid]?.t?.find(x => x[0] === w.name);
+  if(h.dataset.here === "spot") openForm("spot", null, { lat:hereFix.lat, lng:hereFix.lng, name:w ? w.name : "", water:w ? (/river/i.test(w.kind) ? "River" : /lake|flowage|pond/i.test(w.kind) ? "Lake" : "Creek") : "Creek", trout_class:t ? TROUT[t[1]].label : "", status:"fished" });
+  else openForm("catch", null, { lat:hereFix.lat, lng:hereFix.lng });
+});
+
+
 /* ---------- photo fingerprints: a 64-bit "difference hash" that survives resizing and re-saving ---------- */
 async function dhash(blob){
   let bmp; try{ bmp = await createImageBitmap(blob); }catch(e){ bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(blob); }); }
@@ -2908,6 +3052,75 @@ function updateFlow(){
 }
 map.on("moveend zoomend", updateFlow);
 document.addEventListener("mapview", updateFlow);
+
+
+/* ---------- weight ---------- */
+function parseWeight(v){
+  v = String(v || "").trim().toLowerCase(); if(!v) return null;
+  let m = v.match(/^(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds?|#)?\s*(?:,|and)?\s*(?:(\d+(?:\.\d+)?)\s*(?:oz|ounces?))?$/);
+  if(m && (m[2] || /lb|#|pound/.test(v) || !/oz/.test(v))) return Math.round((+m[1] + (m[2] ? +m[2] / 16 : 0)) * 100) / 100;
+  m = v.match(/^(\d+(?:\.\d+)?)\s*(?:oz|ounces?)$/); if(m) return Math.round(+m[1] / 16 * 100) / 100;
+  m = v.match(/^(\d+)\s*-\s*(\d+)$/); if(m) return Math.round((+m[1] + +m[2] / 16) * 100) / 100;
+  return NaN;
+}
+function wtTxt(w){ w = +w; if(!w) return ""; const lb = Math.floor(w), oz = Math.round((w - lb) * 16); return lb ? `${lb} lb${oz ? ` ${oz} oz` : ""}` : `${oz} oz`; }
+const TROUTISH = /trout|steelhead|splake|salmon/i;
+function syncWeightRow(force){
+  const sp = $("fSpecies").value, show = force || !!$("fWt").value || (sp && !TROUTISH.test(sp)) || $("fMethod").value !== "fly" || prefWantsWeight();
+  $("fWtRow").hidden = !show; $("fWtAdd").hidden = show;
+}
+$("fWtAdd").onclick = () => { syncWeightRow(true); $("fWt").focus(); };
+$("fSpecies").addEventListener("input", () => syncWeightRow());
+$("fMethod").addEventListener("change", () => syncWeightRow());
+$("fWt").addEventListener("input", () => { const w = parseWeight($("fWt").value), h = $("fWtHint");
+  h.className = "hint" + (Number.isNaN(w) ? " bad" : ""); h.textContent = w == null ? "" : Number.isNaN(w) ? "Try 3.5 or 3 lb 8 oz" : wtTxt(w); });
+
+/* ---------- catches from before someone joined ---------- */
+const joinDay = () => profile?.created_at ? new Date(profile.created_at).toLocaleDateString("en-CA", { timeZone:"America/Chicago" }) : "0000-00-00";
+const beforeJoin = c => !!c && (c.before_join === true || (!c.display_name && c.caught_on && c.caught_on < joinDay()));
+const countsForTitles = c => !beforeJoin(c);
+
+/* ---------- how you fish: tailors defaults, species and titles ---------- */
+const PREF_METHODS = [["fly","Fly"],["spin","Spin & bait"],["ice","Ice"],["mix","A bit of everything"]];
+const PREF_TARGETS = [["trout","Trout"],["bass","Bass"],["walleye","Walleye"],["pike","Pike & musky"],["panfish","Panfish"],["salmon","Salmon & steelhead"],["catfish","Catfish"]];
+const PREF_WATERS = [["streams","Creeks & rivers"],["lakes","Lakes"],["both","Both"]];
+const TARGET_SPECIES = { trout:["Brook trout","Brown trout","Rainbow trout","Tiger trout"], bass:["Smallmouth bass","Largemouth bass"], walleye:["Walleye","Sauger"],
+  pike:["Northern pike","Musky"], panfish:["Bluegill","Crappie","Yellow perch","Pumpkinseed","Rock bass"], salmon:["Chinook salmon","Coho salmon","Steelhead","Lake trout"], catfish:["Channel catfish","Flathead catfish","Bullhead"] };
+const TARGET_BADGES = { trout:["brookie","brown","rainbow","twenty","slam"], bass:["bass"], walleye:["walleye"], pike:["pike","musky"], panfish:["panfish"], salmon:["rainbow"], catfish:[] };
+const fprefs = () => profile?.fishing_prefs || {};
+const prefWantsWeight = () => { const t = fprefs().targets || []; return t.some(x => x !== "trout") && !t.includes("trout") || fprefs().method === "spin" || fprefs().method === "ice"; };
+function applyPrefs(){
+  const p = fprefs();
+  // species suggestions: what you chase first
+  const dl = $("speciesList"); if(dl && !dl.dataset.base) dl.dataset.base = dl.innerHTML;
+  if(dl){ const want = (p.targets || []).flatMap(t => TARGET_SPECIES[t] || []);
+    const tmp = document.createElement("div"); tmp.innerHTML = dl.dataset.base;
+    const opts = [...tmp.querySelectorAll("option")].map(o => o.value || o.textContent);
+    const ordered = [...want, ...opts.filter(o => !want.includes(o))];
+    dl.innerHTML = ordered.map(o => `<option>${esc(o)}</option>`).join(""); }
+  const sub = document.querySelector(".brand-sub, .brand small, header .sub");
+  if(sub) sub.textContent = !p.method || p.method === "fly" ? "Wisconsin fly fishing" : "Wisconsin fishing";
+}
+function defaultMethod(){ const p = fprefs().method; return p && p !== "mix" ? p : lsGet("fl.method", "fly"); }
+function prefsHtml(){
+  const p = fprefs(), t = new Set(p.targets || []);
+  return `<h4><span>How you fish</span></h4><div class="card prefs">
+    <p class="muted" style="margin:0 0 8px;font-size:13.5px">Coulee sets its defaults, species list and title goals around this. You can still log anything.</p>
+    <p class="plabel">Mostly</p><div class="chips">${PREF_METHODS.map(([k, l]) => `<button type="button" class="chip" data-pm="${k}" aria-pressed="${p.method === k}">${l}</button>`).join("")}</div>
+    <p class="plabel">You go after</p><div class="chips">${PREF_TARGETS.map(([k, l]) => `<button type="button" class="chip" data-pt="${k}" aria-pressed="${t.has(k)}">${l}</button>`).join("")}</div>
+    <p class="plabel">Usually on</p><div class="chips">${PREF_WATERS.map(([k, l]) => `<button type="button" class="chip" data-pw="${k}" aria-pressed="${p.waters === k}">${l}</button>`).join("")}</div></div>`;
+}
+async function savePrefs(next){
+  const fishing_prefs = { ...fprefs(), ...next };
+  profile = { ...profile, fishing_prefs }; saveCache(); applyPrefs(); renderLog();
+  const { error } = await sb.from("profiles").update({ fishing_prefs }).eq("id", me.id);
+  if(error) toast("Couldn't save that. It'll stay on this phone for now.");
+}
+$("log").addEventListener("click", e => {
+  const m = e.target.closest("[data-pm]"); if(m){ savePrefs({ method:m.dataset.pm }); return; }
+  const w = e.target.closest("[data-pw]"); if(w){ savePrefs({ waters:w.dataset.pw }); return; }
+  const t = e.target.closest("[data-pt]"); if(t){ const s = new Set(fprefs().targets || []); s.has(t.dataset.pt) ? s.delete(t.dataset.pt) : s.add(t.dataset.pt); savePrefs({ targets:[...s] }); }
+});
 
 
 /* ================= Phase 4: notifications, forums, messages, reports ================= */
@@ -3362,22 +3575,42 @@ async function startSession(user){
     for(const j of outbox) if(j.photo){ idb.get(j.photo).then(b => { if(b){ pendingPhotoUrls[j.photo] = URL.createObjectURL(b); renderAll(); } }).catch(()=>{}); } }
   loadState = navigator.onLine ? "loading" : "offline";
   if(!recoveryShown) $("auth").hidden = true; canWrite = true;
-  renderAll(); updateSync(); applyGate();
+  applyPrefs(); renderAll(); updateSync(); applyGate();
   await loadAll(); flush();
 }
 function showAuth(){ me = null; $("auth").hidden = false; setAuthMode("in"); }
 sb.auth.onAuthStateChange((event, session) => {
   if(event === "PASSWORD_RECOVERY"){ showNewPassword(); if(session?.user) startSession(session.user); return; }
   if(session?.user) startSession(session.user);
-  else if(event === "SIGNED_OUT") showAuth();
+  else if(event === "SIGNED_OUT" && !storedUser()) showAuth();
 });
 
 /* ---------- start ---------- */
 tab = lsGet("fl.tab", "map");
 renderAll();
-const { data:{ session } } = await sb.auth.getSession();
+// Open straight from the sign-in saved on this phone, so the app works with no signal.
+// Checking it with the server can take a while (or fail) offline; that must never sign anyone out.
+function storedUser(){ try{ const s = JSON.parse(authStore.getItem("fl.auth") || "null"); return s?.user?.id ? s.user : null; }catch(e){ return null; } }
+let offlineAuth = false;
+const saved = storedUser();
+if(saved) startSession(saved);
+const { data:{ session } } = await Promise.race([
+  sb.auth.getSession().catch(() => ({ data:{ session:null }, failed:true })),
+  new Promise(r => setTimeout(() => r({ data:{ session:null }, slow:true }), saved ? 4000 : 15000))
+]);
 if(session?.user) startSession(session.user);
+else if(storedUser()) offlineAuth = true;            // couldn't reach the server: keep going from this phone
+else if(saved){ me = null; showAuth(); }              // the server rejected the saved sign-in
 else { showAuth(); if(LINK_ERROR){ $("authMsg").className = "hint bad"; $("authMsg").textContent = /expired|invalid/i.test(decodeURIComponent(LINK_ERROR)) ? "That email link has expired or was already used. Request a new one." : decodeURIComponent(LINK_ERROR.replace(/\+/g, " ")); } }
+
+async function recheckAuth(){
+  if(!offlineAuth || !navigator.onLine) return;
+  const { data:{ session } } = await sb.auth.getSession().catch(() => ({ data:{ session:null } }));
+  if(session?.user){ offlineAuth = false; loadAll(); flush(); }
+  else if(!storedUser()){ offlineAuth = false; me = null; showAuth(); }
+}
+window.addEventListener("online", recheckAuth);
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") recheckAuth(); });
 
 if("serviceWorker" in navigator){
   const hadController = !!navigator.serviceWorker.controller;

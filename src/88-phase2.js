@@ -40,7 +40,7 @@ const BADGES = [
   { id:"ice", name:"Hard Water", desc:"Catch a fish ice fishing.", goal:1, val:s => s.cs.some(c => c.method === "ice" && fishOf(c) > 0) ? 1 : 0 }
 ];
 function badgeStats(cs = catches){
-  const withFish = cs.filter(c => fishOf(c) > 0);
+  const withFish = cs.filter(c => fishOf(c) > 0 && countsForTitles(c));
   const byDay = {}; withFish.forEach(c => (byDay[c.caught_on] ||= new Set()).add((c.species || "").toLowerCase()));
   return { cs: withFish, fish: withFish.reduce((a, c) => a + fishOf(c), 0),
     species: new Set(withFish.map(c => (c.species || "").toLowerCase()).filter(Boolean)).size,
@@ -50,9 +50,12 @@ function badgeStats(cs = catches){
 function badges(cs){ const s = badgeStats(cs); return BADGES.map(b => { const v = Math.min(b.goal, b.val(s)); return { ...b, v, earned: v >= b.goal }; }); }
 function titlesHtml(){
   const list = badges(); const got = list.filter(b => b.earned);
-  const next = list.filter(b => !b.earned).sort((a, b) => b.v / b.goal - a.v / a.goal).slice(0, 6);
+  const focus = new Set((fprefs().targets || []).flatMap(t => TARGET_BADGES[t] || []));
+  const next = list.filter(b => !b.earned).sort((a, b) => (focus.has(b.id) - focus.has(a.id)) || (b.v / b.goal - a.v / a.goal)).slice(0, 6);
+  const hist = catches.filter(beforeJoin).length;
   return `<h4><span>Titles</span><span>${got.length}/${list.length}</span></h4>
     ${got.length ? `<div class="badges">${got.map(b => `<span class="badge on" title="${esc(b.desc)}"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span>`).join("")}</div>` : `<p class="muted" style="margin:0 0 8px">Log fish to earn titles like Bass Master and Brookie Hunter.</p>`}
+    ${hist ? `<p class="note">${hist} catch${hist === 1 ? "" : "es"} from before you joined Coulee ${hist === 1 ? "is" : "are"} in your log and stats, but titles and friend leaderboards only count fish caught since you joined.</p>` : ""}
     ${next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}`;
 }
 function titlePickerHtml(){

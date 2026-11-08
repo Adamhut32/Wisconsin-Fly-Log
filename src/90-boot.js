@@ -70,22 +70,42 @@ async function startSession(user){
     for(const j of outbox) if(j.photo){ idb.get(j.photo).then(b => { if(b){ pendingPhotoUrls[j.photo] = URL.createObjectURL(b); renderAll(); } }).catch(()=>{}); } }
   loadState = navigator.onLine ? "loading" : "offline";
   if(!recoveryShown) $("auth").hidden = true; canWrite = true;
-  renderAll(); updateSync(); applyGate();
+  applyPrefs(); renderAll(); updateSync(); applyGate();
   await loadAll(); flush();
 }
 function showAuth(){ me = null; $("auth").hidden = false; setAuthMode("in"); }
 sb.auth.onAuthStateChange((event, session) => {
   if(event === "PASSWORD_RECOVERY"){ showNewPassword(); if(session?.user) startSession(session.user); return; }
   if(session?.user) startSession(session.user);
-  else if(event === "SIGNED_OUT") showAuth();
+  else if(event === "SIGNED_OUT" && !storedUser()) showAuth();
 });
 
 /* ---------- start ---------- */
 tab = lsGet("fl.tab", "map");
 renderAll();
-const { data:{ session } } = await sb.auth.getSession();
+// Open straight from the sign-in saved on this phone, so the app works with no signal.
+// Checking it with the server can take a while (or fail) offline; that must never sign anyone out.
+function storedUser(){ try{ const s = JSON.parse(authStore.getItem("fl.auth") || "null"); return s?.user?.id ? s.user : null; }catch(e){ return null; } }
+let offlineAuth = false;
+const saved = storedUser();
+if(saved) startSession(saved);
+const { data:{ session } } = await Promise.race([
+  sb.auth.getSession().catch(() => ({ data:{ session:null }, failed:true })),
+  new Promise(r => setTimeout(() => r({ data:{ session:null }, slow:true }), saved ? 4000 : 15000))
+]);
 if(session?.user) startSession(session.user);
+else if(storedUser()) offlineAuth = true;            // couldn't reach the server: keep going from this phone
+else if(saved){ me = null; showAuth(); }              // the server rejected the saved sign-in
 else { showAuth(); if(LINK_ERROR){ $("authMsg").className = "hint bad"; $("authMsg").textContent = /expired|invalid/i.test(decodeURIComponent(LINK_ERROR)) ? "That email link has expired or was already used. Request a new one." : decodeURIComponent(LINK_ERROR.replace(/\+/g, " ")); } }
+
+async function recheckAuth(){
+  if(!offlineAuth || !navigator.onLine) return;
+  const { data:{ session } } = await sb.auth.getSession().catch(() => ({ data:{ session:null } }));
+  if(session?.user){ offlineAuth = false; loadAll(); flush(); }
+  else if(!storedUser()){ offlineAuth = false; me = null; showAuth(); }
+}
+window.addEventListener("online", recheckAuth);
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") recheckAuth(); });
 
 if("serviceWorker" in navigator){
   const hadController = !!navigator.serviceWorker.controller;

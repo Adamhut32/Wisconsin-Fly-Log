@@ -21,7 +21,7 @@ function everyone(){
   return [...mine, ...friendCatches.filter(c => c.rel !== "following")];
 }
 function leaderboards(p){
-  const all = everyone().filter(c => inPeriod(c.caught_on, p) && fishOf(c) > 0);
+  const all = everyone().filter(c => inPeriod(c.caught_on, p) && fishOf(c) > 0 && !beforeJoin(c));
   const by = {}; const name = {};
   for(const c of all){ (by[c.user_id] ||= []).push(c); name[c.user_id] = c.display_name; }
   if(me && !by[me.id]){ by[me.id] = []; name[me.id] = profile?.display_name || "You"; }

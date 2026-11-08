@@ -34,7 +34,7 @@
 
 <div class="app" id="app">
   <header class="top">
-    <div class="brand"><h1>Coulee</h1><span class="sub">Wisconsin fly fishing</span></div>
+    <div class="brand"><h1>Coulee</h1><span class="sub">Wisconsin fly fishing</span><span class="pill testpill" id="testPill" hidden>Test</span></div>
     <span class="sync" id="sync" hidden></span>
     <div class="tally" aria-live="polite">
       <span class="t-spot"><b id="tSpots">0</b>spots</span>
@@ -150,6 +150,8 @@
           <div class="field"><label for="fLen">Length (in)</label><input id="fLen" inputmode="decimal" placeholder="14"></div>
           <div class="field"><label for="fCount">Fish</label><input id="fCount" type="number" min="0" value="1"></div>
         </div>
+        <div class="field" id="fWtRow" style="margin-top:12px" hidden><label for="fWt">Weight (lb)</label><input id="fWt" inputmode="decimal" placeholder="3.5, or 3 lb 8 oz" autocomplete="off"><span class="hint" id="fWtHint"></span></div>
+        <button class="link" type="button" id="fWtAdd" style="margin-top:6px">+ Add weight</button>
         <div class="grid2" style="margin-top:12px">
           <div class="field"><label for="fFly" id="fFlyLbl">Fly</label><input id="fFly" list="flyList" placeholder="#16 Elk Hair Caddis"></div>
           <div class="field"><label for="fDate">Date</label><input id="fDate" type="date"></div>
@@ -274,6 +276,7 @@
   </div>
 </div>
 
+<div class="coachRing" id="coachRing" hidden></div>
 <!-- agreements for existing accounts -->
 <div class="scrim guide" id="terms" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
