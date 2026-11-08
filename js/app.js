@@ -3532,9 +3532,17 @@ $("authUpTab").onclick = () => setAuthMode("up");
 $("forgotBtn").onclick = () => setAuthMode("reset");
 $("authForm").addEventListener("submit", async e => {
   e.preventDefault();
-  const msg = $("authMsg"), email = $("aEmail").value.trim(), pw = $("aPw").value, go = $("authGo");
+  const msg = $("authMsg"), pw = $("aPw").value, go = $("authGo");
+  // forgive small typing slips: spaces (and invisible ones), a comma for a dot, a stray dot at the end, capitals
+  const email = $("aEmail").value.replace(/[\s​-‍⁠﻿]+/g, "").replace(/,/g, ".").replace(/\.+$/, "").toLowerCase();
+  if(email && email !== $("aEmail").value) $("aEmail").value = email;
   msg.className = "hint bad";
-  if(authMode !== "newpw" && !/^\S+@\S+\.\S+$/.test(email)){ msg.textContent = "Enter your email address."; $("aEmail").focus(); return; }
+  if(authMode !== "newpw" && !/^[^@]+@[^@]+\.[^@.]{2,}$/.test(email)){
+    msg.textContent = !email ? "Enter your email address."
+      : !email.includes("@") ? "That email is missing the @ sign."
+      : (email.match(/@/g) || []).length > 1 ? "That email has more than one @ sign."
+      : `That email is missing its ending, like .com. You typed: ${email}`;
+    $("aEmail").focus(); return; }
   if(authMode !== "reset" && pw.length < 8){ msg.textContent = "Passwords need at least 8 characters."; $("aPw").focus(); return; }
   if(authMode === "up" && !$("aName").value.trim()){ msg.textContent = "Add your name so friends know who you are."; $("aName").focus(); return; }
   if(authMode === "up"){ const ye = checkBirthYear($("aYear").value); if(ye){ msg.textContent = ye; $("aYear").focus(); return; }
