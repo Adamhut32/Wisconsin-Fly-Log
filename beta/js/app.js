@@ -3182,7 +3182,7 @@ $("log").addEventListener("click", async e => {
 });
 
 /* ---------- push notifications ---------- */
-const PUSH_CATS = [["friends","Friend requests"],["messages","Messages"],["tourneys","Tournament invites and changes"],["fish","Fish logged for you, fair-play notices"],["forum","Replies to your forum threads"]];
+const PUSH_CATS = [["catches","Friends' catches"],["friends","Friend requests"],["messages","Messages"],["tourneys","Tournament invites, changes and catches"],["fish","Fish logged for you, fair-play notices"],["forum","Replies to your forum threads"]];
 let pushStateV = null;
 const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
@@ -3224,7 +3224,10 @@ function notifyCardHtml(){
         ${isStaff() ? `<label class="check"><input type="checkbox" data-pushpref="staff" ${p.staff !== false ? "checked" : ""}> New accounts, reports and flagged photos</label>` : ""}
         <div class="row2" style="margin-top:8px"><button class="btn sm" type="button" data-push="test">Send a test</button><button class="link" type="button" data-push="off">Turn off on this device</button></div>`
     : `<p>Get a notification for friend requests, messages, tournament invites and more.</p><div class="row2"><button class="btn sm ink" type="button" data-push="on">Turn on notifications</button></div>`;
-  return `<h4><span>Notifications</span></h4><div class="card">${body}</div>`;
+  const tell = p.tell_friends !== false;
+  const share = `<div class="card"><label class="check"><input type="checkbox" data-pushpref="tell_friends" ${tell ? "checked" : ""}> Tell friends when I log a catch</label>
+    <p class="muted" style="margin:4px 0 0">${tell ? "Friends who can see a catch get a notification about it." : "Friends can still see your catches in their feed, but won't get a notification."} Fish entered in a tournament always notify the other anglers in it.</p></div>`;
+  return `<h4><span>Notifications</span></h4><div class="card">${body}</div>${share}`;
 }
 $("log").addEventListener("click", async e => {
   const b = e.target.closest("[data-push]"); if(!b) return;
@@ -3238,12 +3241,14 @@ $("log").addEventListener("change", async e => {
   const { error } = await sb.from("profiles").update({ push_prefs }).eq("id", me.id);
   if(error){ toast("Couldn't save."); e.target.checked = !e.target.checked; return; }
   profile = { ...profile, push_prefs }; saveCache();
+  if(k === "tell_friends"){ renderLog(); toast(e.target.checked ? "Friends will hear about your catches." : "Friends won't get notified of your catches."); }
 });
 // a tapped notification opens the right screen
 function openDeepLink(h){
   if(!h || !me) return false;
   const [k, id] = h.replace(/^#/, "").split(":");
   if(k === "friends"){ friendsView = "people"; setTab("friends"); }
+  else if(k === "feed"){ friendsView = "feed"; setTab("friends"); }
   else if(k === "tourney" && id){ setTab("tourney"); openTourney(id); }
   else if(k === "log"){ setTab("map"); }
   else if(k === "messages"){ friendsView = "messages"; chatWith = id || null; setTab("friends"); }
@@ -3254,7 +3259,7 @@ function openDeepLink(h){
   return true;
 }
 navigator.serviceWorker?.addEventListener("message", e => { if(e.data?.type === "open") openDeepLink(e.data.url); });
-let pendingDeepLink = /^#(friends|tourney|log|messages|forum|staff|me)\b/.test(location.hash) ? location.hash : null;
+let pendingDeepLink = /^#(friends|feed|tourney|log|messages|forum|staff|me)\b/.test(location.hash) ? location.hash : null;
 if(pendingDeepLink) history.replaceState(null, "", location.pathname + location.search);
 
 /* ---------- messages ---------- */
