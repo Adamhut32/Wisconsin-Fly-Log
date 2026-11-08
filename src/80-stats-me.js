@@ -13,8 +13,10 @@ function renderStatsTab(el){
   const species = {}; const flies = {}; const months = Array(12).fill(0); const flyMonth = {};
   for(const c of withFish){
     const n = fishOf(c), m = +(c.caught_on||"0000-01").slice(5,7) - 1; months[m] += n;
-    if(c.species){ const s = species[c.species] ||= { n:0, big:null }; s.n += n; if(c.length_in != null && (!s.big || +c.length_in > +s.big.length_in)) s.big = c; }
-    if(c.fly){ const f = flies[c.fly] ||= { n:0, months:Array(12).fill(0) }; f.n += n; f.months[m] += n; (flyMonth[m] ||= {})[c.fly] = ((flyMonth[m] ||= {})[c.fly] || 0) + n; }
+    const spn = sentenceCase(c.species);
+    if(spn){ const s = species[spn] ||= { n:0, big:null }; s.n += n; if(c.length_in != null && (!s.big || +c.length_in > +s.big.length_in)) s.big = c; }
+    const fly = capWords(c.fly);   // "Copper john" and "Copper John" are one fly
+    if(fly){ const f = flies[fly] ||= { n:0, months:Array(12).fill(0) }; f.n += n; f.months[m] += n; (flyMonth[m] ||= {})[fly] = ((flyMonth[m] ||= {})[fly] || 0) + n; }
   }
   const max = Math.max(1, ...months);
   const W = 320, H = 130, bw = W/12;
@@ -371,6 +373,7 @@ $("log").addEventListener("click", async ev => {
   const sd = t.closest("[data-sugdel]"); if(sd){ await sb.from("suggestions").delete().eq("id", sd.dataset.sugdel); loadCreator(); return; }
   const a = t.closest("[data-a]"); if(!a) return;
   if(a.dataset.a === "guide") openGuide(true);
+  if(a.dataset.a === "alltitles"){ titlesAll = !titlesAll; renderLog(); }
   if(a.dataset.a === "savepublic"){
     const is_public = $("mePublic").checked, findable = $("meFindable").checked, bio = $("meBio").value.trim() || null, msg = $("pubMsg");
     const { error } = await sb.from("profiles").update({ is_public, findable, bio }).eq("id", me.id);

@@ -107,3 +107,14 @@ function offlineBlock(cid){
     <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 90 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
 }
+
+/* after a map data update, say so once instead of only showing it in Me -> Offline maps */
+let offlineNudged = false;
+async function nudgeOfflineRefresh(){
+  if(offlineNudged || !navigator.onLine) return; offlineNudged = true;
+  const old = lsGet("fl.offlineIds", null);
+  if(!old || old.v === offlineV() || !old.ids?.length) return;
+  await countSavedCounties();
+  const stale = old.ids.filter(id => !offlineSaved?.has(id)).length;
+  if(stale) toast(`Map update: ${stale} saved count${stale === 1 ? "y needs" : "ies need"} a refresh for offline use. Me → Offline maps → Refresh saved counties.`);
+}

@@ -9,6 +9,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const dataUrl = p => (CFG.dataBase || "data/") + p + "?v=" + CFG.dataVersion;
+// "copper John" -> "Copper John" (flies); "brown Trout" -> "Brown trout" (species, like the app's list). Same rule as the database.
+const capWords = s => { s = (s || "").trim().replace(/\s+/g, " "); return s ? s.split(" ").map(w => w[0].toUpperCase() + w.slice(1)).join(" ") : null; };
+const sentenceCase = s => { s = (s || "").trim().replace(/\s+/g, " "); return s ? s[0].toUpperCase() + s.slice(1).toLowerCase() : null; };
 // detailed creek lines (DNR 24K) for close zoom; a test version may point these at the monthly refresh
 const hdUrl = id => (CFG.hdBase || (CFG.dataBase || "data/") + "water/hd/") + id + ".json?h=" + (CFG.hdVersion || "1");
 const offlineV = () => CFG.dataVersion + "." + (CFG.hdVersion || "1");
@@ -29,7 +32,8 @@ let showFriends = lsGet("fl.showFriends", true);
 let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
-let mapPerson = null; // when set, the map shows that friend's shared catches and spots instead of yours
+let mapPerson = null;
+let hidePins = false; // "My pins off": hide every spot, catch and fish count, e.g. to show someone the map // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me
 let tripOpen = null;           // trip id shown in Trips tab
@@ -62,6 +66,7 @@ const lenTxt = v => v == null || v === "" ? "" : `${+v}″`;
 /* ---------- derived numbers ---------- */
 function countyStats(id){
   let s=0,f=0;
+  if(hidePins) return { spots:0, fish:0 };
   if(mapPerson){ // looking at a friend's map: count what they share
     for(const x of friendSpots) if(x.user_id===mapPerson && x.county===id) s++;
     for(const c of friendCatches) if(c.user_id===mapPerson && c.county===id) f+=fishOf(c);

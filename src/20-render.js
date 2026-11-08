@@ -14,6 +14,7 @@ function renderBadges(){
 const markerIndex = {};
 function renderMarkers(){
   markerLayer.clearLayers(); friendLayer.clearLayers();
+  if(hidePins){ $("legend").classList.remove("friends-on"); return; }
   for(const s of (mapPerson ? [] : spots)){
     const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot ${esc(s.status)}"></div>`, iconSize:[0,0] }), riseOnHover:true, title:s.name||"Spot" });
     m.bindPopup(() => spotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });

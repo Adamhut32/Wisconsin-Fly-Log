@@ -12,12 +12,12 @@ function buildArea(id, w, t){
   const g = L.layerGroup(), streams = [], extra = [], R = areaRenderer;
   for(const [name, typ, rings] of w.l){
     const named = name && name !== "Unnamed";
-    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, interactive:!!named, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1 });
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, interactive:!!named, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     if(named) p.on("click", e => openWaterPopup(e, name, waterType(name), null, id));
     g.addLayer(p);
   }
   if(t) for(const [name, c, rings] of t.p){
-    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1 });
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null }, id)); g.addLayer(p);
   }
   if(t) for(const [name, c, mi, orw, paths] of t.t){
@@ -28,6 +28,7 @@ function buildArea(id, w, t){
     g.addLayer(band);
   }
   for(const [name, order, raw] of w.s){
+    if((!name || name === "NA" || name === "Unnamed") && order >= 4) continue;   // DNR flow paths through lakes, not creeks
     const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
     if(!paths.length) continue;
     const ll = llPaths(paths), wgt = streamWeight(order);

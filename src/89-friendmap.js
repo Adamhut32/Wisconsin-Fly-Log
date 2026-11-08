@@ -33,3 +33,9 @@ function personBar(){
   b.hidden = false; $("personDone").onclick = closePersonMap;
 }
 document.addEventListener("click", e => { const p = e.target.closest("[data-pmap]"); if(p){ e.preventDefault(); openPersonMap(p.dataset.pmap); } });
+
+/* ---------- "My pins off": hide spots, catches and county fish counts (showing a friend, planning on your phone) ---------- */
+hidePins = lsGet("fl.hidePins", false);
+function syncPins(){ const b = $("pinsToggle"); b.setAttribute("aria-pressed", String(!hidePins)); b.textContent = hidePins ? "My pins off" : "My pins on"; document.getElementById("map").classList.toggle("nopins", hidePins); }
+$("pinsToggle").onclick = () => { hidePins = !hidePins; lsSet("fl.hidePins", hidePins); syncPins(); renderAll(); countyLayer.setStyle(countyStyle); toast(hidePins ? "Your spots and catches are hidden on the map." : "Your spots and catches are back."); };
+syncPins();

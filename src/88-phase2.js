@@ -48,6 +48,7 @@ function badgeStats(cs = catches){
     slam: Object.values(byDay).some(s => s.has("brook trout") && s.has("brown trout") && s.has("rainbow trout")) };
 }
 function badges(cs){ const s = badgeStats(cs); return BADGES.map(b => { const v = Math.min(b.goal, b.val(s)); return { ...b, v, earned: v >= b.goal }; }); }
+let titlesAll = false;
 function titlesHtml(){
   const list = badges(); const got = list.filter(b => b.earned);
   const focus = new Set((fprefs().targets || []).flatMap(t => TARGET_BADGES[t] || []));
@@ -56,7 +57,10 @@ function titlesHtml(){
   return `<h4><span>Titles</span><span>${got.length}/${list.length}</span></h4>
     ${got.length ? `<div class="badges">${got.map(b => `<span class="badge on" title="${esc(b.desc)}"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span>`).join("")}</div>` : `<p class="muted" style="margin:0 0 8px">Log fish to earn titles like Bass Master and Brookie Hunter.</p>`}
     ${hist ? `<p class="note">${hist} catch${hist === 1 ? "" : "es"} from before you joined Coulee ${hist === 1 ? "is" : "are"} in your log and stats, but titles and friend leaderboards only count fish caught since you joined.</p>` : ""}
-    ${next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}`;
+    ${titlesAll
+      ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Every title (${list.length - got.length} still to earn)</p><div class="badges">${list.filter(b => !b.earned).map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>`
+      : next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}
+    <button class="link" type="button" data-a="alltitles" style="margin-top:6px">${titlesAll ? "Show just what's up next" : `See all ${list.length} titles`}</button>`;
 }
 function titlePickerHtml(){
   const got = badges().filter(b => b.earned);

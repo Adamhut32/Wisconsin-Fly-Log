@@ -225,8 +225,8 @@ $("entryForm").addEventListener("submit", async ev => {
     if(formKind==="catch"){
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
-      rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
-        fly:$("fFly").value.trim() || null, method:$("fMethod").value, weight_lb:(w => w == null || Number.isNaN(w) ? null : w)(parseWeight($("fWt").value)), water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
+      rec = { ...base, species:sentenceCase($("fSpecies").value), length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
+        fly:capWords($("fFly").value), method:$("fMethod").value, weight_lb:(w => w == null || Number.isNaN(w) ? null : w)(parseWeight($("fWt").value)), water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
         photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };

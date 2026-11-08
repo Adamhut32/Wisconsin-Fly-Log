@@ -523,3 +523,5 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .yearsel.subnav button{flex:0 0 auto;white-space:nowrap}
 #map.personmode .viewsw{display:none}
 .personbar[hidden]{display:none}
+.legend #pinsToggle{display:inline-block}
+#map.nopins .cbadge{display:none}
