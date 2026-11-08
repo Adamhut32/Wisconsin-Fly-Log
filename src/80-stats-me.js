@@ -30,10 +30,11 @@ function renderStatsTab(el){
     <div class="stats four"><div class="stat f"><b>${fish}</b><span>fish</span></div><div class="stat"><b>${days}</b><span>days fished</span></div><div class="stat"><b>${sp.length}</b><span>species</span></div><div class="stat"><b>${tripCount}</b><span>trips</span></div></div>
     ${cs.length ? `<h4><span>Fish by month</span></h4>${chart}
     <h4><span>Species</span></h4><table class="tbl"><thead><tr><th>Species</th><th class="n">Fish</th><th class="n">Biggest</th></tr></thead><tbody>${sp.map(([k,v]) => `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${v.big ? lenTxt(v.big.length_in) : "–"}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Add species to your catches to see them here.</td></tr>`}</tbody></table>
-    <h4><span>Flies that worked</span></h4><table class="tbl"><thead><tr><th>Fly</th><th class="n">Fish</th><th class="n">Best month</th></tr></thead><tbody>${fl.map(([k,v]) => { const bm = v.months.indexOf(Math.max(...v.months)); return `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${MON[bm]}</td></tr>`; }).join("") || `<tr><td colspan="3" class="muted">Add the fly to your catches to see what works.</td></tr>`}</tbody></table>
+    ${titlesHtml()}
+    <h4><span>${cs.some(c => c.method && c.method !== "fly") ? "Flies and lures that worked" : "Flies that worked"}</span></h4><table class="tbl"><thead><tr><th>Fly or lure</th><th class="n">Fish</th><th class="n">Best month</th></tr></thead><tbody>${fl.map(([k,v]) => { const bm = v.months.indexOf(Math.max(...v.months)); return `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${MON[bm]}</td></tr>`; }).join("") || `<tr><td colspan="3" class="muted">Add the fly to your catches to see what works.</td></tr>`}</tbody></table>
     ${bestByMonth.length ? `<h4><span>Best fly each month</span></h4><ul class="list">${bestByMonth.map(([m, [f, n]]) => `<li class="item" style="grid-template-columns:44px 1fr auto;cursor:default"><span class="muted" style="font-weight:700">${MON[m]}</span><span class="t"><b>${esc(f)}</b></span><span class="num">${n} fish</span></li>`).join("")}</ul>` : ""}
     <h4><span>Spots</span></h4><p style="margin:0"><span class="pill want">${st.want} want to try</span> <span class="pill scouted">${st.scouted} scouted</span> <span class="pill fished">${st.fished} fished</span></p>`
-    : `<div class="empty"><b>Nothing to count yet</b>Log a few catches with the species, length and fly, and this page fills in with your best months and flies.</div>`}`;
+    : `${titlesHtml()}<div class="empty"><b>Nothing to count yet</b>Log a few catches with the species, length and fly, and this page fills in with your best months and flies.</div>`}`;
 }
 $("log").addEventListener("click", ev => { const y = ev.target.closest("[data-year]"); if(y){ statYear = y.dataset.year; lsSet("fl.statYear", statYear); renderLog(); } });
 
@@ -52,7 +53,7 @@ function renderMeTab(el){
       <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
     ${isStaff() && pendingCount ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${pendingCount} account${pendingCount===1?"":"s"} waiting for approval</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
-    <span class="hint" id="nameMsg" role="alert"></span>
+    <span class="hint" id="nameMsg" role="alert"></span>${titlePickerHtml()}
     <div class="row2" style="margin-top:14px">
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
@@ -94,6 +95,19 @@ const HELP = [
     "No location in the photo? Tap Here to use your phone's GPS, or Map to tap the spot.",
     "Friends see shows what others can see: Exact spot, County only, or Nothing.",
     "No signal? Log anyway. The catch is saved on your phone and syncs when you're back in range."]],
+  ["Any fish, any method", [
+    "Pick the method for each catch: Fly, Spinning, Baitcasting, Ice fishing, Trolling or Other. The Fly box becomes Lure or bait for the others.",
+    "Species covers trout, bass, walleye, pike, musky, panfish, salmon, catfish and more. Type any other species too.",
+    "Catches outside Wisconsin are kept with their exact location in an Outside Wisconsin list on the Log tab. They'll file into the right state when Coulee adds it."]],
+  ["Logging a friend's fish", [
+    "In Log a catch, change Whose fish? to a friend. They get it in their Log tab and choose Add to my log or Not mine.",
+    "It only counts for them once they accept it, so nobody can add fish to someone else's log."]],
+  ["Titles", [
+    "Earn titles like Bass Master, Brookie Hunter and Twenty-Incher as you log fish. See them all, with progress, in the Stats tab.",
+    "Pick one to show next to your name in the Me tab."]],
+  ["Planning a trip", [
+    "Tap a creek or lake and choose Plan a trip to add it to an upcoming trip, or start a new one.",
+    "Each planned water has directions and links to the DNR regulations, trout stream maps or Lake Pages."]],
   ["Spots", [
     "Spots are water you want to fish. Mark each one Want to try, Scouted or Fished.",
     "Each spot shows when you last fished it and how many fish you've logged there. Pick the spot when you log a catch to connect them."]],
@@ -103,6 +117,7 @@ const HELP = [
   ["Tournaments", [
     "Anyone can start a tournament: pick dates, an area (anywhere, a region, or specific counties), species and scoring, then invite friends.",
     "Catches that fit the rules are entered automatically when you log them. You can also enter or remove catches on the tournament page.",
+    "Tournaments can be fly only. After a tournament ends, entries are locked: only its creator can change details or remove entries, and members are told about every change. Use Suggest a change to ask the creator.",
     "Photo tournaments only accept fish whose photo was taken during the tournament dates. The app reads the date stamp saved in the photo, so take photos with your phone's camera rather than screenshots."]],
   ["Friends and following", [
     "Friends: share your 6-character friend code. Once they accept, you see each other's shared catches, trips and leaderboards, and can invite each other to tournaments.",

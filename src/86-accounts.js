@@ -86,7 +86,9 @@ $("log").addEventListener("click", async ev => {
 
 /* ---------- profile pictures ---------- */
 const AV_BASE = CFG.supabaseUrl + "/storage/v1/object/public/avatars/";
-let avatars = lsGet("fl.avatars", {});
+let avatars = lsGet("fl.avatars", {}), titles = lsGet("fl.titles", {});
+const titleOf = id => id === me?.id ? profile?.title : (titles[id] || people[id]?.title);
+const titlePill = id => titleOf(id) ? ` <span class="pill ttl">${esc(titleOf(id))}</span>` : "";
 function avHtml(id, name, cls = "", path){
   const p = path !== undefined ? path : id === me?.id ? profile?.avatar_path : (avatars[id] || people[id]?.avatar_path);
   const ini = esc(((name || "?").trim()[0] || "?").toUpperCase());
@@ -95,10 +97,10 @@ function avHtml(id, name, cls = "", path){
 async function loadAvatars(ids){
   ids = [...new Set(ids.filter(id => id && id !== me?.id))];
   if(!ids.length) return;
-  const { data, error } = await sb.from("profiles").select("id, avatar_path").in("id", ids.slice(0, 300));
+  const { data, error } = await sb.from("profiles").select("id, avatar_path, title").in("id", ids.slice(0, 300));
   if(error || !data) return;
-  for(const p of data) avatars[p.id] = p.avatar_path || "";
-  lsSet("fl.avatars", avatars);
+  for(const p of data){ avatars[p.id] = p.avatar_path || ""; titles[p.id] = p.title || ""; }
+  lsSet("fl.avatars", avatars); lsSet("fl.titles", titles);
   if(tab === "friends") renderLog();
 }
 async function avatarBlob(file){

@@ -156,8 +156,14 @@ function waterPopup(name, kind, ll, trout){
   const regHtml = reg ? `<div class="regs"><b>${esc(reg[1])}</b>${reg[3]?`<div><span>Season</span>${esc(reg[3])}</div>`:""}${reg[4]?`<div><span>Early season</span>${esc(reg[4])}</div>`:""}${reg[2]?`<div><span>Bag</span>${esc(reg[2])}</div>`:""}${reg[5]?`<div><span>Gear</span>${esc(reg[5])}</div>`:""}${reg[6]?`<div><span>Special</span>${esc(reg[6])}</div>`:""}${seasonHtml(reg)}<small>From DNR's trout regulation map. Check the current regulations before you fish.</small></div>` : "";
   div.innerHTML = `<h3>${esc(name)}</h3><div class="meta">${esc(kind)}${trout?` · <span class="tclass" style="background:var(${TROUT[trout.c].tok})">${TROUT[trout.c].label} trout</span>`:""}${trout && trout.mi?` · ${trout.mi} mi`:""}</div>${regHtml}
     <div class="coords">${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}</div>
-    <div class="row"><a class="link" href="${gmaps(ll.lat,ll.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${canWrite?`<button class="link" data-a="addspot">Add as spot</button>`:""}</div>`;
-  div.addEventListener("click", ev => { if(ev.target.closest('[data-a="addspot"]')){ map.closePopup(); openForm("spot", null, { name, lat:ll.lat, lng:ll.lng, water: waterType(name), trout_class: trout ? TROUT[trout.c].label : "" }); } });
+    <div class="row"><a class="link" href="${gmaps(ll.lat,ll.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${canWrite?`<button class="link" data-a="addspot">Add as spot</button><button class="link" data-a="planwater">Plan a trip</button>`:""}</div>
+    <div class="row dnr">${dnrLinks(kind, trout ? TROUT[trout.c].label : null)}</div>`;
+  div.addEventListener("click", ev => {
+    if(ev.target.closest('[data-a="addspot"]')){ map.closePopup(); openForm("spot", null, { name, lat:ll.lat, lng:ll.lng, water: waterType(name), trout_class: trout ? TROUT[trout.c].label : "" }); }
+    const pw = ev.target.closest('[data-a="planwater"]');
+    if(pw){ pendingPlanWater = { name, kind: waterType(name), lat:+ll.lat.toFixed(5), lng:+ll.lng.toFixed(5), county: countyAt(ll.lat, ll.lng) || detailFor || null, trout: trout ? TROUT[trout.c].label + " trout" : null };
+      pw.hidden = true; div.insertAdjacentHTML("beforeend", planChooserHtml(pendingPlanWater)); map._popup && map._popup.update(); }
+  });
   return div;
 }
 /* hovering any piece of a creek lights up the whole creek */
@@ -509,7 +515,7 @@ function thumb(c, cls){
   return url ? `<span class="th ${cls||""}" style="background-image:url('${url}')"></span>` : `<span class="th ${cls||""}">${icon("i-fish")}</span>`;
 }
 function itemCatch(c){
-  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc([fmtDate(c.caught_on), c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
+  return `<li><button class="item" data-go="c:${esc(c.id)}">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc([fmtDate(c.caught_on), c.method && c.method !== "fly" ? METHODS[c.method] : "", c.fly, c.county && !currentCounty ? countyName(c.county) : ""].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c)!==1?`<span class="f">×${fishOf(c)}</span>`:""}${c._pending?" ⋯":""}</span></button></li>`;
 }
 function itemSpot(s){
   const v = spotVisits(s);
@@ -545,12 +551,13 @@ function renderMapTab(el){
     const recent = [...catches].sort(byDateDesc).slice(0,6);
     const want = spots.filter(s => s.status === "want").slice(0, 5);
     const ann = announcements[0] && (Date.now() - new Date(announcements[0].created_at)) < 14*864e5 ? `<div class="card notice" style="margin:8px 0 4px"><p class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">From the founder</p><p>${esc(announcements[0].body)}</p></div>` : "";
-    el.innerHTML = `<div class="eyebrow">Statewide</div><h2>Wisconsin</h2>${statusLine()}${ann}
+    el.innerHTML = `<div class="eyebrow">Statewide</div><h2>Wisconsin</h2>${statusLine()}${ann}${inboxHtml()}
       <div class="stats"><div class="stat s"><b>${T.spots}</b><span>potential spots</span></div><div class="stat f"><b>${T.fish}</b><span>fish caught</span></div><div class="stat"><b>${T.counties}<small style="font-size:13px;color:var(--muted)">/72</small></b><span>counties</span></div></div>
       ${rows.length ? `<h4><span>Counties</span><span>spots · fish</span></h4><ul class="list">${rows.map(r=>`<li><button class="item" data-county="${r.id}" style="grid-template-columns:1fr auto"><span class="t"><b>${esc(r.name)} County</b></span><span class="num"><span class="s">${r.spots}</span> · <span class="f">${r.fish}</span></span></button></li>`).join("")}</ul>` :
         (loadState!=="loading" ? `<div class="empty"><b>Your log is empty</b>Tap a county to zoom in, then use <b style="display:inline;font:inherit;color:var(--spot)">Add spot</b> for water you want to try, or <b style="display:inline;font:inherit;color:var(--fish)">Log a catch</b> with a photo. Counties fill in as you go.</div>` : "")}
       ${want.length?`<h4><span>Want to try</span></h4><ul class="list">${want.map(itemSpot).join("")}</ul>`:""}
       ${recent.length?`<h4><span>Recent catches</span></h4><ul class="list">${recent.map(itemCatch).join("")}</ul>`:""}
+      ${outsideHtml()}
       <p class="note">Statewide view shows major rivers. Open a county to see every named creek, river and lake, DNR trout stream classes and regulations, and public land. Region outlines are approximate.</p>`;
   } else {
     const f = byId[currentCounty], s = countyStats(currentCounty);
@@ -572,7 +579,7 @@ function renderLog(){
   const big = tab !== "map", mainEl = document.querySelector(".main");
   if(mainEl.classList.contains("panel-big") !== big){ mainEl.classList.toggle("panel-big", big); setTimeout(() => { map.invalidateSize(); drawLabels(); }, 300); }
   $("reqDot").hidden = !friendships.some(f => f.status === "pending" && f.addressee === me?.id);
-  $("tDot").hidden = !tournaments.some(t => t.my_status === "invited");
+  $("tDot").hidden = !tournaments.some(t => t.my_status === "invited") && !notices.some(n => n.kind.startsWith("tourney") && !n.read);
   if(tab === "map") renderMapTab(el);
   else if(tab === "trips") renderTripsTab(el);
   else if(tab === "tourney") renderTourneyTab(el);
@@ -747,6 +754,7 @@ function openForm(kind, rec, prefill){
   $("fName").value = r.name || ""; $("fWater").value = r.water || "Creek"; $("fClass").value = r.trout_class || ""; $("fTarget").value = r.target || ""; $("fStatus").value = r.status || "want";
   $("fSpecies").value = r.species || ""; $("fLen").value = r.length_in ?? ""; $("fCount").value = r.count ?? 1; $("fFly").value = r.fly || "";
   $("fDate").value = r.caught_on || todayStr(); $("fNotes").value = r.notes || "";
+  $("fMethod").value = r.method || lsGet("fl.method", "fly"); updateFlyLabel(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
   if(rec) setVis(rec.visibility);
@@ -814,7 +822,7 @@ $("entryForm").addEventListener("submit", async ev => {
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
       rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
-        fly:$("fFly").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
+        fly:$("fFly").value.trim() || null, method:$("fMethod").value, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
         photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null) };
       if($("fCount").value === "") rec.count = 1;
@@ -823,7 +831,17 @@ $("entryForm").addEventListener("submit", async ev => {
       rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value };
     }
     const wasEditing = !!editing;
+    if(table === "catches") lsSet("fl.method", rec.method);
+    const forFriend = table === "catches" && !wasEditing ? $("fFor").value : "";
+    if(forFriend){
+      btn.textContent = "Sending…";
+      const fname = friendsList().find(f => f.id === forFriend)?.name || "your friend";
+      await sendGift(rec, blob, forFriend);
+      closeForm(); toast(`Sent to ${fname}. It joins their log when they accept it.`); return;
+    }
+    const before = table === "catches" && !wasEditing ? catches.slice() : null;
     await saveRecord(table, rec, blob, wasEditing);
+    if(before) setTimeout(() => celebrate(rec, before), 350);
     closeForm();
     const where = rec.county ? countyName(rec.county) : "your log";
     toast(navigator.onLine ? `${table==="catches"?"Catch":"Spot"} saved in ${where}` : `Saved on this phone. It will sync when you're back online.`);
@@ -847,9 +865,9 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
-  trips: ["id","name","start_date","end_date","base","notes","shared"]
+  trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
 const pick = (table, r) => { const o = {}; for(const k of COLS[table]) if(k in r) o[k] = r[k] === undefined ? null : r[k]; return o; };
 const listFor = t => t === "catches" ? catches : t === "spots" ? spots : trips;
@@ -935,7 +953,7 @@ async function flush(){
         const offline = !navigator.onLine || (e && /fetch|network|Load failed/i.test(String(e.message || e)));
         if(offline){ break; }
         console.error("sync", job, e);
-        if(status && String(status).startsWith("4")){ outbox.shift(); saveOutbox(); toast("One change couldn't be saved and was skipped."); continue; }
+        if(status && String(status).startsWith("4")){ outbox.shift(); saveOutbox(); toast(e && /tournament/i.test(e.message || "") ? e.message : "One change couldn't be saved and was skipped."); setTimeout(loadAll, 1500); continue; }
         syncFailing = true; break;
       }
     }
@@ -1005,11 +1023,12 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
     if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
     if(isStaff()) loadStaffList();
+    loadInbox();
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
@@ -1159,7 +1178,7 @@ function renderTripsTab(el){
     <div class="stack" style="margin-top:14px">${list.length ? list.map(t => {
       const s = summarize(tripCatches(t)); const now = t.start_date <= today && today <= t.end_date;
       return `<button class="trip${now?" now":""}" data-trip="${esc(t.id)}" type="button"><small>${now?"Happening now · ":""}${esc(fmtRange(t.start_date, t.end_date))}${t.base?` · ${esc(t.base)}`:""}</small><b>${esc(t.name)}</b>
-        <span class="tnums"><span><em>${s.fish}</em> fish</span><span>${daysBetween(t.start_date, t.end_date).length} days</span>${s.big?`<span>Biggest ${lenTxt(s.big.length_in)}</span>`:""}${!t.shared?"<span>Private</span>":""}${t._pending?"<span>Waiting to sync</span>":""}</span></button>`; }).join("")
+        <span class="tnums"><span><em>${s.fish}</em> fish</span><span>${daysBetween(t.start_date, t.end_date).length} days</span>${s.big?`<span>Biggest ${lenTxt(s.big.length_in)}</span>`:""}${(t.waters||[]).length?`<span>${t.waters.length} water${t.waters.length===1?"":"s"} planned</span>`:""}${!t.shared?"<span>Private</span>":""}${t._pending?"<span>Waiting to sync</span>":""}</span></button>`; }).join("")
       : `<div class="empty"><b>No trips yet</b>Make one for your next outing, even a single day. Every catch you log during those dates lands in it, and you get a recap with photos, the best fly, and day-by-day notes.</div>`}</div>
     ${loose && list.length ? `<p class="note">${loose} catch${loose===1?" isn't":"es aren't"} part of a trip. Edit a catch to add it to one.</p>` : ""}`;
 }
@@ -1176,6 +1195,7 @@ function renderTrip(el, t){
     ${s.fly ? `<p style="margin:0 0 6px"><b>Best fly:</b> ${esc(s.fly[0])} (${s.fly[1]} fish)</p>` : ""}
     ${counties_.size ? `<p class="muted" style="margin:0 0 8px">${[...counties_].map(countyName).join(", ")}</p>` : ""}
     ${t.notes ? `<p style="margin:6px 0 10px">${esc(t.notes)}</p>` : ""}
+    ${tripPlanHtml(t)}
     ${photos.length ? `<div class="strip">${photos.map(c => `<button type="button" data-go="c:${esc(c.id)}" aria-label="${esc(c.species||"Catch")} photo" style="background-image:url('${photoSrc(c.photo_path)}')"></button>`).join("")}</div>` : ""}
     <div class="row2" style="margin:8px 0 4px">
       <button class="btn sm fish" type="button" data-a="logtrip">${icon("i-fish")}Log a catch</button>
@@ -1236,7 +1256,9 @@ $("tripForm").addEventListener("submit", async ev => {
   if(!a || !b){ err.textContent = "Add the first and last day."; return; }
   if(b < a){ err.textContent = "The last day can't be before the first day."; $("tEnd").focus(); return; }
   if(daysBetween(a, b).length > 45){ err.textContent = "Trips can be up to 45 days long."; return; }
-  const rec = { id: tripEditing ? tripEditing.id : uuid(), name, start_date:a, end_date:b, base:$("tBase").value.trim() || null, notes:$("tNotes").value.trim() || null, shared:$("tShared").checked };
+  const rec = { id: tripEditing ? tripEditing.id : uuid(), name, start_date:a, end_date:b, base:$("tBase").value.trim() || null, notes:$("tNotes").value.trim() || null, shared:$("tShared").checked,
+    waters: tripEditing ? (tripEditing.waters || []) : (pendingPlanWater ? [pendingPlanWater] : []) };
+  if(!tripEditing) pendingPlanWater = null;
   const isNew = !tripEditing;
   try{
     await saveRecord("trips", rec, null, !isNew);
@@ -1273,7 +1295,7 @@ async function loadTournaments(){
 function tState(t){ const d = todayStr(); return d < t.starts_on ? "upcoming" : d > t.ends_on ? "finished" : "live"; }
 function tRules(t){
   const bits = [`${fmtRange(t.starts_on, t.ends_on)}`, t.area_label || (t.counties ? `${t.counties.length} counties` : "Anywhere in Wisconsin"),
-    t.species ? (t.species.length > 3 ? `${t.species.length} species` : t.species.join(", ")) : "Any species", SCORING[t.scoring]?.label];
+    t.species ? (t.species.length > 3 ? `${t.species.length} species` : t.species.join(", ")) : "Any species", t.methods && t.methods.length === 1 && t.methods[0] === "fly" ? "Fly only" : t.methods ? "No fly" : "", SCORING[t.scoring]?.label];
   return bits.filter(Boolean).join(" · ");
 }
 function standings(t, rows){
@@ -1301,7 +1323,8 @@ function renderTourneyTab(el){
   const openOnes = tournaments.filter(t => t.open && !t.my_status && tState(t) !== "finished");
   const card = t => { const s = tState(t); return `<button class="trip${s==="live"?" now":""}" type="button" data-tourney="${esc(t.id)}"><small>${s==="live"?"Happening now":s==="upcoming"?"Starts "+esc(fmtDate(t.starts_on)):"Finished"} · by ${esc(t.owner_name)}${t.open?" · Open to everyone":""}</small><b>${esc(t.name)}</b>
     <span class="tnums"><span>${esc(tRules(t))}</span></span><span class="tnums"><span>${t.members} angler${t.members===1?"":"s"}</span><span>${t.entries} entr${t.entries===1?"y":"ies"}</span>${t.require_photo?"<span>Photo required</span>":""}</span></button>`; };
-  el.innerHTML = `<div class="eyebrow">Tournaments</div><h2>Tournaments</h2>
+  markTourneyNoticesRead();
+  el.innerHTML = `<div class="eyebrow">Tournaments</div><h2>Tournaments</h2>${tourneyNoticesHtml()}
     <p class="muted" style="margin:4px 0 12px">Set the dates, area and how it's scored, then invite friends. Catches that fit the rules are entered automatically when you log them.</p>
     <button class="btn ink" type="button" data-a="newtourney">${icon("i-plus")}New tournament</button>
     ${invites.length ? `<h4><span>Invitations</span></h4><div class="stack">${invites.map(t => `<div class="card"><p><b>${esc(t.name)}</b></p><p class="muted">${esc(t.owner_name)} invited you · ${esc(tRules(t))}</p><div class="row2"><button class="btn sm ink" type="button" data-tjoin="${esc(t.id)}">Join</button><button class="btn sm" type="button" data-tdecline="${esc(t.id)}">No thanks</button></div></div>`).join("")}</div>` : ""}
@@ -1322,6 +1345,7 @@ function renderTourney(el, t){
       <p><b>Dates:</b> ${esc(fmtRange(t.starts_on, t.ends_on))}</p>
       <p><b>Area:</b> ${esc(t.area_label || (t.counties ? t.counties.map(id => byId[id]?.properties.name).filter(Boolean).join(", ") : "Anywhere in Wisconsin"))}</p>
       <p><b>Species:</b> ${esc(t.species ? t.species.join(", ") : "Any")}</p>
+      <p><b>Method:</b> ${esc(t.methods ? (t.methods.length === 1 && t.methods[0] === "fly" ? "Fly only" : t.methods.map(m => METHODS[m]).join(", ")) : "Any")}</p>
       <p><b>Scoring:</b> ${esc(SCORING[t.scoring]?.label)}. ${esc(SCORING[t.scoring]?.how)}</p>
       ${t.require_photo ? `<p><b>Photo:</b> Each fish needs a photo taken during the tournament dates. The app checks the date stamp saved in the photo.</p>` : ""}
     </div>
@@ -1330,11 +1354,12 @@ function renderTourney(el, t){
     <h4><span>${s === "finished" ? "Final standings" : "Standings"}</span><span>${SCORING[t.scoring]?.label}</span></h4>
     ${!board ? `<p class="status">Loading standings…</p>` : board.length ? `<div class="board"><ol>${board.map((r,i) => `<li class="${r.id===me?.id?"me":""}"><span class="r">${i+1}</span><span>${i===0&&s==="finished"?`<span class="pill open">Winner</span> `:""}${esc(r.name)}<small>${esc(r.sub)}</small></span><span class="v">${esc(r.txt)}</span></li>`).join("")}</ol></div>` : `<p class="muted">No entries yet.</p>`}
     ${rows && rows.length ? `<h4><span>Entries</span><span>${rows.length}</span></h4><div class="strip">${rows.filter(r => r.photo_path).map(r => `<button type="button" title="${esc(r.display_name)}: ${esc(r.species||"")} ${r.length_in?lenTxt(r.length_in):""}" style="background-image:url('${photoSrc(r.photo_path)}')" data-tphoto="${esc(r.catch_id)}"></button>`).join("")}</div>
-      <ul class="list">${rows.slice().sort((a,b)=>(b.caught_on||"").localeCompare(a.caught_on||"")).map(r => `<li class="item" style="cursor:default">${thumb(r)}<span class="t"><b>${esc(r.species||"Fish")}${r.length_in?` · ${lenTxt(r.length_in)}`:""}</b><small>${esc(r.display_name)} · ${esc(fmtDate(r.caught_on))} · ${esc(countyName(r.county))}</small></span><span class="num">${r.user_id===me?.id && s!=="finished"?`<button class="link danger" type="button" data-twithdraw="${esc(r.catch_id)}">Remove</button>`:""}</span></li>`).join("")}</ul>` : ""}
+      <ul class="list">${rows.slice().sort((a,b)=>(b.caught_on||"").localeCompare(a.caught_on||"")).map(r => `<li class="item" style="cursor:default">${thumb(r)}<span class="t"><b>${esc(r.species||"Fish")}${r.length_in?` · ${lenTxt(r.length_in)}`:""}</b><small>${esc(r.display_name)} · ${esc(fmtDate(r.caught_on))} · ${esc(countyName(r.county))}</small></span><span class="num" data-rmslot>${r.user_id===me?.id && s!=="finished"?`<button class="link danger" type="button" data-twithdraw="${esc(r.catch_id)}">Remove</button>`:isOwner?`<button class="link danger" type="button" data-townerrm="${esc(r.catch_id)}">Remove</button>`:""}</span></li>`).join("")}</ul>` : ""}
     ${joined && s !== "finished" ? `<h4><span>Your catches during these dates</span></h4>${myCatches.length ? `<ul class="list">${myCatches.map(c => `<li class="item" style="cursor:default">${thumb(c)}<span class="t"><b>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}</b><small>${esc(fmtDate(c.caught_on))}${c.photo_taken_on?"":" · photo has no date"}</small></span><span class="num">${entered.has(c.id)?`<span class="pill fished">Entered</span>`:`<button class="btn sm" type="button" data-tenter="${esc(c.id)}">Enter</button>`}</span></li>`).join("")}</ul><span class="hint" id="tenterMsg" role="alert"></span>` : `<p class="muted">Nothing logged during the tournament yet. Catches that fit the rules are entered when you log them.</p>`}` : ""}
     <h4><span>Anglers</span><span>${ppl.filter(p => p.status === "joined").length}</span></h4>
     <p style="margin:0">${ppl.map(p => `<span class="pill${p.status==="joined"?"":" priv"}" style="margin:0 4px 4px 0">${esc(p.display_name)}${p.status==="invited"?" (invited)":""}</span>`).join("") || `<span class="muted">Loading…</span>`}</p>
     ${joined && s !== "finished" ? `<div class="row2" style="margin-top:10px"><button class="btn sm" type="button" data-a="tinvite">Invite friends</button></div><div data-invite></div>` : ""}
+    ${tourneyToolsHtml(t)}
     <div class="row2" style="margin-top:16px">${isOwner || profile?.role === "creator" ? `<button class="btn sm" type="button" data-a="tdelete">Delete tournament</button>` : joined ? `<button class="btn sm" type="button" data-tdecline="${esc(t.id)}">Leave tournament</button>` : ""}</div><div data-tslot></div>`;
 }
 function friendsList(){ return friendships.filter(f => f.status === "accepted").map(f => { const id = f.requester === me.id ? f.addressee : f.requester; return { id, name: people[id]?.display_name || "Friend" }; }); }
@@ -1378,7 +1403,7 @@ function openTourneyForm(){
   $("tfStart").value = iso(sat); $("tfEnd").value = iso(sun);
   $("tfArea").value = "any"; tfCounties = new Set(); renderCountyPick();
   $("tfSpecies").value = "any"; $("tfScoring").value = "biggest"; $("tfPhoto").checked = true;
-  $("tfOpenRow").hidden = profile?.role !== "creator"; $("tfOpen").checked = false;
+  $("tfOpenRow").hidden = !(profile?.role === "creator" || profile?.verified); $("tfOpen").checked = false; $("tfMethod").value = "any";
   const fr = friendsList();
   $("tfInvite").innerHTML = fr.length ? fr.map(f => `<label class="check"><input type="checkbox" value="${esc(f.id)}"> ${esc(f.name)}</label>`).join("") : `<p class="muted" style="margin:0">Add friends in the Friends tab to invite them. You can invite people later too.</p>`;
   $("tourneyScrim").hidden = false;
@@ -1409,13 +1434,14 @@ $("tourneyForm").addEventListener("submit", async e => {
   if(area === "pick"){ if(!tfCounties.size){ err.textContent = "Pick at least one county, or choose Anywhere."; return; } ids = [...tfCounties]; label = ids.length <= 3 ? ids.map(id => byId[id].properties.name).join(", ") + (ids.length === 1 ? " County" : " counties") : `${ids.length} counties`; }
   else if(area !== "any"){ ids = REGION_COUNTIES[area].map(n => idByName[n]).filter(Boolean); label = area; }
   const sp = $("tfSpecies").value;
-  const species = sp === "any" ? null : sp === "trout" ? TROUT_SPECIES : [sp];
+  const species = sp === "any" ? null : sp === "trout" ? TROUT_SPECIES : sp === "bass" ? BASS : sp === "panfish" ? PANFISH : [sp];
+  const mt = $("tfMethod").value, methods = mt === "fly" ? ["fly"] : mt === "nofly" ? ["spin","baitcast","ice","trolling","other"] : null;
   const invite = [...$("tfInvite").querySelectorAll("input:checked")].map(i => i.value);
   const btn = $("tfSave"); btn.disabled = true;
   const { data, error } = await sb.rpc("create_tournament", { p_name:name, p_description:$("tfDesc").value.trim() || null, p_starts:a, p_ends:b, p_counties:ids, p_area_label:label,
-    p_species:species, p_scoring:$("tfScoring").value, p_require_photo:$("tfPhoto").checked, p_open:$("tfOpen").checked, p_invite:invite });
+    p_species:species, p_scoring:$("tfScoring").value, p_require_photo:$("tfPhoto").checked, p_open:$("tfOpen").checked, p_invite:invite, p_methods:methods });
   btn.disabled = false;
-  if(error){ err.textContent = error.message.includes("creator") ? "Only the founder can make open tournaments." : "Couldn't create the tournament. Check your connection and try again."; return; }
+  if(error){ err.textContent = /open tournaments|approval/.test(error.message) ? error.message : "Couldn't create the tournament. Check your connection and try again."; return; }
   $("tourneyScrim").hidden = true;
   toast(invite.length ? `Tournament created. Invited ${invite.length} friend${invite.length===1?"":"s"}.` : "Tournament created");
   await loadTournaments();
@@ -1479,7 +1505,7 @@ function renderFriendsTab(el){
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
     body = posts.length ? `<div class="feed">${posts.map(c => { const url = photoSrc(c.photo_path); return `<article class="post">${url?`<img class="ph" src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
-      <div class="pb"><span class="who">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
+      <div class="pb"><span class="who">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}${titlePill(c.user_id)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
       <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
       : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Share your friend code above, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
@@ -1498,7 +1524,7 @@ function renderFriendsTab(el){
   } else {
     body = `${incoming.length ? `<h4><span>Requests</span></h4><ul class="list">${incoming.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.requester, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Wants to share catches with you</small></span><span class="row2"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></li>`).join("")}</ul>` : ""}
       <h4><span>Friends</span><span>${accepted.length}</span></h4>
-      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)}><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)}><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
       <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
       ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
       <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
@@ -1507,7 +1533,7 @@ function renderFriendsTab(el){
   if(friendsView === "find"){
     body = `<form id="findForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="findQ" placeholder="Search anglers by name" aria-label="Search anglers by name" value="${esc(findQ)}"><button class="btn" type="submit">Search</button></form>
       <p class="muted" style="margin:6px 0 10px">Follow anglers with public profiles to see the catches they share. Unlike friends, following doesn't need their OK, and they don't see your catches.</p>
-      <div id="findResults">${findResults ? (findResults.length ? `<ul class="list">${findResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name)}<span class="t"><b class="wrap">${esc(p.display_name)}${p.featured?` <span class="pill open">Featured</span>`:""}</b><small>${p.followers} follower${p.followers===1?"":"s"} · ${p.fish} shared fish${p.bio?` · ${esc(p.bio)}`:""}</small></span><span class="row2">${profile?.role==="creator"?`<button class="link" type="button" data-feature="${esc(p.id)}" data-on="${p.featured?"0":"1"}">${p.featured?"Unfeature":"Feature"}</button>`:""}<button class="btn sm ${p.following?"":"ink"}" type="button" data-${p.following?"unfollow":"follow"}="${esc(p.id)}">${p.following?"Following":"Follow"}</button></span></li>`).join("")}</ul>` : `<p class="muted">No public anglers match that name.</p>`) : `<p class="status">Loading anglers…</p>`}</div>`;
+      <div id="findResults">${findResults ? (findResults.length ? `<ul class="list">${findResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name)}<span class="t"><b class="wrap">${esc(p.display_name)}${titlePill(p.id)}${p.featured?` <span class="pill open">Featured</span>`:""}</b><small>${p.followers} follower${p.followers===1?"":"s"} · ${p.fish} shared fish${p.bio?` · ${esc(p.bio)}`:""}</small></span><span class="row2">${profile?.role==="creator"?`<button class="link" type="button" data-feature="${esc(p.id)}" data-on="${p.featured?"0":"1"}">${p.featured?"Unfeature":"Feature"}</button>`:""}<button class="btn sm ${p.following?"":"ink"}" type="button" data-${p.following?"unfollow":"follow"}="${esc(p.id)}">${p.following?"Following":"Follow"}</button></span></li>`).join("")}</ul>` : `<p class="muted">No public anglers match that name.</p>`) : `<p class="status">Loading anglers…</p>`}</div>`;
     if(!findResults) searchAnglers(findQ);
   }
   el.innerHTML = `<div class="eyebrow">Friends</div><h2>Fishing friends</h2>
@@ -1579,10 +1605,11 @@ function renderStatsTab(el){
     <div class="stats four"><div class="stat f"><b>${fish}</b><span>fish</span></div><div class="stat"><b>${days}</b><span>days fished</span></div><div class="stat"><b>${sp.length}</b><span>species</span></div><div class="stat"><b>${tripCount}</b><span>trips</span></div></div>
     ${cs.length ? `<h4><span>Fish by month</span></h4>${chart}
     <h4><span>Species</span></h4><table class="tbl"><thead><tr><th>Species</th><th class="n">Fish</th><th class="n">Biggest</th></tr></thead><tbody>${sp.map(([k,v]) => `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${v.big ? lenTxt(v.big.length_in) : "–"}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Add species to your catches to see them here.</td></tr>`}</tbody></table>
-    <h4><span>Flies that worked</span></h4><table class="tbl"><thead><tr><th>Fly</th><th class="n">Fish</th><th class="n">Best month</th></tr></thead><tbody>${fl.map(([k,v]) => { const bm = v.months.indexOf(Math.max(...v.months)); return `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${MON[bm]}</td></tr>`; }).join("") || `<tr><td colspan="3" class="muted">Add the fly to your catches to see what works.</td></tr>`}</tbody></table>
+    ${titlesHtml()}
+    <h4><span>${cs.some(c => c.method && c.method !== "fly") ? "Flies and lures that worked" : "Flies that worked"}</span></h4><table class="tbl"><thead><tr><th>Fly or lure</th><th class="n">Fish</th><th class="n">Best month</th></tr></thead><tbody>${fl.map(([k,v]) => { const bm = v.months.indexOf(Math.max(...v.months)); return `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${MON[bm]}</td></tr>`; }).join("") || `<tr><td colspan="3" class="muted">Add the fly to your catches to see what works.</td></tr>`}</tbody></table>
     ${bestByMonth.length ? `<h4><span>Best fly each month</span></h4><ul class="list">${bestByMonth.map(([m, [f, n]]) => `<li class="item" style="grid-template-columns:44px 1fr auto;cursor:default"><span class="muted" style="font-weight:700">${MON[m]}</span><span class="t"><b>${esc(f)}</b></span><span class="num">${n} fish</span></li>`).join("")}</ul>` : ""}
     <h4><span>Spots</span></h4><p style="margin:0"><span class="pill want">${st.want} want to try</span> <span class="pill scouted">${st.scouted} scouted</span> <span class="pill fished">${st.fished} fished</span></p>`
-    : `<div class="empty"><b>Nothing to count yet</b>Log a few catches with the species, length and fly, and this page fills in with your best months and flies.</div>`}`;
+    : `${titlesHtml()}<div class="empty"><b>Nothing to count yet</b>Log a few catches with the species, length and fly, and this page fills in with your best months and flies.</div>`}`;
 }
 $("log").addEventListener("click", ev => { const y = ev.target.closest("[data-year]"); if(y){ statYear = y.dataset.year; lsSet("fl.statYear", statYear); renderLog(); } });
 
@@ -1601,7 +1628,7 @@ function renderMeTab(el){
       <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
     ${isStaff() && pendingCount ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${pendingCount} account${pendingCount===1?"":"s"} waiting for approval</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
-    <span class="hint" id="nameMsg" role="alert"></span>
+    <span class="hint" id="nameMsg" role="alert"></span>${titlePickerHtml()}
     <div class="row2" style="margin-top:14px">
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
@@ -1643,6 +1670,19 @@ const HELP = [
     "No location in the photo? Tap Here to use your phone's GPS, or Map to tap the spot.",
     "Friends see shows what others can see: Exact spot, County only, or Nothing.",
     "No signal? Log anyway. The catch is saved on your phone and syncs when you're back in range."]],
+  ["Any fish, any method", [
+    "Pick the method for each catch: Fly, Spinning, Baitcasting, Ice fishing, Trolling or Other. The Fly box becomes Lure or bait for the others.",
+    "Species covers trout, bass, walleye, pike, musky, panfish, salmon, catfish and more. Type any other species too.",
+    "Catches outside Wisconsin are kept with their exact location in an Outside Wisconsin list on the Log tab. They'll file into the right state when Coulee adds it."]],
+  ["Logging a friend's fish", [
+    "In Log a catch, change Whose fish? to a friend. They get it in their Log tab and choose Add to my log or Not mine.",
+    "It only counts for them once they accept it, so nobody can add fish to someone else's log."]],
+  ["Titles", [
+    "Earn titles like Bass Master, Brookie Hunter and Twenty-Incher as you log fish. See them all, with progress, in the Stats tab.",
+    "Pick one to show next to your name in the Me tab."]],
+  ["Planning a trip", [
+    "Tap a creek or lake and choose Plan a trip to add it to an upcoming trip, or start a new one.",
+    "Each planned water has directions and links to the DNR regulations, trout stream maps or Lake Pages."]],
   ["Spots", [
     "Spots are water you want to fish. Mark each one Want to try, Scouted or Fished.",
     "Each spot shows when you last fished it and how many fish you've logged there. Pick the spot when you log a catch to connect them."]],
@@ -1652,6 +1692,7 @@ const HELP = [
   ["Tournaments", [
     "Anyone can start a tournament: pick dates, an area (anywhere, a region, or specific counties), species and scoring, then invite friends.",
     "Catches that fit the rules are entered automatically when you log them. You can also enter or remove catches on the tournament page.",
+    "Tournaments can be fly only. After a tournament ends, entries are locked: only its creator can change details or remove entries, and members are told about every change. Use Suggest a change to ask the creator.",
     "Photo tournaments only accept fish whose photo was taken during the tournament dates. The app reads the date stamp saved in the photo, so take photos with your phone's camera rather than screenshots."]],
   ["Friends and following", [
     "Friends: share your 6-character friend code. Once they accept, you see each other's shared catches, trips and leaderboards, and can invite each other to tournaments.",
@@ -1965,7 +2006,9 @@ $("log").addEventListener("click", async ev => {
 
 /* ---------- profile pictures ---------- */
 const AV_BASE = CFG.supabaseUrl + "/storage/v1/object/public/avatars/";
-let avatars = lsGet("fl.avatars", {});
+let avatars = lsGet("fl.avatars", {}), titles = lsGet("fl.titles", {});
+const titleOf = id => id === me?.id ? profile?.title : (titles[id] || people[id]?.title);
+const titlePill = id => titleOf(id) ? ` <span class="pill ttl">${esc(titleOf(id))}</span>` : "";
 function avHtml(id, name, cls = "", path){
   const p = path !== undefined ? path : id === me?.id ? profile?.avatar_path : (avatars[id] || people[id]?.avatar_path);
   const ini = esc(((name || "?").trim()[0] || "?").toUpperCase());
@@ -1974,10 +2017,10 @@ function avHtml(id, name, cls = "", path){
 async function loadAvatars(ids){
   ids = [...new Set(ids.filter(id => id && id !== me?.id))];
   if(!ids.length) return;
-  const { data, error } = await sb.from("profiles").select("id, avatar_path").in("id", ids.slice(0, 300));
+  const { data, error } = await sb.from("profiles").select("id, avatar_path, title").in("id", ids.slice(0, 300));
   if(error || !data) return;
-  for(const p of data) avatars[p.id] = p.avatar_path || "";
-  lsSet("fl.avatars", avatars);
+  for(const p of data){ avatars[p.id] = p.avatar_path || ""; titles[p.id] = p.title || ""; }
+  lsSet("fl.avatars", avatars); lsSet("fl.titles", titles);
   if(tab === "friends") renderLog();
 }
 async function avatarBlob(file){
@@ -2156,6 +2199,301 @@ function offlineBlock(cid){
     <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically. Your catches still log offline and sync later.</p>
     <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 50 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
+}
+
+
+/* ---------- methods ---------- */
+const METHODS = { fly:"Fly", spin:"Spinning", baitcast:"Baitcasting", ice:"Ice fishing", trolling:"Trolling", other:"Other" };
+function updateFlyLabel(){
+  const fly = $("fMethod").value === "fly";
+  $("fFlyLbl").textContent = fly ? "Fly" : "Lure or bait";
+  $("fFly").placeholder = fly ? "#16 Elk Hair Caddis" : $("fMethod").value === "ice" ? "Waxworm on a jig" : "Mepps spinner";
+}
+$("fMethod").addEventListener("change", updateFlyLabel);
+function fillForOptions(){
+  const fr = friendsList();
+  $("fFor").innerHTML = `<option value="">Mine</option>` + fr.map(f => `<option value="${esc(f.id)}">${esc(f.name)}'s fish</option>`).join("");
+  $("fForRow").hidden = !!editing || !fr.length;
+}
+
+/* ---------- titles and badges, worked out from your own catches ---------- */
+const sameSp = (c, list) => c.species && list.some(s => c.species.toLowerCase() === s.toLowerCase());
+const BASS = ["Smallmouth bass","Largemouth bass"], PANFISH = ["Bluegill","Pumpkinseed","Crappie","Black crappie","White crappie","Yellow perch","Rock bass","Sunfish","Green sunfish"];
+const TROUT_ALL = ["Brook trout","Brown trout","Rainbow trout","Tiger trout","Steelhead","Lake trout","Splake"];
+const nSp = (cs, list) => cs.filter(c => sameSp(c, list)).reduce((a, c) => a + fishOf(c), 0);
+const BADGES = [
+  { id:"first", name:"First Fish", desc:"Log your first fish.", goal:1, val:s => s.fish },
+  { id:"ten", name:"Double Digits", desc:"Log 10 fish.", goal:10, val:s => s.fish },
+  { id:"fifty", name:"Fifty Fish", desc:"Log 50 fish.", goal:50, val:s => s.fish },
+  { id:"century", name:"Century Club", desc:"Log 100 fish.", goal:100, val:s => s.fish },
+  { id:"brookie", name:"Brookie Hunter", desc:"Catch 10 brook trout.", goal:10, val:s => nSp(s.cs, ["Brook trout"]) },
+  { id:"brown", name:"Brown Hound", desc:"Catch 10 brown trout.", goal:10, val:s => nSp(s.cs, ["Brown trout"]) },
+  { id:"rainbow", name:"Rainbow Chaser", desc:"Catch 10 rainbow trout.", goal:10, val:s => nSp(s.cs, ["Rainbow trout","Steelhead"]) },
+  { id:"bass", name:"Bass Master", desc:"Catch 10 bass.", goal:10, val:s => nSp(s.cs, BASS) },
+  { id:"walleye", name:"Walleye Whisperer", desc:"Catch 10 walleye.", goal:10, val:s => nSp(s.cs, ["Walleye","Sauger"]) },
+  { id:"pike", name:"Pike Patrol", desc:"Catch 5 northern pike.", goal:5, val:s => nSp(s.cs, ["Northern pike"]) },
+  { id:"musky", name:"Fish of 10,000 Casts", desc:"Catch a musky.", goal:1, val:s => nSp(s.cs, ["Musky","Muskellunge"]) },
+  { id:"panfish", name:"Panfish Pro", desc:"Catch 25 panfish.", goal:25, val:s => nSp(s.cs, PANFISH) },
+  { id:"twenty", name:"Twenty-Incher", desc:"Land a trout 20 inches or longer.", goal:1, val:s => s.cs.some(c => sameSp(c, TROUT_ALL) && +c.length_in >= 20) ? 1 : 0 },
+  { id:"slam", name:"Driftless Grand Slam", desc:"Brook, brown and rainbow trout on the same day.", goal:1, val:s => s.slam ? 1 : 0 },
+  { id:"species5", name:"Species Explorer", desc:"Catch 5 different species.", goal:5, val:s => s.species },
+  { id:"counties10", name:"County Collector", desc:"Catch fish in 10 counties.", goal:10, val:s => s.counties },
+  { id:"counties72", name:"72 Club", desc:"Catch fish in all 72 counties.", goal:72, val:s => s.counties },
+  { id:"trips5", name:"Road Tripper", desc:"Take 5 trips.", goal:5, val:s => s.trips },
+  { id:"ice", name:"Hard Water", desc:"Catch a fish ice fishing.", goal:1, val:s => s.cs.some(c => c.method === "ice" && fishOf(c) > 0) ? 1 : 0 }
+];
+function badgeStats(cs = catches){
+  const withFish = cs.filter(c => fishOf(c) > 0);
+  const byDay = {}; withFish.forEach(c => (byDay[c.caught_on] ||= new Set()).add((c.species || "").toLowerCase()));
+  return { cs: withFish, fish: withFish.reduce((a, c) => a + fishOf(c), 0),
+    species: new Set(withFish.map(c => (c.species || "").toLowerCase()).filter(Boolean)).size,
+    counties: new Set(withFish.map(c => c.county).filter(Boolean)).size, trips: trips.length,
+    slam: Object.values(byDay).some(s => s.has("brook trout") && s.has("brown trout") && s.has("rainbow trout")) };
+}
+function badges(cs){ const s = badgeStats(cs); return BADGES.map(b => { const v = Math.min(b.goal, b.val(s)); return { ...b, v, earned: v >= b.goal }; }); }
+function titlesHtml(){
+  const list = badges(); const got = list.filter(b => b.earned);
+  const next = list.filter(b => !b.earned).sort((a, b) => b.v / b.goal - a.v / a.goal).slice(0, 6);
+  return `<h4><span>Titles</span><span>${got.length}/${list.length}</span></h4>
+    ${got.length ? `<div class="badges">${got.map(b => `<span class="badge on" title="${esc(b.desc)}"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span>`).join("")}</div>` : `<p class="muted" style="margin:0 0 8px">Log fish to earn titles like Bass Master and Brookie Hunter.</p>`}
+    ${next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}`;
+}
+function titlePickerHtml(){
+  const got = badges().filter(b => b.earned);
+  if(!got.length) return "";
+  return `<div class="field" style="margin-top:10px"><label for="meTitle">Title shown with your name</label>
+    <select id="meTitle"><option value="">None</option>${got.map(b => `<option ${profile?.title === b.name ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></div>`;
+}
+$("log").addEventListener("change", async e => {
+  if(e.target.id !== "meTitle") return;
+  const title = e.target.value || null;
+  const { error } = await sb.from("profiles").update({ title }).eq("id", me.id);
+  if(error){ toast("Couldn't save your title."); return; }
+  profile = { ...profile, title }; saveCache(); toast(title ? `Now showing "${title}"` : "Title removed");
+});
+
+/* ---------- celebrate a new catch ---------- */
+const calm = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function celebrate(rec, before){
+  const lines = [];
+  if(rec.species && rec.length_in != null){
+    const prev = before.filter(c => c.species && c.species.toLowerCase() === rec.species.toLowerCase() && c.length_in != null);
+    if(prev.length && +rec.length_in > Math.max(...prev.map(c => +c.length_in))) lines.push(`New personal best ${rec.species.toLowerCase()}!`);
+  }
+  const had = new Set(badges(before).filter(b => b.earned).map(b => b.id));
+  const fresh = badges().filter(b => b.earned && !had.has(b.id));
+  if(rec.lat != null && !calm()){
+    const m = L.marker([rec.lat, rec.lng], { interactive:false, keyboard:false, icon:L.divIcon({ className:"", html:`<div class="splash"><i></i><i></i><i></i></div>`, iconSize:[0,0] }) }).addTo(map);
+    setTimeout(() => map.removeLayer(m), 1900);
+  }
+  if(!lines.length && !fresh.length) return;
+  const el = $("cheer");
+  el.innerHTML = `${fresh.length ? `<small>Title earned</small><b>${esc(fresh.map(b => b.name).join(" · "))}</b>` : ""}${lines.map(l => `<span>${esc(l)}</span>`).join("")}`;
+  el.hidden = false; el.classList.remove("go"); void el.offsetWidth; el.classList.add("go");
+  clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, calm() ? 3000 : 3600);
+}
+
+/* ---------- log a fish for a friend ---------- */
+async function sendGift(rec, blob, friendId){
+  if(!navigator.onLine) throw Object.assign(new Error("offline"), { userMessage:"Logging a friend's fish needs a connection. Try again when you have signal." });
+  let photo_path = null;
+  if(blob){
+    photo_path = `${me.id}/gift-${uuid()}.jpg`;
+    const up = await sb.storage.from("photos").upload(photo_path, blob, { contentType:"image/jpeg" });
+    if(up.error) throw up.error;
+  }
+  const catch_ = { species:rec.species, length_in:rec.length_in, count:rec.count, fly:rec.fly, method:rec.method, caught_on:rec.caught_on,
+    lat:rec.lat, lng:rec.lng, county:rec.county, notes:rec.notes, photo_taken_on:rec.photo_taken_on };
+  const { error } = await sb.from("catch_gifts").insert({ from_user:me.id, to_user:friendId, catch:catch_, photo_path });
+  if(error){ if(photo_path) sb.storage.from("photos").remove([photo_path]); throw error; }
+}
+let gifts = [], notices = [];
+async function loadInbox(){
+  if(!me || !navigator.onLine) return;
+  const [g, n] = await Promise.all([
+    sb.from("catch_gifts").select("*").eq("to_user", me.id).eq("status", "pending").order("created_at", { ascending:false }),
+    sb.from("notices").select("*").order("created_at", { ascending:false }).limit(40)
+  ]);
+  if(!g.error) gifts = g.data || [];
+  if(!n.error) notices = n.data || [];
+  if(gifts.length){ const ids = gifts.map(x => x.from_user).filter(id => !people[id]); if(ids.length) loadAvatars(ids); }
+  renderLog();
+}
+const giftFrom = g => people[g.from_user]?.display_name || "A friend";
+function inboxHtml(){
+  const other = notices.filter(n => !n.kind.startsWith("tourney") && n.kind !== "gift");
+  if(!gifts.length && !other.length) return "";
+  return `${gifts.map(g => { const c = g.catch || {};
+      return `<div class="card gift"><div class="acct-h">${avHtml(g.from_user, giftFrom(g))}<span class="t"><b class="wrap">${esc(giftFrom(g))} logged a fish for you</b><small>${esc([c.species || "Fish", c.length_in ? lenTxt(c.length_in) : "", c.caught_on ? fmtDate(c.caught_on) : "", c.county ? countyName(c.county) : "", METHODS[c.method] || ""].filter(Boolean).join(" · "))}</small></span></div>
+        ${g.photo_path ? `<img class="gph" src="${photoSrc(g.photo_path) || ""}" data-giftphoto="${esc(g.photo_path)}" alt="Photo of the fish">` : ""}
+        <div class="row2"><button class="btn sm ink" type="button" data-giftyes="${esc(g.id)}">Add to my log</button><button class="btn sm" type="button" data-giftno="${esc(g.id)}">Not mine</button></div></div>`; }).join("")}
+    ${other.slice(0, 5).map(n => `<div class="card notice slim"><p><b>${esc(n.title)}</b></p>${n.body ? `<p class="muted">${esc(n.body)}</p>` : ""}<button class="link" type="button" data-noticex="${esc(n.id)}">Dismiss</button></div>`).join("")}`;
+}
+async function giftPhotoBlob(path){
+  const { data, error } = await sb.storage.from("photos").download(path);
+  if(error) throw error; return data;
+}
+$("log").addEventListener("click", async e => {
+  const yes = e.target.closest("[data-giftyes]"), no = e.target.closest("[data-giftno]"), x = e.target.closest("[data-noticex]");
+  if(x){ notices = notices.filter(n => n.id !== x.dataset.noticex); renderLog(); sb.from("notices").delete().eq("id", x.dataset.noticex); return; }
+  if(!yes && !no) return;
+  const g = gifts.find(z => z.id === (yes || no).dataset[yes ? "giftyes" : "giftno"]); if(!g) return;
+  (yes || no).disabled = true;
+  try{
+    if(no){ await sb.rpc("decline_gift", { gid:g.id }); toast("Removed."); }
+    else{
+      let path = null;
+      if(g.photo_path){ const blob = await giftPhotoBlob(g.photo_path); path = `${me.id}/${uuid()}-${Date.now()}.jpg`;
+        const up = await sb.storage.from("photos").upload(path, blob, { contentType:"image/jpeg" }); if(up.error) throw up.error; }
+      const before = catches.slice();
+      const { data:cid, error } = await sb.rpc("accept_gift", { gid:g.id, new_photo_path:path, vis:"county" });
+      if(error){ if(path) sb.storage.from("photos").remove([path]); throw error; }
+      const c = g.catch || {};
+      const rec = { id:cid, user_id:me.id, ...c, length_in:c.length_in != null ? +c.length_in : null, count:+c.count || 1, photo_path:path, visibility:"county", created_at:new Date().toISOString() };
+      catches = [...catches, rec]; saveCache();
+      sb.rpc("auto_enter", { cid }).then(({ data }) => { if(data && data.length){ toast(`Entered in ${data.join(", ")}`); loadTournaments(); } });
+      toast("Added to your log. It's set to County only; edit it to change that."); celebrate(rec, before);
+    }
+    gifts = gifts.filter(z => z.id !== g.id);
+    const n = notices.find(z => z.kind === "gift" && z.ref === g.id); if(n){ notices = notices.filter(z => z !== n); sb.from("notices").delete().eq("id", n.id); }
+    renderAll();
+  }catch(err){ console.error(err); toast(err.message && /handled|cancelled/.test(err.message) ? err.message : "Couldn't do that. Try again."); (yes || no).disabled = false; }
+});
+
+/* ---------- tournament updates, owner edits, suggestions ---------- */
+function tourneyNoticesHtml(){
+  const list = notices.filter(n => n.kind.startsWith("tourney")).slice(0, 8);
+  if(!list.length) return "";
+  return `<h4><span>Updates</span><span>${list.filter(n => !n.read).length || ""}</span></h4><div class="stack">${list.map(n => `<div class="card notice slim${n.read ? " read" : ""}">
+    <p><b>${esc(n.title)}</b> <small class="muted">${esc(fmtDate(n.created_at.slice(0, 10)))}</small></p>${n.body ? `<p>${esc(n.body)}</p>` : ""}
+    <div class="row2">${n.ref && tournaments.some(t => t.id === n.ref) ? `<button class="link" type="button" data-tourney="${esc(n.ref)}">Open tournament</button>` : ""}<button class="link" type="button" data-noticex="${esc(n.id)}">Dismiss</button></div></div>`).join("")}</div>`;
+}
+function markTourneyNoticesRead(){
+  const ids = notices.filter(n => n.kind.startsWith("tourney") && !n.read).map(n => n.id);
+  if(!ids.length) return;
+  setTimeout(() => { notices.forEach(n => { if(ids.includes(n.id)) n.read = true; }); sb.from("notices").update({ read:true }).in("id", ids); $("tDot").hidden = !tournaments.some(t => t.my_status === "invited"); }, 1500);
+}
+function tourneyToolsHtml(t){
+  const isOwner = t.owner === me?.id, joined = t.my_status === "joined", over = tState(t) === "finished";
+  let h = "";
+  if(isOwner) h += `<button class="btn sm" type="button" data-a="tedit">Edit details</button>`;
+  else if(joined) h += `<button class="btn sm" type="button" data-a="tsuggest">Suggest a change</button>`;
+  return (h ? `<div class="row2" style="margin-top:10px">${h}</div>` : "") + `<div data-tedit></div>`
+    + (over ? `<p class="note">${isOwner ? "This tournament is over. You can still fix the details or remove entries; members are told about every change." : "This tournament is over, so entries are locked. Only its creator can change it, and you'll be told if they do."}</p>` : "");
+}
+$("log").addEventListener("click", async e => {
+  const a = e.target.closest("[data-a]"); const t = tournaments.find(x => x.id === tourneyOpen);
+  const rm = e.target.closest("[data-townerrm]");
+  if(rm && t){ const slot = rm.closest("li").querySelector("[data-rmslot]") || rm.parentElement;
+    slot.innerHTML = `<span class="row2"><input data-rmwhy placeholder="Reason (they'll see it)" maxlength="200" style="min-width:140px"><button class="link danger" type="button" data-townerrmyes="${esc(rm.dataset.townerrm)}">Remove</button></span>`; return; }
+  const rmy = e.target.closest("[data-townerrmyes]");
+  if(rmy && t){ const why = rmy.parentElement.querySelector("[data-rmwhy]")?.value.trim() || null;
+    const { error } = await sb.rpc("owner_remove_entry", { tid:t.id, cid:rmy.dataset.townerrmyes, reason:why });
+    toast(error ? (error.message || "Couldn't remove it.") : "Entry removed. The angler was told."); openTourney(t.id); loadTournaments(); return; }
+  if(!a || !t) return;
+  const slot = $("log").querySelector("[data-tedit]");
+  if(a.dataset.a === "tedit" && slot){
+    slot.innerHTML = `<form class="card" id="teditForm" novalidate style="margin-top:8px">
+      <div class="field"><label for="teName">Name</label><input id="teName" maxlength="80" value="${esc(t.name)}"></div>
+      <div class="field"><label for="teDesc">Description</label><textarea id="teDesc" maxlength="1000">${esc(t.description || "")}</textarea></div>
+      <div class="grid2"><div class="field"><label for="teStart">Starts</label><input id="teStart" type="date" value="${esc(t.starts_on)}"></div><div class="field"><label for="teEnd">Ends</label><input id="teEnd" type="date" value="${esc(t.ends_on)}"></div></div>
+      <p class="muted" style="font-size:13px">Members get a notice describing what you changed.</p>
+      <span class="hint" id="teErr" role="alert"></span>
+      <div class="actions"><button class="btn" type="button" data-a="teditno">Cancel</button><button class="btn ink" type="submit">Save changes</button></div></form>`;
+    $("teditForm").addEventListener("submit", async ev => {
+      ev.preventDefault(); const err = $("teErr"); err.className = "hint bad";
+      const name = $("teName").value.trim(), s = $("teStart").value, en = $("teEnd").value;
+      if(name.length < 2){ err.textContent = "Give it a name."; return; }
+      if(!s || !en || en < s){ err.textContent = "Check the dates."; return; }
+      const { error } = await sb.from("tournaments").update({ name, description:$("teDesc").value.trim() || null, starts_on:s, ends_on:en }).eq("id", t.id);
+      if(error){ err.textContent = "Couldn't save. Try again."; return; }
+      toast("Saved. Members were told what changed."); await loadTournaments(); openTourney(t.id);
+    });
+  }
+  if(a.dataset.a === "teditno" && slot) slot.innerHTML = "";
+  if(a.dataset.a === "tsuggest" && slot){
+    slot.innerHTML = `<form class="card" id="tsugForm" novalidate style="margin-top:8px"><div class="field"><label for="tsBody">What should change?</label><textarea id="tsBody" maxlength="1000" placeholder="My 18-inch brown from Saturday is missing"></textarea></div>
+      <span class="hint" id="tsErr" role="alert"></span><div class="actions"><button class="btn" type="button" data-a="teditno">Cancel</button><button class="btn ink" type="submit">Send to ${esc(t.owner_name)}</button></div></form>`;
+    $("tsugForm").addEventListener("submit", async ev => {
+      ev.preventDefault(); const body = $("tsBody").value.trim();
+      const { error } = await sb.rpc("suggest_tournament_change", { tid:t.id, body });
+      if(error){ $("tsErr").className = "hint bad"; $("tsErr").textContent = error.message || "Couldn't send it."; return; }
+      slot.innerHTML = ""; toast(`Sent to ${t.owner_name}.`);
+    });
+  }
+});
+
+/* ---------- trip plans ---------- */
+const DNR = {
+  trout:["DNR trout regulations", "https://dnr.wisconsin.gov/topic/fishing/regulations/troutregs.html"],
+  streams:["DNR trout stream maps", "https://dnr.wisconsin.gov/topic/fishing/trout/streammaps.html"],
+  lakes:["DNR Lake Pages", "https://apps.dnr.wi.gov/lakes/lakepages/Search.aspx"],
+  regs:["DNR fishing regulations", "https://dnr.wisconsin.gov/topic/fishing/regulations/hookline.html"]
+};
+function dnrLinks(kind, trout){
+  const l = trout ? [DNR.trout, DNR.streams] : /lake|flowage|pond/i.test(kind || "") ? [DNR.lakes, DNR.regs] : [DNR.regs];
+  return l.map(([t, u]) => `<a class="link" href="${u}" target="_blank" rel="noopener">${t}</a>`).join("");
+}
+let pendingPlanWater = null;
+function planChooserHtml(w){
+  const today = todayStr();
+  const up = trips.filter(t => t.end_date >= today).sort((a, b) => a.start_date.localeCompare(b.start_date));
+  return `<div class="planpick"><p style="margin:0 0 6px"><b>Add ${esc(w.name)} to a trip</b></p>
+    ${up.map(t => `<button class="btn sm" type="button" data-planto="${esc(t.id)}">${esc(t.name)} · ${esc(fmtRange(t.start_date, t.end_date))}</button>`).join("")}
+    <button class="btn sm ink" type="button" data-planto="new">${icon("i-plus")}New trip</button></div>`;
+}
+function addWaterToTrip(t, w){
+  const list = Array.isArray(t.waters) ? t.waters.slice() : [];
+  if(list.some(x => x.name === w.name && x.county === w.county)){ toast(`${w.name} is already on that trip.`); return; }
+  list.push(w);
+  saveRecord("trips", { ...t, waters:list }, null, true);
+  toast(`Added ${w.name} to ${t.name}.`);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-planto]"); if(!b || !pendingPlanWater) return;
+  map.closePopup();
+  const w = pendingPlanWater;
+  if(b.dataset.planto === "new"){ openTripForm(null); $("tName").value = `${w.name} trip`; return; }
+  const t = trips.find(x => x.id === b.dataset.planto); if(t){ addWaterToTrip(t, w); pendingPlanWater = null; }
+});
+function tripPlanHtml(t){
+  const ws = Array.isArray(t.waters) ? t.waters : [];
+  if(!ws.length) return t.end_date >= todayStr() ? `<p class="note">Plan this trip: tap a creek or lake on the map and choose <b>Plan a trip</b>.</p>` : "";
+  return `<h4><span>Planned water</span><span>${ws.length}</span></h4><ul class="list">${ws.map((w, i) => `<li class="item planw" style="cursor:default;grid-template-columns:1fr auto">
+    <span class="t"><b class="wrap">${esc(w.name)}</b><small>${esc([w.kind, w.trout, w.county ? countyName(w.county) : ""].filter(Boolean).join(" · "))}</small>
+      <span class="row2 links">${w.lat != null ? `<a class="link" href="${gmaps(w.lat, w.lng)}" target="_blank" rel="noopener">Directions</a><button class="link" type="button" data-planshow="${i}">Show on map</button>` : ""}${dnrLinks(w.kind, w.trout)}</span></span>
+    <button class="link danger" type="button" data-planrm="${i}">Remove</button></li>`).join("")}</ul>
+    <p class="note">Tap any creek or lake and choose <b>Plan a trip</b> to add more. Check the DNR regulations for each water before you go.</p>`;
+}
+$("log").addEventListener("click", e => {
+  const t = trips.find(x => x.id === tripOpen); if(!t) return;
+  const rm = e.target.closest("[data-planrm]");
+  if(rm){ const list = (t.waters || []).filter((_, i) => i !== +rm.dataset.planrm); saveRecord("trips", { ...t, waters:list }, null, true); return; }
+  const sh = e.target.closest("[data-planshow]");
+  if(sh){ const w = (t.waters || [])[+sh.dataset.planshow]; if(!w) return;
+    if(w.county && currentCounty !== w.county){ currentCounty = w.county; $("backBtn").hidden = false; setMask(w.county); showDetail(w.county); countyLayer.setStyle(countyStyle); }
+    map.flyTo([w.lat, w.lng], 14, { duration:.6 }); }
+});
+
+/* ---------- catches outside Wisconsin ---------- */
+const NEIGHBOR_POLYS = (GEO.neighbors.features || []).map(f => {
+  const g = f.geometry, polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  const hit = NEIGHBOR_NAMES.find(([, la, ln]) => polys.some(p => inPoly(ln, la, p)));
+  return { name: hit ? hit[0][0] + hit[0].slice(1).toLowerCase() : null, polys };
+}).filter(x => x.name);
+function stateAt(lat, lng){
+  if(lat == null) return null;
+  if(countyAt(lat, lng)) return "Wisconsin";
+  const n = NEIGHBOR_POLYS.find(x => x.polys.some(p => inPoly(lng, lat, p)));
+  return n ? n.name : "Somewhere else";
+}
+function outsideHtml(){
+  const out = catches.filter(c => !c.county && c.lat != null);
+  if(!out.length) return "";
+  const by = {}; out.forEach(c => (by[stateAt(c.lat, c.lng)] ||= []).push(c));
+  return `<h4><span>Outside Wisconsin</span><span>${out.reduce((a, c) => a + fishOf(c), 0)} fish</span></h4>
+    ${Object.entries(by).sort((a, b) => b[1].length - a[1].length).map(([st, cs]) => `<p class="muted" style="margin:8px 0 4px;font-weight:700">${esc(st)}</p><ul class="list">${cs.sort(byDateDesc).map(itemCatch).join("")}</ul>`).join("")}
+    <p class="note">These are saved with their exact location. When Coulee adds more states, they'll file into the right state and county on their own.</p>`;
 }
 
 

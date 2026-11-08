@@ -137,13 +137,18 @@
       </div>
 
       <div id="catchFields2">
+        <div class="grid2" style="margin-bottom:12px">
+          <div class="field"><label for="fMethod">Method</label>
+            <select id="fMethod"><option value="fly">Fly</option><option value="spin">Spinning</option><option value="baitcast">Baitcasting</option><option value="ice">Ice fishing</option><option value="trolling">Trolling</option><option value="other">Other</option></select></div>
+          <div class="field" id="fForRow"><label for="fFor">Whose fish?</label><select id="fFor"><option value="">Mine</option></select></div>
+        </div>
         <div class="grid3">
           <div class="field"><label for="fSpecies">Species</label><input id="fSpecies" list="speciesList" placeholder="Brown trout"></div>
           <div class="field"><label for="fLen">Length (in)</label><input id="fLen" inputmode="decimal" placeholder="14"></div>
           <div class="field"><label for="fCount">Fish</label><input id="fCount" type="number" min="0" value="1"></div>
         </div>
         <div class="grid2" style="margin-top:12px">
-          <div class="field"><label for="fFly">Fly</label><input id="fFly" list="flyList" placeholder="#16 Elk Hair Caddis"></div>
+          <div class="field"><label for="fFly" id="fFlyLbl">Fly</label><input id="fFly" list="flyList" placeholder="#16 Elk Hair Caddis"></div>
           <div class="field"><label for="fDate">Date</label><input id="fDate" type="date"></div>
         </div>
         <div class="grid2" style="margin-top:12px">
@@ -225,10 +230,11 @@
       </div>
       <div class="grid2">
         <div class="field"><label for="tfSpecies">Species</label>
-          <select id="tfSpecies"><option value="any">Any species</option><option value="trout">Trout only</option><option>Brown trout</option><option>Brook trout</option><option>Rainbow trout</option><option>Smallmouth bass</option><option>Largemouth bass</option><option>Northern pike</option><option>Musky</option><option>Bluegill</option></select></div>
+          <select id="tfSpecies"><option value="any">Any species</option><option value="trout">Trout only</option><option>Brown trout</option><option>Brook trout</option><option>Rainbow trout</option><option value="bass">Bass (any)</option><option>Smallmouth bass</option><option>Largemouth bass</option><option>Northern pike</option><option>Musky</option><option>Walleye</option><option value="panfish">Panfish (any)</option><option>Bluegill</option><option>Yellow perch</option><option>Crappie</option></select></div>
         <div class="field"><label for="tfScoring">Scoring</label>
           <select id="tfScoring"><option value="biggest">Biggest fish</option><option value="top3">Top 3 total length</option><option value="most">Most fish</option><option value="species">Most species</option></select></div>
       </div>
+      <div class="field"><label for="tfMethod">Method</label><select id="tfMethod"><option value="any">Any method</option><option value="fly">Fly only</option><option value="nofly">Spin, bait and ice only</option></select></div>
       <label class="check"><input type="checkbox" id="tfPhoto" checked> Require a photo taken during the tournament</label>
       <label class="check" id="tfOpenRow" hidden><input type="checkbox" id="tfOpen"> Open to everyone (anyone can join)</label>
       <div class="field"><label>Invite friends</label><div id="tfInvite" class="stack" style="gap:4px"></div></div>
@@ -291,7 +297,9 @@
 <datalist id="speciesList">
   <option>Brook trout</option><option>Brown trout</option><option>Rainbow trout</option><option>Tiger trout</option>
   <option>Smallmouth bass</option><option>Largemouth bass</option><option>Northern pike</option><option>Musky</option>
-  <option>Bluegill</option><option>Pumpkinseed</option><option>Crappie</option><option>Rock bass</option><option>Walleye</option><option>Common carp</option>
+  <option>Bluegill</option><option>Pumpkinseed</option><option>Crappie</option><option>Rock bass</option><option>Yellow perch</option><option>White bass</option>
+  <option>Walleye</option><option>Sauger</option><option>Lake trout</option><option>Splake</option><option>Chinook salmon</option><option>Coho salmon</option><option>Steelhead</option>
+  <option>Channel catfish</option><option>Flathead catfish</option><option>Bullhead</option><option>Lake sturgeon</option><option>Bowfin</option><option>Freshwater drum</option><option>Common carp</option><option>White sucker</option>
 </datalist>
 <datalist id="flyList">
   <option>Elk Hair Caddis</option><option>Parachute Adams</option><option>Pheasant Tail Nymph</option><option>Hare's Ear Nymph</option>
@@ -299,6 +307,7 @@
 </datalist>
 
 <div class="toast" id="toast" hidden></div>
+<div class="cheer" id="cheer" hidden role="status"></div>
 
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>

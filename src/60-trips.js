@@ -21,7 +21,7 @@ function renderTripsTab(el){
     <div class="stack" style="margin-top:14px">${list.length ? list.map(t => {
       const s = summarize(tripCatches(t)); const now = t.start_date <= today && today <= t.end_date;
       return `<button class="trip${now?" now":""}" data-trip="${esc(t.id)}" type="button"><small>${now?"Happening now · ":""}${esc(fmtRange(t.start_date, t.end_date))}${t.base?` · ${esc(t.base)}`:""}</small><b>${esc(t.name)}</b>
-        <span class="tnums"><span><em>${s.fish}</em> fish</span><span>${daysBetween(t.start_date, t.end_date).length} days</span>${s.big?`<span>Biggest ${lenTxt(s.big.length_in)}</span>`:""}${!t.shared?"<span>Private</span>":""}${t._pending?"<span>Waiting to sync</span>":""}</span></button>`; }).join("")
+        <span class="tnums"><span><em>${s.fish}</em> fish</span><span>${daysBetween(t.start_date, t.end_date).length} days</span>${s.big?`<span>Biggest ${lenTxt(s.big.length_in)}</span>`:""}${(t.waters||[]).length?`<span>${t.waters.length} water${t.waters.length===1?"":"s"} planned</span>`:""}${!t.shared?"<span>Private</span>":""}${t._pending?"<span>Waiting to sync</span>":""}</span></button>`; }).join("")
       : `<div class="empty"><b>No trips yet</b>Make one for your next outing, even a single day. Every catch you log during those dates lands in it, and you get a recap with photos, the best fly, and day-by-day notes.</div>`}</div>
     ${loose && list.length ? `<p class="note">${loose} catch${loose===1?" isn't":"es aren't"} part of a trip. Edit a catch to add it to one.</p>` : ""}`;
 }
@@ -38,6 +38,7 @@ function renderTrip(el, t){
     ${s.fly ? `<p style="margin:0 0 6px"><b>Best fly:</b> ${esc(s.fly[0])} (${s.fly[1]} fish)</p>` : ""}
     ${counties_.size ? `<p class="muted" style="margin:0 0 8px">${[...counties_].map(countyName).join(", ")}</p>` : ""}
     ${t.notes ? `<p style="margin:6px 0 10px">${esc(t.notes)}</p>` : ""}
+    ${tripPlanHtml(t)}
     ${photos.length ? `<div class="strip">${photos.map(c => `<button type="button" data-go="c:${esc(c.id)}" aria-label="${esc(c.species||"Catch")} photo" style="background-image:url('${photoSrc(c.photo_path)}')"></button>`).join("")}</div>` : ""}
     <div class="row2" style="margin:8px 0 4px">
       <button class="btn sm fish" type="button" data-a="logtrip">${icon("i-fish")}Log a catch</button>
@@ -98,7 +99,9 @@ $("tripForm").addEventListener("submit", async ev => {
   if(!a || !b){ err.textContent = "Add the first and last day."; return; }
   if(b < a){ err.textContent = "The last day can't be before the first day."; $("tEnd").focus(); return; }
   if(daysBetween(a, b).length > 45){ err.textContent = "Trips can be up to 45 days long."; return; }
-  const rec = { id: tripEditing ? tripEditing.id : uuid(), name, start_date:a, end_date:b, base:$("tBase").value.trim() || null, notes:$("tNotes").value.trim() || null, shared:$("tShared").checked };
+  const rec = { id: tripEditing ? tripEditing.id : uuid(), name, start_date:a, end_date:b, base:$("tBase").value.trim() || null, notes:$("tNotes").value.trim() || null, shared:$("tShared").checked,
+    waters: tripEditing ? (tripEditing.waters || []) : (pendingPlanWater ? [pendingPlanWater] : []) };
+  if(!tripEditing) pendingPlanWater = null;
   const isNew = !tripEditing;
   try{
     await saveRecord("trips", rec, null, !isNew);

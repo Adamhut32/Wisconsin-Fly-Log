@@ -11,9 +11,9 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility"],
-  trips: ["id","name","start_date","end_date","base","notes","shared"]
+  trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
 const pick = (table, r) => { const o = {}; for(const k of COLS[table]) if(k in r) o[k] = r[k] === undefined ? null : r[k]; return o; };
 const listFor = t => t === "catches" ? catches : t === "spots" ? spots : trips;
@@ -99,7 +99,7 @@ async function flush(){
         const offline = !navigator.onLine || (e && /fetch|network|Load failed/i.test(String(e.message || e)));
         if(offline){ break; }
         console.error("sync", job, e);
-        if(status && String(status).startsWith("4")){ outbox.shift(); saveOutbox(); toast("One change couldn't be saved and was skipped."); continue; }
+        if(status && String(status).startsWith("4")){ outbox.shift(); saveOutbox(); toast(e && /tournament/i.test(e.message || "") ? e.message : "One change couldn't be saved and was skipped."); setTimeout(loadAll, 1500); continue; }
         syncFailing = true; break;
       }
     }
@@ -169,11 +169,12 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); renderAll();
     loadTournaments();
     if(applyGate()){ if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
     if(isStaff()) loadStaffList();
+    loadInbox();
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
