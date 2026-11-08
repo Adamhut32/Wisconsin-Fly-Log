@@ -9,6 +9,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const dataUrl = p => (CFG.dataBase || "data/") + p + "?v=" + CFG.dataVersion;
+// detailed creek lines (DNR 24K) for close zoom; a test version may point these at the monthly refresh
+const hdUrl = id => (CFG.hdBase || (CFG.dataBase || "data/") + "water/hd/") + id + ".json?h=" + (CFG.hdVersion || "1");
+const offlineV = () => CFG.dataVersion + "." + (CFG.hdVersion || "1");
 const DETAIL_ZOOM = 9;
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
 const todayStr = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; };
@@ -105,7 +108,7 @@ let countyLayer;
 function countyStyle(f){
   const s = countyStats(f.id);
   const max = Math.max(1, ...counties.map(c => countyStats(c.id).fish));
-  const heat = s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0);
+  const heat = (s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0)) * (map.getZoom() >= 9.5 ? 0.25 : 1);
   if(currentCounty === f.id) return { color: css("--ink"), weight: 2.4, fillColor: css("--land"), fillOpacity: 0 };
   return { color: css("--county-edge"), weight: 0.8, fillColor: s.fish ? css("--fish") : css("--spot"), fillOpacity: heat };
 }
@@ -144,6 +147,9 @@ let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], 
 /* the creek data has a point every ~60 m, so lines look jagged up close; round the corners (Chaikin) so they read like water */
 function smoothPath(pts, n = 2){
   if(pts.length < 3) return pts;
+  // detailed lines (a point every ~30 m or closer) already curve; only round off sparse ones
+  let d = 0; for(let i = 1; i < pts.length; i++) d += Math.hypot((pts[i][0] - pts[i-1][0]) * 111000, (pts[i][1] - pts[i-1][1]) * 80000);
+  if(d / (pts.length - 1) < 70) return pts;   // average gap in meters
   for(let k = 0; k < n; k++){
     const out = [pts[0]];
     for(let i = 0; i < pts.length - 1; i++){ const a = pts[i], b = pts[i+1];
@@ -152,7 +158,8 @@ function smoothPath(pts, n = 2){
   }
   return pts;
 }
-const llPaths = paths => paths.map(pa => smoothPath(pa.map(q => [q[1], q[0]])));
+// rounding only shows up close in; skip it when zoomed out so drawing stays quick
+const llPaths = paths => { const sm = map.getZoom() >= 12; return paths.map(pa => { const ll = pa.map(q => [q[1], q[0]]); return sm ? smoothPath(ll) : ll; }); };
 function streamWeight(o){ return o >= 6 ? 3 : o >= 5 ? 2.5 : o >= 4 ? 2 : o >= 3 ? 1.6 : o >= 2 ? 1.25 : 0.95; }
 const TROUT = { 1:{ label:"Class I", tok:"--t1" }, 2:{ label:"Class II", tok:"--t2" }, 3:{ label:"Class III", tok:"--t3" } };
 async function getJSON(cache, path, id){
@@ -162,16 +169,16 @@ async function getJSON(cache, path, id){
 }
 function waterType(name){ return /lake|pond|flowage|reservoir|springs/i.test(name) ? (/flowage/i.test(name) ? "Flowage" : /pond|springs/i.test(name) ? "Spring pond" : "Lake") : (/river/i.test(name) ? "River" : "Creek"); }
 function d2(a, b){ const k = Math.cos(a[1]*Math.PI/180); return ((a[0]-b[0])*k)**2 + (a[1]-b[1])**2; }
-function nearestReg(name, ll){
-  const t = troutCache[detailFor]; if(!t) return null;
+function nearestReg(name, ll, cid){
+  const t = troutCache[cid || detailFor]; if(!t) return null;
   const p = [ll.lng, ll.lat]; let best = null, bd = Infinity;
   for(const r of t.r){ const same = r[0] && name && r[0].toLowerCase().replace(/\s*\(.*\)/,"") === name.toLowerCase();
     for(const pa of r[7]) for(const q of pa){ const d = d2(p, q) * (same ? .25 : 1); if(d < bd){ bd = d; best = r; } } }
   return bd < 0.0004 ? best : null; // within ~1–2 km
 }
-function waterPopup(name, kind, ll, trout){
+function waterPopup(name, kind, ll, trout, cid){
   const div = document.createElement("div"); div.className = "pop";
-  const reg = trout ? nearestReg(name, ll) : null;
+  const reg = trout ? nearestReg(name, ll, cid) : null;
   const regHtml = reg ? `<div class="regs"><b>${esc(reg[1])}</b>${reg[3]?`<div><span>Season</span>${esc(reg[3])}</div>`:""}${reg[4]?`<div><span>Early season</span>${esc(reg[4])}</div>`:""}${reg[2]?`<div><span>Bag</span>${esc(reg[2])}</div>`:""}${reg[5]?`<div><span>Gear</span>${esc(reg[5])}</div>`:""}${reg[6]?`<div><span>Special</span>${esc(reg[6])}</div>`:""}${seasonHtml(reg)}<small>From DNR's trout regulation map. Check the current regulations before you fish.</small></div>` : "";
   div.innerHTML = `<h3>${esc(name)}</h3><div class="meta">${esc(kind)}${trout?` · <span class="tclass" style="background:var(${TROUT[trout.c].tok})">${TROUT[trout.c].label} trout</span>`:""}${trout && trout.mi?` · ${trout.mi} mi`:""}</div>${regHtml}
     <div class="coords">${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}</div>
@@ -189,12 +196,12 @@ function waterPopup(name, kind, ll, trout){
 let hoverName = null;
 function setHover(name){
   if(hoverName === name) return; hoverName = name;
-  for(const s of detailStreams){ const on = name && s.name === name; s.line.setStyle(on ? { color:css("--hl"), weight:s.w + 2.2 } : { color:css("--stream"), weight:s.w }); }
+  for(const s of [...detailStreams, ...areaStreams()]){ const on = name && s.name === name; s.line.setStyle(on ? { color:css("--hl"), weight:s.w + 2.2 } : { color:css("--stream"), weight:s.w }); }
   drawLabels();
 }
-function openWaterPopup(e, name, kind, trout){
+function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
-  L.popup({ maxWidth:300, autoPanPadding:[20,20] }).setLatLng(e.latlng).setContent(waterPopup(name, kind, e.latlng, trout)).openOn(map);
+  L.popup({ maxWidth:300, autoPanPadding:[20,20] }).setLatLng(e.latlng).setContent(waterPopup(name, kind, e.latlng, trout, cid)).openOn(map);
 }
 let detailPromise = null;
 function showDetail(id){
@@ -207,6 +214,16 @@ async function loadDetail(id){
   try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + id + ".json"), id), getJSON(troutCache, dataUrl("water/trout/" + id + ".json"), id).catch(()=>null) ]); }
   catch(e){ if(detailFor===id) toast("Couldn't load creeks for this county."); return; }
   if(detailFor !== id) return;
+  drawDetail(id, levelOf(id, w), t);
+  map.removeLayer(riverLayer);
+  $("legend").classList.add("trout-on");
+  drawLabels(); renderLog();
+  loadAccess(id);
+  updateArea();
+}
+function drawDetail(id, w, t){
+  if(detailLayer){ map.removeLayer(detailLayer); detailLayer = null; }
+  if(detailRenderer){ map.removeLayer(detailRenderer); detailRenderer = null; }
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
   const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:.6 });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
@@ -233,7 +250,9 @@ async function loadDetail(id){
     const ll = llPaths(paths);
     const wgt = streamWeight(order);
     g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
-    const line = L.polyline(ll, { renderer:R, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const unnamed = !name || name === "NA" || name === "Unnamed";
+    const line = L.polyline(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    if(unnamed){ g.addLayer(line); continue; }   // unnamed creeks: drawn, but no label or card
     const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
     line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null));
     line.on("mouseover", () => setHover(name)); line.on("mouseout", () => setHover(null));
@@ -244,11 +263,6 @@ async function loadDetail(id){
     for(const [name, c, mi, orw, paths] of t.t){ if(!name || have.has(name.toLowerCase())) continue;
       detailLabelsExtra.push({ name, order:2, ll: paths.map(pa=>pa.map(q=>[q[1],q[0]])) }); } }
   detailLayer = g.addTo(map);
-  map.removeLayer(riverLayer);
-  $("legend").classList.add("trout-on");
-  drawLabels(); renderLog();
-  loadNearby(id);
-  loadAccess(id);
 }
 /* creeks in the surrounding counties, drawn under the fade so they read as context */
 async function loadNearby(id){
@@ -276,11 +290,11 @@ function clearDetail(){
   if(!map.hasLayer(riverLayer)) map.addLayer(riverLayer);
   clearAccess();
   $("legend").classList.remove("trout-on");
-  drawLabels();
+  drawLabels(); setTimeout(updateArea, 0);
 }
 function waterNames(id){
   const w = waterCache[id]; if(!w) return null;
-  const tally = {}; for(const [n,o] of w.s) tally[n] = Math.max(tally[n]||0, o);
+  const tally = {}; for(const [n,o] of w.s) if(n && n !== "NA" && n !== "Unnamed") tally[n] = Math.max(tally[n]||0, o);
   const tr = {}; const t = troutCache[id]; if(t) for(const [n,c] of t.t) if(TROUT[c]) tr[n.toLowerCase()] = Math.min(tr[n.toLowerCase()]||9, c);
   return Object.entries(tally).map(([n,o]) => [n, o, tr[n.toLowerCase()] || 0]).sort((a,b)=>(a[2]||9)-(b[2]||9)||b[1]-a[1]||a[0].localeCompare(b[0]));
 }
@@ -303,20 +317,21 @@ function renderLabels(){
   const halo = css("--land"), ink = css("--label");
   ctx.lineJoin = "round"; ctx.textBaseline = "middle";
   let items;
-  if(detailFor){
+  const close = detailFor || areaOn.size;
+  if(close){
     const minOrder = z >= 11.5 ? 0 : z >= 10.5 ? 2 : z >= 9.5 ? 3 : 4;
     const byName = {};
-    for(const s of [...detailStreams, ...detailLabelsExtra]){ if(s.order < minOrder && s.name !== hoverName) continue; (byName[s.name] ||= { name:s.name, order:s.order, lines:[] }).lines.push(...s.ll); byName[s.name].order = Math.max(byName[s.name].order, s.order); }
+    for(const s of [...detailStreams, ...detailLabelsExtra, ...areaStreams(), ...areaExtra()]){ if(s.order < minOrder && s.name !== hoverName) continue; (byName[s.name] ||= { name:s.name, order:s.order, lines:[] }).lines.push(...s.ll); byName[s.name].order = Math.max(byName[s.name].order, s.order); }
     items = Object.values(byName).sort((a,b) => (b.name===hoverName) - (a.name===hoverName) || b.order - a.order);
   } else {
     items = z >= 7.5 ? GEO.rivers.filter(r=>r.n).map(r => ({ name:r.n.replace(/\s+/g," ").replace(/^E\. Fk\./,"East Fork"), order:6, lines:[r.c.map(p=>[p[1],p[0]])] })) : [];
   }
   const seen = new Set();
   for(const it of items){
-    if(seen.has(it.name) && !detailFor) continue;
+    if(seen.has(it.name) && !close) continue;
     const size = it.order >= 5 ? 14 : it.order >= 3 ? 12.5 : 11.5;
     ctx.font = `italic ${it.order >= 5 ? 600 : 500} ${size}px "Crimson Pro", Georgia, serif`;
-    const text = it.order >= 5 && detailFor ? it.name.toUpperCase().split("").join(" ") : it.name;
+    const text = it.order >= 5 && close ? it.name.toUpperCase().split("").join(" ") : it.name;
     const tw = ctx.measureText(text).width + 6;
     // longest on-screen stretch of this water
     let best = null, bestLen = 0;
@@ -418,6 +433,126 @@ function restyleBase(){
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", restyleBase);
 new MutationObserver(restyleBase).observe(document.documentElement, { attributes:true, attributeFilter:["data-theme"] });
 
+
+
+/* ---------- creeks for every county on screen once you zoom in, so water reads across county lines ---------- */
+pane("area", 429);               // above the fade outside an open county, below the open county itself
+const AREA_ZOOM = 9.5;
+const areaRenderer = L.canvas({ pane:"area", tolerance:6, padding:.6 });
+const areaGroups = {};           // county id -> { g, streams, extra }
+const areaOn = new Set();        // counties drawn right now
+let areaWant = new Set(), countyBounds = null;
+function areaStreams(){ const out = []; for(const id of areaOn) if(areaGroups[id]) out.push(...areaGroups[id].streams); return out; }
+function areaExtra(){ const out = []; for(const id of areaOn) if(areaGroups[id]) out.push(...areaGroups[id].extra); return out; }
+function buildArea(id, w, t){
+  const g = L.layerGroup(), streams = [], extra = [], R = areaRenderer;
+  for(const [name, typ, rings] of w.l){
+    const named = name && name !== "Unnamed";
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, interactive:!!named, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1 });
+    if(named) p.on("click", e => openWaterPopup(e, name, waterType(name), null, id));
+    g.addLayer(p);
+  }
+  if(t) for(const [name, c, rings] of t.p){
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1 });
+    p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null }, id)); g.addLayer(p);
+  }
+  if(t) for(const [name, c, mi, orw, paths] of t.t){
+    if(!TROUT[c]) continue;
+    const band = L.polyline(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }, id));
+    band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
+    g.addLayer(band);
+  }
+  for(const [name, order, raw] of w.s){
+    const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
+    if(!paths.length) continue;
+    const ll = llPaths(paths), wgt = streamWeight(order);
+    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
+    const unnamed = !name || name === "NA" || name === "Unnamed";
+    const line = L.polyline(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    if(unnamed){ g.addLayer(line); continue; }
+    const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
+    line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null, id));
+    line.on("mouseover", () => setHover(name)); line.on("mouseout", () => setHover(null));
+    g.addLayer(line); streams.push({ name, order, w:wgt, line, ll });
+  }
+  if(t){ const have = new Set(streams.map(x => x.name.toLowerCase()));
+    for(const [name, c, mi, orw, paths] of t.t) if(name && !have.has(name.toLowerCase())) extra.push({ name, order:2, ll:llPaths(paths) }); }
+  return { g, streams, extra };
+}
+let areaBusy = false, areaAgain = false;
+async function updateArea(){
+  if(areaBusy){ areaAgain = true; return; }
+  areaBusy = true;
+  try{
+    const want = new Set();
+    if(map.getZoom() >= AREA_ZOOM){
+      countyBounds ||= Object.fromEntries(countyLayer.getLayers().map(l => [l.feature.id, l.getBounds()]));
+      const vb = map.getBounds().pad(.15);
+      for(const [id, b] of Object.entries(countyBounds)) if(id !== detailFor && vb.intersects(b)) want.add(id);
+    }
+    areaWant = want;
+    for(const id of [...areaOn]) if(!want.has(id)){ map.removeLayer(areaGroups[id].g); areaOn.delete(id); }
+    await Promise.all([...want].map(async id => {
+      if(areaOn.has(id)) return;
+      if(!areaGroups[id]){
+        let w, t;
+        try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + id + ".json"), id), getJSON(troutCache, dataUrl("water/trout/" + id + ".json"), id).catch(() => null) ]); }catch(e){ return; }
+        areaGroups[id] ||= buildArea(id, levelOf(id, w), t);
+      }
+      if(!areaWant.has(id) || id === detailFor || areaOn.has(id)) return;
+      areaGroups[id].g.addTo(map); areaOn.add(id);
+    }));
+    // keep a handful of built counties for quick panning back, drop the rest
+    const built = Object.keys(areaGroups).filter(id => !areaOn.has(id));
+    for(const id of built.slice(0, Math.max(0, built.length - 10))) delete areaGroups[id];
+    const any = areaOn.size > 0 || !!detailFor;
+    if(any && map.hasLayer(riverLayer)) map.removeLayer(riverLayer);
+    if(!any && !map.hasLayer(riverLayer)) map.addLayer(riverLayer);
+    $("legend").classList.toggle("trout-on", any);
+    drawLabels();
+    document.dispatchEvent(new Event("areachange"));
+  }finally{
+    areaBusy = false;
+    if(areaAgain){ areaAgain = false; updateArea(); }
+  }
+}
+map.on("moveend zoomend", updateArea);
+
+/* ---------- detailed creek lines (DNR 24K, ~3 m) once you're zoomed in close; light lines otherwise ---------- */
+const HD_ZOOM = 12;
+const hdCache = {}, hdLevel = {};   // county -> detailed streams; county -> "hd" | "base" currently drawn
+function levelOf(id, w){ const hd = map.getZoom() >= HD_ZOOM && hdCache[id]; hdLevel[id] = hd ? "hd" : "base"; return hd ? { s:hdCache[id].s, l:w.l } : w; }
+let hdBusy = false, hdAgain = false;
+async function updateHd(){
+  if(hdBusy){ hdAgain = true; return; } hdBusy = true;
+  try{
+    const z = map.getZoom(), shown = [detailFor, ...areaOn].filter(Boolean);
+    if(z >= HD_ZOOM) await Promise.all(shown.filter(id => !hdCache[id]).map(id =>
+      fetch(hdUrl(id)).then(r => r.ok ? r.json() : null).then(d => { if(d) hdCache[id] = d; }).catch(() => {})));
+    let changed = false;
+    for(const id of [detailFor, ...areaOn].filter(Boolean)){
+      const want = map.getZoom() >= HD_ZOOM && hdCache[id] ? "hd" : "base";
+      if(hdLevel[id] === want || !waterCache[id]) continue;
+      if(id === detailFor){ drawDetail(id, levelOf(id, waterCache[id]), troutCache[id]); changed = true; }
+      else if(areaOn.has(id)){ map.removeLayer(areaGroups[id].g); areaGroups[id] = buildArea(id, levelOf(id, waterCache[id]), troutCache[id]); areaGroups[id].g.addTo(map); changed = true; }
+    }
+    if(changed){ drawLabels(); document.dispatchEvent(new Event("areachange")); }
+  }finally{ hdBusy = false; if(hdAgain){ hdAgain = false; setTimeout(updateHd, 0); } }
+}
+map.on("zoomend moveend", () => setTimeout(updateHd, 50));
+document.addEventListener("areachange", () => setTimeout(updateHd, 0));
+/* zoomed in, the county "fish caught here" shading would sit over the creeks: fade it out */
+let areaShade = null;
+map.on("zoomend", () => { const on = map.getZoom() >= AREA_ZOOM; if(on !== areaShade){ areaShade = on; countyLayer.setStyle(countyStyle); } });
+/* the creek canvas sits over the counties, so a tap on open land opens that county */
+map.on("click", e => {
+  if(picking) return;
+  const t = e.originalEvent && e.originalEvent.target;
+  if(!t || t.tagName !== "CANVAS" || !t.closest(".leaflet-area-pane, .leaflet-detail-pane")) return;
+  const id = countyAt(e.latlng.lat, e.latlng.lng);
+  if(id && id !== currentCounty) openCounty(id);
+});
 
 
 /* ---------- markers and popups ---------- */
@@ -2472,13 +2607,15 @@ async function latestReleaseId(){ const { data } = await sb.from("releases").sel
 
 /* ---------- save counties for offline use ---------- */
 const OFFLINE_CACHE = "flylog-data";
-const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json")];
+const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json"), hdUrl(id)];
 let offlineSaved = null, offlineBusy = false;
 async function countSavedCounties(){
   if(!("caches" in window)) return null;
   try{ const c = await caches.open(OFFLINE_CACHE); const keys = new Set((await c.keys()).map(r => new URL(r.url).pathname + new URL(r.url).search));
     const base = new URL(dataUrl("water/x.json"), location.href).pathname.replace(/x\.json$/, "");
-    offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion)));
+    const hdKey = id => { const u = new URL(hdUrl(id), location.href); return u.pathname + u.search; };
+    // saved = the county's map file and its detailed creek lines are both on the phone
+    offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion) && keys.has(hdKey(id))));
   }catch(e){ offlineSaved = null; }
   return offlineSaved;
 }
@@ -2492,8 +2629,8 @@ async function saveCountiesOffline(ids, onProgress){
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();
-  const rec = lsGet("fl.offlineIds", { v:CFG.dataVersion, ids:[] });
-  lsSet("fl.offlineIds", { v:CFG.dataVersion, ids:[...new Set([...(rec.v === CFG.dataVersion ? rec.ids : []), ...ids])] });
+  const rec = lsGet("fl.offlineIds", { v:offlineV(), ids:[] });
+  lsSet("fl.offlineIds", { v:offlineV(), ids:[...new Set([...(rec.v === offlineV() ? rec.ids : []), ...ids])] });
   return failed;
 }
 async function offlineAction(which){
@@ -2516,11 +2653,11 @@ function offlineBlock(cid){
   if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations and public land work without signal.</p>`
     : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
   const n = offlineSaved.size, old = lsGet("fl.offlineIds", null);
-  const stale = old && old.v !== CFG.dataVersion && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
+  const stale = old && old.v !== offlineV() && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
   return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
     ${stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>The map data was updated.</b> ${stale} of your saved counties need a refresh to keep working offline.</p><div class="row2"><button class="btn sm ink" type="button" data-offline="refresh">Refresh saved counties</button></div></div>` : ""}
-    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically. Your catches still log offline and sync later.</p>
-    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 50 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
+    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
+    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 90 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
 }
 
@@ -2879,7 +3016,7 @@ $("camTest").addEventListener("change", async () => {
 
 /* ---------- test versions: the founder and admins get new builds first; the founder releases them ---------- */
 const CHANNEL = CFG.channel || "stable", BUILD = CFG.build || 0;
-let liveBuild = CHANNEL === "stable" ? BUILD : null, betaBuild = CHANNEL === "beta" ? BUILD : null, gateBuild = null;
+let liveBuild = CHANNEL === "stable" ? BUILD : null, betaBuild = CHANNEL === "beta" ? BUILD : null, gateBuild = null, betaNote = "";
 async function readBuild(base){ try{ const r = await fetch(base + "build.json?t=" + Date.now(), { cache:"no-store" }); return r.ok ? (await r.json()).build : null; }catch(e){ return null; } }
 const wantsBeta = () => isStaff() && lsGet("fl.useBeta", true);
 async function routeChannel(){
@@ -2891,6 +3028,7 @@ async function routeChannel(){
   if(CHANNEL === "beta" && !wantsBeta()){ location.replace("../" + location.hash); return; }
   if(CHANNEL === "beta"){
     liveBuild = await readBuild("../");
+    try{ betaNote = (await (await fetch("build.json?t=" + Date.now(), { cache:"no-store" })).json()).note || ""; }catch(e){}
     const { data } = await sb.from("release_gate").select("approved_build").eq("id", 1).maybeSingle(); gateBuild = data?.approved_build ?? null;
     $("testPill").hidden = false; $("testPill").textContent = `Test · build ${BUILD}`;
     if(tab === "me") renderLog();
@@ -2902,6 +3040,7 @@ function channelHtml(){
   const ahead = liveBuild != null && BUILD > liveBuild, approved = gateBuild != null && gateBuild >= BUILD;
   return `<h4><span>Test version</span><span>build ${BUILD}</span></h4><div class="card notice">
     <p style="margin:0 0 6px"><b>${ahead ? `You're trying build ${BUILD}. Everyone else has build ${liveBuild}.` : "This test version matches what everyone has."}</b></p>
+    ${ahead && betaNote ? `<p style="margin:0 0 6px">${esc(betaNote)}${/creek/i.test(betaNote) ? ". Zoom in close on a few creeks to check them." : ""}</p>` : ""}
     ${ahead ? (approved ? `<p class="muted" style="margin:0">Approved. It reaches everyone within about 15 minutes, and their app updates the next time they open it.</p>`
       : isFounder() ? `<p class="muted" style="margin:0 0 8px">Try it out. When you're happy, release it. Until then only you and admins have it.</p><div class="row2"><button class="btn sm ink" type="button" data-approve="${BUILD}">Release build ${BUILD} to everyone</button></div>`
       : `<p class="muted" style="margin:0">Only the founder can release it to everyone.</p>`) : ""}
@@ -3167,14 +3306,14 @@ pane("flow", 433, false);
 const flowRenderer = L.svg({ pane:"flow", padding:.5 });
 let flowLayer = null, flowKey = "";
 function updateFlow(){
-  const z = map.getZoom(), t = detailFor && troutCache[detailFor];
-  const want = !calm() && z >= 13 && t && mapView !== "sat";
-  const key = want ? `${detailFor}:${Math.round(z)}:${map.getBounds().pad(.3).toBBoxString()}` : "";
+  const z = map.getZoom(), ids = [detailFor, ...areaOn].filter(id => id && troutCache[id]);
+  const want = !calm() && z >= 13 && ids.length && mapView !== "sat";
+  const key = want ? `${ids.join(",")}:${Math.round(z)}:${map.getBounds().pad(.3).toBBoxString()}` : "";
   if(key === flowKey) return; flowKey = key;
   if(flowLayer){ map.removeLayer(flowLayer); flowLayer = null; }
   if(!want) return;
   const b = map.getBounds().pad(.3), g = L.layerGroup();
-  for(const [, c, , , paths] of t.t){
+  for(const [, c, , , paths] of ids.flatMap(id => troutCache[id].t)){
     if(!TROUT[c]) continue;
     for(const pa of paths){
       const ll = smoothPath(pa.map(q => [q[1], q[0]]));
@@ -3186,6 +3325,7 @@ function updateFlow(){
 }
 map.on("moveend zoomend", updateFlow);
 document.addEventListener("mapview", updateFlow);
+document.addEventListener("areachange", updateFlow);
 
 
 /* ---------- weight ---------- */
