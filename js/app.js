@@ -9,6 +9,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const icon = (id) => `<svg><use href="#${id}"/></svg>`;
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const dataUrl = p => (CFG.dataBase || "data/") + p + "?v=" + CFG.dataVersion;
+// "copper John" -> "Copper John" (flies); "brown Trout" -> "Brown trout" (species, like the app's list). Same rule as the database.
+const capWords = s => { s = (s || "").trim().replace(/\s+/g, " "); return s ? s.split(" ").map(w => w[0].toUpperCase() + w.slice(1)).join(" ") : null; };
+const sentenceCase = s => { s = (s || "").trim().replace(/\s+/g, " "); return s ? s[0].toUpperCase() + s.slice(1).toLowerCase() : null; };
 // detailed creek lines (DNR 24K) for close zoom; a test version may point these at the monthly refresh
 const hdUrl = id => (CFG.hdBase || (CFG.dataBase || "data/") + "water/hd/") + id + ".json?h=" + (CFG.hdVersion || "1");
 const offlineV = () => CFG.dataVersion + "." + (CFG.hdVersion || "1");
@@ -29,7 +32,8 @@ let showFriends = lsGet("fl.showFriends", true);
 let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
-let mapPerson = null; // when set, the map shows that friend's shared catches and spots instead of yours
+let mapPerson = null;
+let hidePins = false; // "My pins off": hide every spot, catch and fish count, e.g. to show someone the map // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me
 let tripOpen = null;           // trip id shown in Trips tab
@@ -62,6 +66,7 @@ const lenTxt = v => v == null || v === "" ? "" : `${+v}″`;
 /* ---------- derived numbers ---------- */
 function countyStats(id){
   let s=0,f=0;
+  if(hidePins) return { spots:0, fish:0 };
   if(mapPerson){ // looking at a friend's map: count what they share
     for(const x of friendSpots) if(x.user_id===mapPerson && x.county===id) s++;
     for(const c of friendCatches) if(c.user_id===mapPerson && c.county===id) f+=fishOf(c);
@@ -94,7 +99,7 @@ const neighborLayer = L.geoJSON(GEO.neighbors, { pane:"base", interactive:false,
 const NEIGHBOR_NAMES = [["MINNESOTA",45.2,-93.15],["IOWA",42.75,-91.75],["ILLINOIS",42.2,-89.2],["MICHIGAN",46.3,-87.6]];
 const neighborNames = L.layerGroup(NEIGHBOR_NAMES.map(([n,la,ln]) => L.marker([la,ln], { interactive:false, keyboard:false, pane:"base", icon:L.divIcon({ className:"", html:`<div class="sname">${n}</div>`, iconSize:[0,0] }) }))).addTo(map);
 const stateFill = L.geoJSON(GEO.state, { pane:"base", interactive:false, className:"state-shadow", style:()=>({ stroke:false, fillColor:css("--land"), fillOpacity:1 }) }).addTo(map);
-const lakeLayer = L.geoJSON(GEO.lakes, { pane:"water", interactive:false, style:()=>({ color:css("--water"), weight:.6, fillColor:css("--lake"), fillOpacity:1 }) }).addTo(map);
+const lakeLayer = L.geoJSON(GEO.lakes, { pane:"water", interactive:false, style:()=>({ color:css("--water"), weight:.6, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" }) }).addTo(map);
 const rippleLayer = L.layerGroup(GEO.ripples.map(r => L.polyline(r.map(p=>[p[1],p[0]]), { pane:"water", interactive:false, color:css("--water"), weight:.7, opacity:.45 }))).addTo(map);
 const stateLine = L.geoJSON(GEO.state, { pane:"stateline", interactive:false, style:()=>({ color:css("--ink"), weight:2.2, fill:false }) }).addTo(map);
 
@@ -227,13 +232,13 @@ function drawDetail(id, w, t){
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
   const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:.6 });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
-    const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1 });
+    const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     if(name && name !== "Unnamed"){ p.on("click", e => openWaterPopup(e, name, waterType(name))); detailLakes.push({ name, poly:p }); }
     else p.options.interactive = false;
     g.addLayer(p);
   }
   if(t) for(const [name, c, rings] of t.p){
-    const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1 });
+    const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null })); detailLakes.push({ name, poly:p }); g.addLayer(p);
   }
   /* trout class bands sit under the creek line, like a highlighter on a paper map */
@@ -245,6 +250,7 @@ function drawDetail(id, w, t){
     g.addLayer(band);
   }
   for(const [name, order, raw] of w.s){
+    if((!name || name === "NA" || name === "Unnamed") && order >= 4) continue;   // DNR flow paths through lakes, not creeks
     const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
     if(!paths.length) continue;
     const ll = llPaths(paths);
@@ -275,9 +281,9 @@ async function loadNearby(id){
     let w, t;
     try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + k + ".json"), k), getJSON(troutCache, dataUrl("water/trout/" + k + ".json"), k).catch(()=>null) ]); }catch(e){ return; }
     if(detailFor !== id || nearbyLayer !== layer) return;
-    for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1 }));
+    for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" }));
     if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), weight:5, opacity:.3, lineJoin:"round" }));
-    for(const [name, order, paths] of w.s) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order), lineJoin:"round" }));
+    for(const [name, order, paths] of w.s) if(!((!name || name === "NA" || name === "Unnamed") && order >= 4)) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order), lineJoin:"round" }));
   }));
 }
 function clearDetail(){
@@ -448,12 +454,12 @@ function buildArea(id, w, t){
   const g = L.layerGroup(), streams = [], extra = [], R = areaRenderer;
   for(const [name, typ, rings] of w.l){
     const named = name && name !== "Unnamed";
-    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, interactive:!!named, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1 });
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, interactive:!!named, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     if(named) p.on("click", e => openWaterPopup(e, name, waterType(name), null, id));
     g.addLayer(p);
   }
   if(t) for(const [name, c, rings] of t.p){
-    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1 });
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null }, id)); g.addLayer(p);
   }
   if(t) for(const [name, c, mi, orw, paths] of t.t){
@@ -464,6 +470,7 @@ function buildArea(id, w, t){
     g.addLayer(band);
   }
   for(const [name, order, raw] of w.s){
+    if((!name || name === "NA" || name === "Unnamed") && order >= 4) continue;   // DNR flow paths through lakes, not creeks
     const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
     if(!paths.length) continue;
     const ll = llPaths(paths), wgt = streamWeight(order);
@@ -570,6 +577,7 @@ function renderBadges(){
 const markerIndex = {};
 function renderMarkers(){
   markerLayer.clearLayers(); friendLayer.clearLayers();
+  if(hidePins){ $("legend").classList.remove("friends-on"); return; }
   for(const s of (mapPerson ? [] : spots)){
     const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot ${esc(s.status)}"></div>`, iconSize:[0,0] }), riseOnHover:true, title:s.name||"Spot" });
     m.bindPopup(() => spotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });
@@ -1007,8 +1015,8 @@ $("entryForm").addEventListener("submit", async ev => {
     if(formKind==="catch"){
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
-      rec = { ...base, species:$("fSpecies").value.trim() || null, length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
-        fly:$("fFly").value.trim() || null, method:$("fMethod").value, weight_lb:(w => w == null || Number.isNaN(w) ? null : w)(parseWeight($("fWt").value)), water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
+      rec = { ...base, species:sentenceCase($("fSpecies").value), length_in: len ? +len : null, count: Math.max(0, parseInt($("fCount").value,10) || 0),
+        fly:capWords($("fFly").value), method:$("fMethod").value, weight_lb:(w => w == null || Number.isNaN(w) ? null : w)(parseWeight($("fWt").value)), water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
         photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
@@ -1219,7 +1227,7 @@ async function loadAll(){
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
-    loadInbox(); touchActive(); setTimeout(backfillHashes, 4000); setTimeout(backfillWaters, 6000);
+    loadInbox(); touchActive(); setTimeout(nudgeOfflineRefresh, 4000); setTimeout(backfillHashes, 4000); setTimeout(backfillWaters, 6000);
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
@@ -1849,8 +1857,10 @@ function renderStatsTab(el){
   const species = {}; const flies = {}; const months = Array(12).fill(0); const flyMonth = {};
   for(const c of withFish){
     const n = fishOf(c), m = +(c.caught_on||"0000-01").slice(5,7) - 1; months[m] += n;
-    if(c.species){ const s = species[c.species] ||= { n:0, big:null }; s.n += n; if(c.length_in != null && (!s.big || +c.length_in > +s.big.length_in)) s.big = c; }
-    if(c.fly){ const f = flies[c.fly] ||= { n:0, months:Array(12).fill(0) }; f.n += n; f.months[m] += n; (flyMonth[m] ||= {})[c.fly] = ((flyMonth[m] ||= {})[c.fly] || 0) + n; }
+    const spn = sentenceCase(c.species);
+    if(spn){ const s = species[spn] ||= { n:0, big:null }; s.n += n; if(c.length_in != null && (!s.big || +c.length_in > +s.big.length_in)) s.big = c; }
+    const fly = capWords(c.fly);   // "Copper john" and "Copper John" are one fly
+    if(fly){ const f = flies[fly] ||= { n:0, months:Array(12).fill(0) }; f.n += n; f.months[m] += n; (flyMonth[m] ||= {})[fly] = ((flyMonth[m] ||= {})[fly] || 0) + n; }
   }
   const max = Math.max(1, ...months);
   const W = 320, H = 130, bw = W/12;
@@ -2207,6 +2217,7 @@ $("log").addEventListener("click", async ev => {
   const sd = t.closest("[data-sugdel]"); if(sd){ await sb.from("suggestions").delete().eq("id", sd.dataset.sugdel); loadCreator(); return; }
   const a = t.closest("[data-a]"); if(!a) return;
   if(a.dataset.a === "guide") openGuide(true);
+  if(a.dataset.a === "alltitles"){ titlesAll = !titlesAll; renderLog(); }
   if(a.dataset.a === "savepublic"){
     const is_public = $("mePublic").checked, findable = $("meFindable").checked, bio = $("meBio").value.trim() || null, msg = $("pubMsg");
     const { error } = await sb.from("profiles").update({ is_public, findable, bio }).eq("id", me.id);
@@ -2661,6 +2672,17 @@ function offlineBlock(cid){
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
 }
 
+/* after a map data update, say so once instead of only showing it in Me -> Offline maps */
+let offlineNudged = false;
+async function nudgeOfflineRefresh(){
+  if(offlineNudged || !navigator.onLine) return; offlineNudged = true;
+  const old = lsGet("fl.offlineIds", null);
+  if(!old || old.v === offlineV() || !old.ids?.length) return;
+  await countSavedCounties();
+  const stale = old.ids.filter(id => !offlineSaved?.has(id)).length;
+  if(stale) toast(`Map update: ${stale} saved count${stale === 1 ? "y needs" : "ies need"} a refresh for offline use. Me → Offline maps → Refresh saved counties.`);
+}
+
 
 /* ---------- methods ---------- */
 const METHODS = { fly:"Fly", spin:"Spinning", baitcast:"Baitcasting", ice:"Ice fishing", trolling:"Trolling", other:"Other" };
@@ -2711,6 +2733,7 @@ function badgeStats(cs = catches){
     slam: Object.values(byDay).some(s => s.has("brook trout") && s.has("brown trout") && s.has("rainbow trout")) };
 }
 function badges(cs){ const s = badgeStats(cs); return BADGES.map(b => { const v = Math.min(b.goal, b.val(s)); return { ...b, v, earned: v >= b.goal }; }); }
+let titlesAll = false;
 function titlesHtml(){
   const list = badges(); const got = list.filter(b => b.earned);
   const focus = new Set((fprefs().targets || []).flatMap(t => TARGET_BADGES[t] || []));
@@ -2719,7 +2742,10 @@ function titlesHtml(){
   return `<h4><span>Titles</span><span>${got.length}/${list.length}</span></h4>
     ${got.length ? `<div class="badges">${got.map(b => `<span class="badge on" title="${esc(b.desc)}"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span>`).join("")}</div>` : `<p class="muted" style="margin:0 0 8px">Log fish to earn titles like Bass Master and Brookie Hunter.</p>`}
     ${hist ? `<p class="note">${hist} catch${hist === 1 ? "" : "es"} from before you joined Coulee ${hist === 1 ? "is" : "are"} in your log and stats, but titles and friend leaderboards only count fish caught since you joined.</p>` : ""}
-    ${next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}`;
+    ${titlesAll
+      ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Every title (${list.length - got.length} still to earn)</p><div class="badges">${list.filter(b => !b.earned).map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>`
+      : next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}
+    <button class="link" type="button" data-a="alltitles" style="margin-top:6px">${titlesAll ? "Show just what's up next" : `See all ${list.length} titles`}</button>`;
 }
 function titlePickerHtml(){
   const got = badges().filter(b => b.earned);
@@ -3091,6 +3117,12 @@ function personBar(){
   b.hidden = false; $("personDone").onclick = closePersonMap;
 }
 document.addEventListener("click", e => { const p = e.target.closest("[data-pmap]"); if(p){ e.preventDefault(); openPersonMap(p.dataset.pmap); } });
+
+/* ---------- "My pins off": hide spots, catches and county fish counts (showing a friend, planning on your phone) ---------- */
+hidePins = lsGet("fl.hidePins", false);
+function syncPins(){ const b = $("pinsToggle"); b.setAttribute("aria-pressed", String(!hidePins)); b.textContent = hidePins ? "My pins off" : "My pins on"; document.getElementById("map").classList.toggle("nopins", hidePins); }
+$("pinsToggle").onclick = () => { hidePins = !hidePins; lsSet("fl.hidePins", hidePins); syncPins(); renderAll(); countyLayer.setStyle(countyStyle); toast(hidePins ? "Your spots and catches are hidden on the map." : "Your spots and catches are back."); };
+syncPins();
 
 
 /* ---------- where am I: show your position and mark a spot or catch right there ---------- */
