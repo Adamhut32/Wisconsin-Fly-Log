@@ -74,7 +74,7 @@ async function startSession(user){
   me = { id:user.id, email:user.email };
   outbox = lsGet(outboxKey(), []);
   const cache = lsGet(cacheKey(), null);
-  if(cache){ ({ catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile } = { ...cache }); follows = cache.follows || []; tournaments = cache.tournaments || []; announcements = cache.announcements || [];
+  if(cache){ ({ catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile } = { ...cache }); follows = cache.follows || []; outings = cache.outings || []; groupTrips = cache.groupTrips || []; tournaments = cache.tournaments || []; announcements = cache.announcements || [];
     for(const j of outbox) if(j.photo){ idb.get(j.photo).then(b => { if(b){ pendingPhotoUrls[j.photo] = URL.createObjectURL(b); renderAll(); } }).catch(()=>{}); } }
   loadState = navigator.onLine ? "loading" : "offline";
   if(!recoveryShown) $("auth").hidden = true; canWrite = true;

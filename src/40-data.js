@@ -13,11 +13,12 @@ try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
   catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
-  trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
+  trips: ["id","name","start_date","end_date","base","notes","shared","waters"],
+  outings: ["id","trip_id","fished_on","hours","water","lat","lng","county","notes","on_map"]
 };
 const pick = (table, r) => { const o = {}; for(const k of COLS[table]) if(k in r) o[k] = r[k] === undefined ? null : r[k]; return o; };
-const listFor = t => t === "catches" ? catches : t === "spots" ? spots : trips;
-function setList(t, v){ if(t === "catches") catches = v; else if(t === "spots") spots = v; else trips = v; }
+const listFor = t => t === "catches" ? catches : t === "spots" ? spots : t === "outings" ? outings : trips;
+function setList(t, v){ if(t === "catches") catches = v; else if(t === "spots") spots = v; else if(t === "outings") outings = v; else trips = v; }
 
 /* ---------- photo blobs waiting to upload (IndexedDB) ---------- */
 const idb = (() => {
@@ -64,7 +65,7 @@ let outbox = [];
 const outboxKey = () => "fl.outbox." + (me?.id || "anon");
 const cacheKey = () => "fl.cache." + (me?.id || "anon");
 function saveOutbox(){ lsSet(outboxKey(), outbox); updateSync(); }
-function saveCache(){ lsSet(cacheKey(), { catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile, follows, tournaments, announcements, at:Date.now() }); }
+function saveCache(){ lsSet(cacheKey(), { catches, spots, trips, outings, groupTrips, friendCatches, friendSpots, friendTrips, friendships, people, profile, follows, tournaments, announcements, at:Date.now() }); }
 function updateSync(){
   const el = $("sync"); const n = outbox.length;
   if(!navigator.onLine){ el.hidden = false; el.className = "sync"; el.innerHTML = `${icon("i-cloud-off")}Offline${n?` · ${n} to sync`:""}`; return; }
@@ -157,14 +158,14 @@ async function saveRecord(table, rec, blob, isEdit, second){
   flush();
 }
 async function removeRecord(kind, rec){
-  const table = kind === "catch" ? "catches" : kind === "spot" ? "spots" : "trips";
+  const table = kind === "catch" ? "catches" : kind === "spot" ? "spots" : kind === "outing" ? "outings" : "trips";
   setList(table, listFor(table).filter(r => r.id !== rec.id));
   if(table === "spots") catches.forEach(c => { if(c.spot_id === rec.id) c.spot_id = null; });
   if(table === "trips") catches.forEach(c => { if(c.trip_id === rec.id) c.trip_id = null; });
   outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id));
   outbox.push({ op:"delete", table, id:rec.id, photo: rec.photo_path && !pendingPhotoUrls[rec.photo_path] ? rec.photo_path : null, more: morePaths(rec).filter(p => !pendingPhotoUrls[p]) });
   saveOutbox(); saveCache(); renderAll();
-  toast(`${kind === "catch" ? "Catch" : kind === "spot" ? "Spot" : "Trip"} deleted`);
+  toast(`${kind === "catch" ? "Catch" : kind === "spot" ? "Spot" : kind === "outing" ? "Time on the water" : "Trip"} deleted`);
   flush();
 }
 
@@ -194,6 +195,9 @@ async function loadAll(){
       return [...rows.filter(r => !dels.has(r.id) && !upIds.has(r.id)), ...ups];
     };
     catches = merge("catches", c.data); spots = merge("spots", s.data); trips = merge("trips", t.data);
+    // newer tables: a problem here must never block the rest of the app
+    try{ const [o, g] = await Promise.all([sb.from("outings").select("*").order("fished_on", { ascending:false }), sb.rpc("my_group_trips")]);
+      if(!o.error) outings = merge("outings", o.data || []); if(!g.error) groupTrips = g.data || []; }catch(e){}
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];

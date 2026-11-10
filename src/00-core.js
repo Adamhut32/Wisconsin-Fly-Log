@@ -25,7 +25,7 @@ let toastT; function toast(msg){ const t=$("toast"); t.textContent = msg; t.hidd
 /* ---------- state ---------- */
 let me = null;                 // { id, email }
 let profile = null;            // { id, display_name, friend_code }
-let spots = [], catches = [], trips = [];
+let spots = [], catches = [], trips = [], outings = [], groupTrips = [];
 let friendCatches = [], friendSpots = [], friendTrips = [], friendships = [], people = {};
 let follows = [], tournaments = [], announcements = [], mySuggestions = [];
 let showFriends = lsGet("fl.showFriends", true);

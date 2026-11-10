@@ -60,6 +60,7 @@
         <button class="lgbtn" id="accessToggle" type="button" aria-pressed="true">Public land on</button>
         <button class="lgbtn" id="terrainToggle" type="button" aria-pressed="true">Terrain on</button>
         <button class="lgbtn" id="pinsToggle" type="button" aria-pressed="true">My pins on</button>
+        <button class="lgbtn" id="outToggle" type="button" aria-pressed="true">Places fished on</button>
       </div>
       <button class="btn panelshow" id="panelShow" type="button" hidden>« Show panel</button>
       <div class="fab" id="fab">
@@ -217,10 +218,36 @@
       <div class="field"><label for="tBase">Home base</label><input id="tBase" placeholder="Westby campground"></div>
       <div class="field"><label for="tNotes">Notes</label><textarea id="tNotes" placeholder="Who came, water conditions, what worked"></textarea></div>
       <label class="check"><input type="checkbox" id="tShared" checked> Friends can see this trip</label>
+      <div class="field" id="tInviteBox"><label>Invite friends on this trip</label><div class="chiprow" id="tInvite"></div>
+        <small class="muted">They'll get an invite. Everyone on the trip sees each other's catches from the trip dates (never private ones) and time on the water.</small></div>
       <span class="hint" id="tripErr" role="alert"></span>
       <div class="actions">
         <button class="btn" type="button" id="tripCancel">Cancel</button>
         <button class="btn ink" type="submit" id="tripSave">Save trip</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- time on the water -->
+<div class="scrim" id="outScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="outTitle">
+    <h3 id="outTitle">Time on the water</h3>
+    <p class="muted" style="margin:-4px 0 10px">Log where you fished and for how long, fish or no fish.</p>
+    <form id="outForm" novalidate>
+      <div class="grid2">
+        <div class="field"><label for="oDate">Day</label><input id="oDate" type="date"></div>
+        <div class="field"><label for="oHours">Hours fished</label><input id="oHours" inputmode="decimal" placeholder="3.5"></div>
+      </div>
+      <div class="field"><label for="oWater">Where</label><input id="oWater" placeholder="Timber Coulee Creek" maxlength="120" autocapitalize="words"></div>
+      <div class="row2" style="margin:-4px 0 10px"><button class="btn sm" type="button" id="oHere"><svg><use href="#i-gps"/></svg>Use my location</button><span class="hint" id="oWhere"></span></div>
+      <div class="field"><label for="oNotes">Notes</label><textarea id="oNotes" placeholder="Water high and stained, fish were deep"></textarea></div>
+      <label class="check"><input type="checkbox" id="oOnMap" checked> Show this place on my map</label>
+      <span class="hint" id="outErr" role="alert"></span>
+      <div class="actions">
+        <button class="btn link danger" type="button" id="outDel" hidden>Delete</button>
+        <button class="btn" type="button" id="outCancel">Cancel</button>
+        <button class="btn ink" type="submit">Save</button>
       </div>
     </form>
   </div>

@@ -25,7 +25,7 @@ let toastT; function toast(msg){ const t=$("toast"); t.textContent = msg; t.hidd
 /* ---------- state ---------- */
 let me = null;                 // { id, email }
 let profile = null;            // { id, display_name, friend_code }
-let spots = [], catches = [], trips = [];
+let spots = [], catches = [], trips = [], outings = [], groupTrips = [];
 let friendCatches = [], friendSpots = [], friendTrips = [], friendships = [], people = {};
 let follows = [], tournaments = [], announcements = [], mySuggestions = [];
 let showFriends = lsGet("fl.showFriends", true);
@@ -606,6 +606,7 @@ function renderMarkers(){
     m.bindPopup(() => catchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
     markerLayer.addLayer(m); markerIndex["c:"+c.id] = m;
   }
+  outingMarkers();
   for(const c of friendCatches){
     if(c.lat == null || (mapPerson && c.user_id !== mapPerson)) continue;
     const first = (c.display_name || "Friend").split(" ")[0];
@@ -1094,11 +1095,12 @@ try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
   catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
-  trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
+  trips: ["id","name","start_date","end_date","base","notes","shared","waters"],
+  outings: ["id","trip_id","fished_on","hours","water","lat","lng","county","notes","on_map"]
 };
 const pick = (table, r) => { const o = {}; for(const k of COLS[table]) if(k in r) o[k] = r[k] === undefined ? null : r[k]; return o; };
-const listFor = t => t === "catches" ? catches : t === "spots" ? spots : trips;
-function setList(t, v){ if(t === "catches") catches = v; else if(t === "spots") spots = v; else trips = v; }
+const listFor = t => t === "catches" ? catches : t === "spots" ? spots : t === "outings" ? outings : trips;
+function setList(t, v){ if(t === "catches") catches = v; else if(t === "spots") spots = v; else if(t === "outings") outings = v; else trips = v; }
 
 /* ---------- photo blobs waiting to upload (IndexedDB) ---------- */
 const idb = (() => {
@@ -1145,7 +1147,7 @@ let outbox = [];
 const outboxKey = () => "fl.outbox." + (me?.id || "anon");
 const cacheKey = () => "fl.cache." + (me?.id || "anon");
 function saveOutbox(){ lsSet(outboxKey(), outbox); updateSync(); }
-function saveCache(){ lsSet(cacheKey(), { catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile, follows, tournaments, announcements, at:Date.now() }); }
+function saveCache(){ lsSet(cacheKey(), { catches, spots, trips, outings, groupTrips, friendCatches, friendSpots, friendTrips, friendships, people, profile, follows, tournaments, announcements, at:Date.now() }); }
 function updateSync(){
   const el = $("sync"); const n = outbox.length;
   if(!navigator.onLine){ el.hidden = false; el.className = "sync"; el.innerHTML = `${icon("i-cloud-off")}Offline${n?` · ${n} to sync`:""}`; return; }
@@ -1238,14 +1240,14 @@ async function saveRecord(table, rec, blob, isEdit, second){
   flush();
 }
 async function removeRecord(kind, rec){
-  const table = kind === "catch" ? "catches" : kind === "spot" ? "spots" : "trips";
+  const table = kind === "catch" ? "catches" : kind === "spot" ? "spots" : kind === "outing" ? "outings" : "trips";
   setList(table, listFor(table).filter(r => r.id !== rec.id));
   if(table === "spots") catches.forEach(c => { if(c.spot_id === rec.id) c.spot_id = null; });
   if(table === "trips") catches.forEach(c => { if(c.trip_id === rec.id) c.trip_id = null; });
   outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id));
   outbox.push({ op:"delete", table, id:rec.id, photo: rec.photo_path && !pendingPhotoUrls[rec.photo_path] ? rec.photo_path : null, more: morePaths(rec).filter(p => !pendingPhotoUrls[p]) });
   saveOutbox(); saveCache(); renderAll();
-  toast(`${kind === "catch" ? "Catch" : kind === "spot" ? "Spot" : "Trip"} deleted`);
+  toast(`${kind === "catch" ? "Catch" : kind === "spot" ? "Spot" : kind === "outing" ? "Time on the water" : "Trip"} deleted`);
   flush();
 }
 
@@ -1275,6 +1277,9 @@ async function loadAll(){
       return [...rows.filter(r => !dels.has(r.id) && !upIds.has(r.id)), ...ups];
     };
     catches = merge("catches", c.data); spots = merge("spots", s.data); trips = merge("trips", t.data);
+    // newer tables: a problem here must never block the rest of the app
+    try{ const [o, g] = await Promise.all([sb.from("outings").select("*").order("fished_on", { ascending:false }), sb.rpc("my_group_trips")]);
+      if(!o.error) outings = merge("outings", o.data || []); if(!g.error) groupTrips = g.data || []; }catch(e){}
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
@@ -1425,18 +1430,23 @@ function summarize(cs){
   return { fish, species, big, fly };
 }
 function renderTripsTab(el){
-  if(tripOpen){ const t = trips.find(x => x.id === tripOpen); if(t) return renderTrip(el, t); tripOpen = null; }
+  if(tripOpen){ const t = trips.find(x => x.id === tripOpen); if(t) return renderTrip(el, t); const g = groupTrips.find(x => x.id === tripOpen); if(g) return renderGroupTrip(el, g); tripOpen = null; }
   const today = todayStr();
   const list = [...trips].sort((a,b) => b.start_date.localeCompare(a.start_date));
   const loose = catches.filter(c => !c.trip_id).length;
   el.innerHTML = `<div class="eyebrow">Trips</div><h2>Your trips</h2>
     <p class="muted" style="margin:4px 0 12px">Catches join a trip automatically when their date falls inside it.</p>
-    <button class="btn ink" type="button" data-a="newtrip">${icon("i-plus")}New trip</button>
+    <div class="row2"><button class="btn ink" type="button" data-a="newtrip">${icon("i-plus")}New trip</button><button class="btn" type="button" data-a="newouting">Log time on the water</button></div>
+    ${groupTrips.filter(g => g.my_status === "invited").map(g => `<div class="card reqbox" style="margin-top:12px"><b>${esc(g.owner_name)} invited you on a trip</b><p style="margin:2px 0 8px">${esc(g.name)} · ${esc(fmtRange(g.start_date, g.end_date))}</p>
+      <div class="row2"><button class="btn sm ink" type="button" data-gjoin="${esc(g.id)}">Join</button><button class="btn sm" type="button" data-gtrip="${esc(g.id)}">Details</button><button class="link" type="button" data-gdecline="${esc(g.id)}">No thanks</button></div></div>`).join("")}
     <div class="stack" style="margin-top:14px">${list.length ? list.map(t => {
       const s = summarize(tripCatches(t)); const now = t.start_date <= today && today <= t.end_date;
       return `<button class="trip${now?" now":""}" data-trip="${esc(t.id)}" type="button"><small>${now?"Happening now · ":""}${esc(fmtRange(t.start_date, t.end_date))}${t.base?` · ${esc(t.base)}`:""}</small><b>${esc(t.name)}</b>
         <span class="tnums"><span><em>${s.fish}</em> fish</span><span>${daysBetween(t.start_date, t.end_date).length} days</span>${s.big?`<span>Biggest ${lenTxt(s.big.length_in)}</span>`:""}${(t.waters||[]).length?`<span>${t.waters.length} water${t.waters.length===1?"":"s"} planned</span>`:""}${!t.shared?"<span>Private</span>":""}${t._pending?"<span>Waiting to sync</span>":""}</span></button>`; }).join("")
-      : `<div class="empty"><b>No trips yet</b>Make one for your next outing, even a single day. Every catch you log during those dates lands in it, and you get a recap with photos, the best fly, and day-by-day notes.</div>`}</div>
+      : groupTrips.some(g => g.my_status === "joined") ? "" : `<div class="empty"><b>No trips yet</b>Make one for your next outing, even a single day. Every catch you log during those dates lands in it, and you get a recap with photos, the best fly, and day-by-day notes.</div>`}</div>
+    ${groupTrips.filter(g => g.my_status === "joined").length ? `<h4><span>Trips with friends</span></h4><div class="stack">${groupTrips.filter(g => g.my_status === "joined").map(g => { const now = g.start_date <= today && today <= g.end_date;
+      return `<button class="trip${now?" now":""}" data-gtrip="${esc(g.id)}" type="button"><small>${now?"Happening now · ":""}${esc(fmtRange(g.start_date, g.end_date))} · with ${esc(g.owner_name)}</small><b>${esc(g.name)}</b><span class="tnums"><span>${g.people} people</span><span>${daysBetween(g.start_date, g.end_date).length} days</span></span></button>`; }).join("")}</div>` : ""}
+    ${(() => { const loneOut = outings.filter(o => !anyTripFor(o.fished_on)).slice(0, 12); return loneOut.length ? `<h4><span>Time on the water</span><span>${fmtHours(outings.reduce((a, o) => a + (+o.hours || 0), 0)) || ""}</span></h4><ul class="list">${loneOut.map(o => `<li><button class="item out" type="button" data-outing="${esc(o.id)}"><span class="th">${icon("i-pin")}</span><span class="t"><b>${fmtHours(o.hours) || "Fished"}${o.water ? ` · ${esc(o.water)}` : ""}</b><small>${esc([fmtDate(o.fished_on), o.county ? countyName(o.county) : ""].filter(Boolean).join(" · "))}</small></span></button></li>`).join("")}</ul>` : ""; })()}
     ${loose && list.length ? `<p class="note">${loose} catch${loose===1?" isn't":"es aren't"} part of a trip. Edit a catch to add it to one.</p>` : ""}`;
 }
 function renderTrip(el, t){
@@ -1445,6 +1455,8 @@ function renderTrip(el, t){
   const photos = cs.filter(c => c.photo_path);
   const byDay = {}; cs.forEach(c => (byDay[c.caught_on] ||= []).push(c));
   const counties_ = new Set(cs.map(c => c.county).filter(Boolean));
+  const g = tripGroup[t.id], gFish = g ? g.catches.reduce((a, c) => a + fishOf(c), 0) : 0, hrs = tripHours(t);
+  if(!g && !tripAsked.has(t.id)){ tripAsked.add(t.id); loadTripGroup(t.id); }
   el.innerHTML = `<button class="link backlink" data-a="trips" type="button">${icon("i-back")}All trips</button>
     <div class="eyebrow">${esc(fmtRange(t.start_date, t.end_date))}${t.base?` · ${esc(t.base)}`:""}</div><h2>${esc(t.name)}</h2>
     <div class="stats four"><div class="stat f"><b>${s.fish}</b><span>fish</span></div><div class="stat"><b>${s.species.size}</b><span>species</span></div>
@@ -1452,17 +1464,20 @@ function renderTrip(el, t){
     ${s.fly ? `<p style="margin:0 0 6px"><b>Best fly:</b> ${esc(s.fly[0])} (${s.fly[1]} fish)</p>` : ""}
     ${counties_.size ? `<p class="muted" style="margin:0 0 8px">${[...counties_].map(countyName).join(", ")}</p>` : ""}
     ${t.notes ? `<p style="margin:6px 0 10px">${esc(t.notes)}</p>` : ""}
+    ${hrs.all ? `<p style="margin:0 0 6px"><b>On the water:</b> ${fmtHours(hrs.all)}${s.fish + gFish ? ` · ${((s.fish + gFish) / hrs.all).toFixed(1)} fish per hour` : ""}${gFish ? ` · the group caught ${gFish} more` : ""}</p>` : gFish ? `<p style="margin:0 0 6px">The group caught ${gFish} more fish.</p>` : ""}
+    ${tripPeopleHtml(t, true)}
     ${tripPlanHtml(t)}
     ${photos.length ? `<div class="strip">${photos.map(c => `<button type="button" data-go="c:${esc(c.id)}" aria-label="${esc(c.species||"Catch")} photo" style="background-image:url('${photoSrc(c.photo_path)}')"></button>`).join("")}</div>` : ""}
     <div class="row2" style="margin:8px 0 4px">
       <button class="btn sm fish" type="button" data-a="logtrip">${icon("i-fish")}Log a catch</button>
+      <button class="btn sm" type="button" data-a="newouting">Time on the water</button>
       <button class="btn sm" type="button" data-a="fittrip">Show on map</button>
       <button class="btn sm" type="button" data-a="edittrip">Edit</button>
       <button class="btn sm" type="button" data-a="deltrip">Delete</button>
     </div><div data-slot></div>
-    ${days.map(d => { const list = byDay[d] || []; const n = list.reduce((a,c)=>a+fishOf(c),0);
+    ${days.map(d => { const list = byDay[d] || []; const gd = groupDayHtml(t, d); const n = list.reduce((a,c)=>a+fishOf(c),0) + gd.fish;
       return `<div class="day"><h5>${esc(fmtDate(d, { weekday:"long", month:"short", day:"numeric" }))}<span>${n} fish</span></h5>
-        ${list.length ? `<ul class="list">${list.map(itemCatch).join("")}</ul>` : `<p class="skunk">${d > todayStr() ? "Still to come" : "No fish logged"}</p>`}</div>`; }).join("")}
+        ${list.length ? `<ul class="list">${list.map(itemCatch).join("")}</ul>` : ""}${gd.html}${!list.length && !gd.any ? `<p class="skunk">${d > todayStr() ? "Still to come" : "No fish logged"}</p>` : ""}</div>`; }).join("")}
     ${(() => { const out = cs.filter(c => !days.includes(c.caught_on)); return out.length ? `<div class="day"><h5>Outside the trip dates<span>${out.length}</span></h5><ul class="list">${out.map(itemCatch).join("")}</ul></div>` : ""; })()}
     <p class="note">${t.shared ? "Friends can see this trip and the catches in it that aren't private." : "This trip is private."}</p>`;
 }
@@ -1478,7 +1493,7 @@ function fitTrip(){
 $("log").addEventListener("click", ev => {
   const tb = ev.target.closest("[data-trip]"); if(tb){ openTrip(tb.dataset.trip); return; }
   const a = ev.target.closest("[data-a]"); if(!a) return;
-  const t = trips.find(x => x.id === tripOpen);
+  const t = trips.find(x => x.id === tripOpen) || groupTrips.find(x => x.id === tripOpen);
   switch(a.dataset.a){
     case "newtrip": openTripForm(); break;
     case "trips": tripOpen = null; renderLog(); break;
@@ -1499,6 +1514,7 @@ function openTripForm(t){
   $("tripTitle").textContent = t ? "Edit trip" : "New trip"; $("tripErr").textContent = "";
   $("tName").value = t?.name || ""; $("tStart").value = t?.start_date || todayStr(); $("tEnd").value = t?.end_date || todayStr();
   $("tBase").value = t?.base || ""; $("tNotes").value = t?.notes || ""; $("tShared").checked = t ? t.shared : true;
+  tInvite = new Set(); renderTripInvites(t);
   $("tripScrim").hidden = false; setTimeout(() => $("tName").focus({ preventScroll:true }), 50);
 }
 function closeTripForm(){ $("tripScrim").hidden = true; tripEditing = null; }
@@ -1520,13 +1536,191 @@ $("tripForm").addEventListener("submit", async ev => {
   try{
     await saveRecord("trips", rec, null, !isNew);
     // pull in catches from these dates that aren't on another trip yet
+    const invited = sendTripInvites(rec.id);
     const adopt = catches.filter(c => !c.trip_id && c.caught_on >= a && c.caught_on <= b);
     for(const c of adopt){ await saveRecord("catches", { ...c, trip_id: rec.id }, null, true); }
     closeTripForm();
     toast(adopt.length ? `Trip saved. Added ${adopt.length} catch${adopt.length===1?"":"es"} from those dates.` : "Trip saved");
+    invited.then(n => { if(n) toast(`Invited ${n} friend${n === 1 ? "" : "s"}`); });
     openTrip(rec.id);
   }catch(e){ err.textContent = "Couldn't save the trip. Try again."; }
 });
+
+
+/* ---------- trips with friends + time on the water ---------- */
+const tripGroup = {}, tripAsked = new Set();                  // trip id -> { people, catches, outings } from the server
+async function loadTripGroup(id){
+  if(!navigator.onLine) return;
+  const { data, error } = await sb.rpc("trip_group", { tid:id });
+  if(error || !data || Array.isArray(data) || !data.people) return;
+  tripGroup[id] = data; if(tab === "trips" && tripOpen === id) renderLog();
+}
+const fmtHours = h => { const n = +h; return n ? (Number.isInteger(n) ? n : n.toFixed(1)) + " h" : ""; };
+const tripOf = id => trips.find(t => t.id === id) || groupTrips.find(t => t.id === id && t.my_status === "joined");
+// my own trip or a joined group trip on that date
+function anyTripFor(date){ return tripFor(date) || groupTrips.find(t => t.my_status === "joined" && t.start_date <= date && date <= t.end_date) || null; }
+
+/* people on a trip */
+function tripPeopleHtml(t, owner){
+  const g = tripGroup[t.id];
+  const ppl = g ? g.people : [];
+  const joined = ppl.filter(p => p.status !== "invited"), invited = ppl.filter(p => p.status === "invited");
+  const canInvite = owner && friendsList().some(f => !ppl.some(p => p.id === f.id));
+  if(!g && !owner) return "";
+  if(owner && ppl.length <= 1 && !canInvite) return "";
+  return `<div class="card tpeople"><b>${joined.length > 1 ? `${joined.length} people on this trip` : "Just you so far"}</b>
+    <div class="tpl">${joined.map(p => `<span class="tp">${avHtml(p.id, p.name, "sm", p.avatar)}${esc(p.id === me.id ? "You" : (p.name || "").split(" ")[0])}${p.status === "owner" ? ` <small>organizer</small>` : ""}${owner && p.id !== me.id ? ` <button class="link danger" type="button" data-tremove="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button>` : ""}</span>`).join("")}
+    ${invited.map(p => `<span class="tp inv">${avHtml(p.id, p.name, "sm", p.avatar)}${esc((p.name || "").split(" ")[0])} <small>invited</small>${owner ? ` <button class="link danger" type="button" data-tremove="${esc(p.id)}" aria-label="Cancel invite">×</button>` : ""}</span>`).join("")}</div>
+    ${canInvite ? `<button class="btn sm" type="button" data-a="tinvite">Invite friends</button><div data-invslot></div>` : ""}
+    ${!owner ? `<button class="link danger" type="button" data-tremove="${esc(me.id)}">Leave this trip</button>` : ""}</div>`;
+}
+function inviteListHtml(t){
+  const ppl = tripGroup[t.id]?.people || [];
+  const can = friendsList().filter(f => !ppl.some(p => p.id === f.id));
+  return `<div class="chiprow">${can.map(f => `<button type="button" class="chip" data-inv="${esc(f.id)}" aria-pressed="false">${esc(f.name)}</button>`).join("")}</div>
+    <button class="btn sm ink" type="button" data-a="tinvitesend">Send invites</button>`;
+}
+
+/* the group's catches and time on the water, folded into the trip's days */
+function groupDayHtml(t, d){
+  const g = tripGroup[t.id]; const mine = outings.filter(o => o.fished_on === d && (o.trip_id === t.id || !o.trip_id));
+  const theirs = g ? g.catches.filter(c => c.caught_on === d) : [], tout = g ? g.outings.filter(o => o.fished_on === d) : [];
+  const rows = [
+    ...mine.map(o => `<li><button class="item out" type="button" data-outing="${esc(o.id)}"><span class="th">${icon("i-pin")}</span><span class="t"><b>${fmtHours(o.hours) || "Fished"}${o.water ? ` · ${esc(o.water)}` : ""}</b><small>${esc(["You", o.notes].filter(Boolean).join(" · "))}</small></span></button></li>`),
+    ...tout.map(o => `<li><div class="item out" style="cursor:default"><span class="th">${icon("i-pin")}</span><span class="t"><b>${fmtHours(o.hours) || "Fished"}${o.water ? ` · ${esc(o.water)}` : ""}</b><small>${esc([o.display_name, o.notes].filter(Boolean).join(" · "))}</small></span></div></li>`),
+    ...theirs.map(c => `<li><div class="item" style="cursor:default">${thumb(c)}<span class="t"><b>${esc(c.species || "Fish")}${c.length_in ? ` · ${lenTxt(c.length_in)}` : ""}</b><small>${esc([c.display_name, c.water, c.fly].filter(Boolean).join(" · "))}</small></span><span class="num">${fishOf(c) !== 1 ? `<span class="f">×${fishOf(c)}</span>` : ""}</span></div></li>`)];
+  return { html: rows.length ? `<ul class="list">${rows.join("")}</ul>` : "", fish: theirs.reduce((a, c) => a + fishOf(c), 0), any: rows.length > 0 };
+}
+function tripHours(t){
+  const g = tripGroup[t.id];
+  const mine = outings.filter(o => o.fished_on >= t.start_date && o.fished_on <= t.end_date).reduce((a, o) => a + (+o.hours || 0), 0);
+  const theirs = g ? g.outings.reduce((a, o) => a + (+o.hours || 0), 0) : 0;
+  return { mine, all: mine + theirs };
+}
+
+/* trip someone else organized */
+function renderGroupTrip(el, t){
+  const g = tripGroup[t.id];
+  if(t.my_status === "invited"){
+    el.innerHTML = `<button class="link backlink" data-a="trips" type="button">${icon("i-back")}All trips</button>
+      <div class="eyebrow">${esc(fmtRange(t.start_date, t.end_date))}${t.base ? ` · ${esc(t.base)}` : ""}</div><h2>${esc(t.name)}</h2>
+      <p>${esc(t.owner_name)} invited you on this trip.</p>${t.notes ? `<p class="muted">${esc(t.notes)}</p>` : ""}
+      <p class="note">If you join, everyone on the trip sees your catches from these dates (never private ones) and your time on the water.</p>
+      <div class="row2"><button class="btn ink" type="button" data-gjoin="${esc(t.id)}">Join trip</button><button class="btn" type="button" data-gdecline="${esc(t.id)}">No thanks</button></div>`;
+    return;
+  }
+  const days = daysBetween(t.start_date, t.end_date);
+  const mineC = catches.filter(c => days.includes(c.caught_on));
+  const all = [...mineC, ...(g ? g.catches : [])], s = summarize(all), hrs = tripHours(t);
+  el.innerHTML = `<button class="link backlink" data-a="trips" type="button">${icon("i-back")}All trips</button>
+    <div class="eyebrow">${esc(fmtRange(t.start_date, t.end_date))}${t.base ? ` · ${esc(t.base)}` : ""} · with ${esc(t.owner_name)}</div><h2>${esc(t.name)}</h2>
+    <div class="stats four"><div class="stat f"><b>${s.fish}</b><span>group fish</span></div><div class="stat"><b>${s.species.size}</b><span>species</span></div>
+      <div class="stat"><b>${s.big ? lenTxt(s.big.length_in) : "–"}</b><span>biggest</span></div><div class="stat"><b>${hrs.all ? fmtHours(hrs.all) : "–"}</b><span>on the water</span></div></div>
+    ${s.fly ? `<p style="margin:0 0 6px"><b>Best fly:</b> ${esc(s.fly[0])} (${s.fly[1]} fish)</p>` : ""}
+    ${t.notes ? `<p style="margin:6px 0 10px">${esc(t.notes)}</p>` : ""}
+    ${tripPeopleHtml(t, false)}
+    <div class="row2" style="margin:8px 0 4px"><button class="btn sm fish" type="button" data-a="logtrip">${icon("i-fish")}Log a catch</button><button class="btn sm" type="button" data-a="newouting">Log time on the water</button></div>
+    ${!g ? `<p class="status">Loading the group's catches…</p>` : ""}
+    ${days.map(d => { const mine = mineC.filter(c => c.caught_on === d), gd = groupDayHtml(t, d), n = mine.reduce((a, c) => a + fishOf(c), 0) + gd.fish;
+      return `<div class="day"><h5>${esc(fmtDate(d, { weekday:"long", month:"short", day:"numeric" }))}<span>${n} fish</span></h5>
+        ${mine.length ? `<ul class="list">${mine.map(itemCatch).join("")}</ul>` : ""}${gd.html}${!mine.length && !gd.any ? `<p class="skunk">${d > todayStr() ? "Still to come" : "No fish logged"}</p>` : ""}</div>`; }).join("")}`;
+}
+
+/* actions */
+let invPick = new Set();
+$("log").addEventListener("click", async ev => {
+  const e = ev.target;
+  const gt = e.closest("[data-gtrip]"); if(gt){ expandPanel(); tripOpen = gt.dataset.gtrip; tab = "trips"; renderLog(); $("log").scrollTop = 0; loadTripGroup(tripOpen); return; }
+  const j = e.closest("[data-gjoin]"); if(j){ const { error } = await sb.rpc("trip_respond", { tid:j.dataset.gjoin, accept:true }); if(error){ toast("Couldn't join. Try again."); return; }
+    const t = groupTrips.find(x => x.id === j.dataset.gjoin); if(t) t.my_status = "joined"; saveCache(); toast("You're on the trip"); tripOpen = j.dataset.gjoin; renderLog(); loadTripGroup(tripOpen); return; }
+  const dc = e.closest("[data-gdecline]"); if(dc){ await sb.rpc("trip_respond", { tid:dc.dataset.gdecline, accept:false }); groupTrips = groupTrips.filter(x => x.id !== dc.dataset.gdecline); saveCache(); tripOpen = null; renderLog(); return; }
+  const rm = e.closest("[data-tremove]"); if(rm){
+    const uid = rm.dataset.tremove, tid = tripOpen; const self = uid === me.id;
+    if(!confirmTap(rm, self ? "Tap again to leave" : "Tap again to remove")) return;
+    const { error } = await sb.rpc("trip_remove", { tid, uid }); if(error){ toast("Couldn't do that. Try again."); return; }
+    if(self){ groupTrips = groupTrips.filter(x => x.id !== tid); tripOpen = null; saveCache(); toast("You left the trip"); renderLog(); } else loadTripGroup(tid);
+    return; }
+  const iv = e.closest("[data-inv]"); if(iv){ const id = iv.dataset.inv; invPick.has(id) ? invPick.delete(id) : invPick.add(id); iv.setAttribute("aria-pressed", String(invPick.has(id))); return; }
+  const a = e.closest("[data-a]"); if(!a) return;
+  if(a.dataset.a === "tinvite"){ const t = trips.find(x => x.id === tripOpen); const slot = $("log").querySelector("[data-invslot]"); if(t && slot){ invPick = new Set(); slot.innerHTML = inviteListHtml(t); } }
+  if(a.dataset.a === "tinvitesend"){ if(!invPick.size){ toast("Tap the friends to invite."); return; } const tid = tripOpen;
+    const { data, error } = await sb.rpc("trip_invite", { tid, uids:[...invPick] }); if(error){ toast("Couldn't send invites. Try again."); return; }
+    toast(`Invited ${data} friend${data === 1 ? "" : "s"}`); invPick = new Set(); loadTripGroup(tid); }
+  if(a.dataset.a === "newouting"){ const t = tripOf(tripOpen); openOuting(null, t ? (todayStr() >= t.start_date && todayStr() <= t.end_date ? todayStr() : t.start_date) : null); }
+  const o = e.closest("[data-outing]"); if(o){ const r = outings.find(x => x.id === o.dataset.outing); if(r) openOuting(r); }
+});
+// small "tap twice" guard instead of a browser confirm dialog
+function confirmTap(el, label){ if(el.dataset.armed){ return true; } el.dataset.armed = "1"; const old = el.textContent; el.textContent = label; setTimeout(() => { delete el.dataset.armed; el.textContent = old; }, 3000); return false; }
+document.addEventListener("click", e => { const o = e.target.closest("[data-outing]"); if(o && !$("log").contains(o)){ const r = outings.find(x => x.id === o.dataset.outing); if(r){ map.closePopup(); openOuting(r); } } });
+
+/* invites chosen while making a trip */
+let tInvite = new Set();
+function renderTripInvites(t){
+  const box = $("tInviteBox"), fr = friendsList();
+  box.hidden = !fr.length || (t && t.user_id && t.user_id !== me.id);
+  const ppl = t ? (tripGroup[t.id]?.people || []) : [];
+  $("tInvite").innerHTML = fr.filter(f => !ppl.some(p => p.id === f.id)).map(f => `<button type="button" class="chip" data-tinv="${esc(f.id)}" aria-pressed="${tInvite.has(f.id)}">${esc(f.name)}</button>`).join("") || `<small class="muted">Everyone's already invited.</small>`;
+}
+$("tInvite").addEventListener("click", e => { const b = e.target.closest("[data-tinv]"); if(!b) return; const id = b.dataset.tinv; tInvite.has(id) ? tInvite.delete(id) : tInvite.add(id); b.setAttribute("aria-pressed", String(tInvite.has(id))); });
+async function sendTripInvites(tid){
+  if(!tInvite.size) return 0;
+  const ids = [...tInvite]; tInvite = new Set();
+  for(let i = 0; i < 20; i++){ if(!outbox.some(j => j.table === "trips" && j.row?.id === tid)) break; await new Promise(r => setTimeout(r, 500)); }   // the trip must reach the server first
+  const { data, error } = await sb.rpc("trip_invite", { tid, uids:ids });
+  if(error){ toast("Trip saved, but the invites didn't send. Open the trip to try again."); return 0; }
+  loadTripGroup(tid); return data || 0;
+}
+
+/* time on the water form */
+let outEditing = null, outCoords = null;
+function openOuting(rec, date){
+  if(!canWrite){ toast("Sign in to save."); return; }
+  outEditing = rec || null; outCoords = rec && rec.lat != null ? { lat:+rec.lat, lng:+rec.lng } : null;
+  $("outTitle").textContent = rec ? "Edit time on the water" : "Time on the water";
+  $("oDate").value = rec?.fished_on || date || todayStr(); $("oHours").value = rec?.hours ? String(+rec.hours) : "";
+  $("oWater").value = rec?.water || ""; $("oNotes").value = rec?.notes || ""; $("oOnMap").checked = rec ? rec.on_map !== false : true;
+  $("oWhere").textContent = outCoords ? "Location saved" : ""; $("outErr").textContent = ""; $("outDel").hidden = !rec;
+  $("outScrim").hidden = false;
+}
+function closeOuting(){ $("outScrim").hidden = true; outEditing = null; }
+$("outCancel").onclick = closeOuting;
+$("outScrim").addEventListener("click", e => { if(e.target === $("outScrim")) closeOuting(); });
+$("oHere").onclick = () => {
+  const h = $("oWhere"); h.className = "hint"; h.textContent = "Finding you…";
+  navigator.geolocation.getCurrentPosition(p => {
+    outCoords = { lat:p.coords.latitude, lng:p.coords.longitude }; h.className = "hint ok"; h.textContent = "Location saved";
+    if(!$("oWater").value.trim()) watersNear(outCoords.lat, outCoords.lng).then(list => { const w = pickWater(list); if(w && !$("oWater").value.trim()) $("oWater").value = w.name; }).catch(() => {});
+  }, () => { h.className = "hint bad"; h.textContent = "Couldn't get your location."; }, { enableHighAccuracy:true, timeout:20000, maximumAge:60000 });
+};
+$("outDel").onclick = () => { if(!outEditing) return; if(!confirmTap($("outDel"), "Tap again to delete")) return; const r = outEditing; closeOuting(); removeRecord("outing", r); };
+$("outForm").addEventListener("submit", async ev => {
+  ev.preventDefault(); const err = $("outErr"); err.className = "hint bad"; err.textContent = "";
+  const d = $("oDate").value, hs = $("oHours").value.trim().replace(",", "."), h = hs ? +hs : null;
+  if(!d){ err.textContent = "Pick the day."; return; }
+  if(hs && !(h > 0 && h <= 24)){ err.textContent = "Hours should be between 0.5 and 24, like 3 or 2.5."; $("oHours").focus(); return; }
+  if(!hs && !$("oWater").value.trim() && !outCoords){ err.textContent = "Add the hours or where you fished."; return; }
+  const t = anyTripFor(d);
+  const rec = { id: outEditing ? outEditing.id : uuid(), fished_on:d, hours: h ? Math.round(h * 10) / 10 : null, water: capWords($("oWater").value.trim()) || null,
+    lat: outCoords ? outCoords.lat : null, lng: outCoords ? outCoords.lng : null, county: outCoords ? countyAt(outCoords.lat, outCoords.lng) : null,
+    notes: $("oNotes").value.trim() || null, on_map: $("oOnMap").checked, trip_id: t && trips.some(x => x.id === t.id) ? t.id : null };
+  try{ await saveRecord("outings", rec, null, !!outEditing); closeOuting(); toast(t ? `Saved to ${t.name}` : "Time on the water saved"); }
+  catch(e){ err.textContent = "Couldn't save. Try again."; }
+});
+
+/* places fished on my map */
+let showOutings = lsGet("fl.outings", true);
+function syncOutToggle(){ const b = $("outToggle"); b.setAttribute("aria-pressed", String(showOutings)); b.textContent = showOutings ? "Places fished on" : "Places fished off"; b.hidden = !outings.some(o => o.lat != null && o.on_map !== false); }
+$("outToggle").onclick = () => { showOutings = !showOutings; lsSet("fl.outings", showOutings); renderAll(); };
+function outingMarkers(){
+  syncOutToggle();
+  if(!showOutings || hidePins || mapPerson) return;
+  for(const o of outings){
+    if(o.lat == null || o.on_map === false) continue;
+    const m = L.marker([o.lat, o.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-out" title="Fished">${o.hours ? fmtHours(o.hours).replace(" h", "h") : ""}</div>`, iconSize:[0,0] }), zIndexOffset:100, title:"Fished here" });
+    m.bindPopup(() => `<div class="pop"><div class="meta" style="font-weight:700">Fished${o.hours ? ` ${fmtHours(o.hours)}` : ""}</div><h3>${esc(o.water || "Places fished")}</h3><div class="meta">${esc(fmtDate(o.fished_on))}${o.county ? ` · ${esc(countyName(o.county))}` : ""}</div>${o.notes ? `<p style="margin:6px 0">${esc(o.notes)}</p>` : ""}<div class="row"><button class="link" type="button" data-outing="${esc(o.id)}">Edit</button></div></div>`, { maxWidth:280 });
+    markerLayer.addLayer(m);
+  }
+}
 
 
 /* ---------- tournaments ---------- */
@@ -4069,7 +4263,7 @@ async function startSession(user){
   me = { id:user.id, email:user.email };
   outbox = lsGet(outboxKey(), []);
   const cache = lsGet(cacheKey(), null);
-  if(cache){ ({ catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile } = { ...cache }); follows = cache.follows || []; tournaments = cache.tournaments || []; announcements = cache.announcements || [];
+  if(cache){ ({ catches, spots, trips, friendCatches, friendSpots, friendTrips, friendships, people, profile } = { ...cache }); follows = cache.follows || []; outings = cache.outings || []; groupTrips = cache.groupTrips || []; tournaments = cache.tournaments || []; announcements = cache.announcements || [];
     for(const j of outbox) if(j.photo){ idb.get(j.photo).then(b => { if(b){ pendingPhotoUrls[j.photo] = URL.createObjectURL(b); renderAll(); } }).catch(()=>{}); } }
   loadState = navigator.onLine ? "loading" : "offline";
   if(!recoveryShown) $("auth").hidden = true; canWrite = true;

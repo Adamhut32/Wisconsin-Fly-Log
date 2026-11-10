@@ -29,6 +29,7 @@ function renderMarkers(){
     m.bindPopup(() => catchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
     markerLayer.addLayer(m); markerIndex["c:"+c.id] = m;
   }
+  outingMarkers();
   for(const c of friendCatches){
     if(c.lat == null || (mapPerson && c.user_id !== mapPerson)) continue;
     const first = (c.display_name || "Friend").split(" ")[0];

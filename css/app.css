@@ -558,3 +558,11 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .uname span{color:var(--muted);font-weight:700}
 .uname input{border:0;background:transparent;padding-left:4px;outline:none;box-shadow:none}
 .uname:focus-within{outline:2px solid var(--fish);outline-offset:1px}
+/* trips with friends, time on the water */
+.tpeople{margin:8px 0 10px} .tpeople>b{display:block;margin-bottom:6px}
+.tpl{display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:8px}
+.tp{display:inline-flex;align-items:center;gap:6px;font-weight:600} .tp small{color:var(--muted);font-weight:400} .tp.inv{opacity:.7}
+.tp .link{padding:0 4px;font-size:1.1em}
+.item.out .th{background:transparent;border:1.5px dashed var(--spot);color:var(--spot)}
+.mk-out{position:absolute;transform:translate(-50%,-50%);min-width:18px;height:18px;padding:0 4px;border-radius:9px;border:2px dashed var(--spot);background:var(--paper);color:var(--spot);font:700 10px/14px system-ui,sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.chiprow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
