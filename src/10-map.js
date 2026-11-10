@@ -60,12 +60,15 @@ const markerLayer = L.layerGroup();
 
 /* soft mask outside the open county */
 let maskLayer = null;
+// on satellite and topo the fade outside an open county is lighter, so the photo still reads
+const maskOpacity = () => curView() === "field" ? .72 : .38;
+document.addEventListener("mapview", () => { if(maskLayer) maskLayer.setStyle({ fillOpacity:maskOpacity(), fillColor:css("--paper") }); });
 function setMask(id){
   if(maskLayer){ map.removeLayer(maskLayer); maskLayer = null; }
   if(!id) return;
   const g = byId[id].geometry; const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
   const holes = polys.map(p => p[0].map(q=>[q[1],q[0]]));
-  maskLayer = L.polygon([[[38,-100],[38,-80],[52,-80],[52,-100]], ...holes], { pane:"mask", interactive:false, stroke:false, fillColor:css("--paper"), fillOpacity:.72 }).addTo(map);
+  maskLayer = L.polygon([[[38,-100],[38,-80],[52,-80],[52,-100]], ...holes], { pane:"mask", interactive:false, stroke:false, fillColor:css("--paper"), fillOpacity:maskOpacity() }).addTo(map);
 }
 
 /* ---------- detailed creeks, lakes and trout water, one file per county ---------- */

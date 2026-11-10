@@ -143,12 +143,15 @@ const markerLayer = L.layerGroup();
 
 /* soft mask outside the open county */
 let maskLayer = null;
+// on satellite and topo the fade outside an open county is lighter, so the photo still reads
+const maskOpacity = () => curView() === "field" ? .72 : .38;
+document.addEventListener("mapview", () => { if(maskLayer) maskLayer.setStyle({ fillOpacity:maskOpacity(), fillColor:css("--paper") }); });
 function setMask(id){
   if(maskLayer){ map.removeLayer(maskLayer); maskLayer = null; }
   if(!id) return;
   const g = byId[id].geometry; const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
   const holes = polys.map(p => p[0].map(q=>[q[1],q[0]]));
-  maskLayer = L.polygon([[[38,-100],[38,-80],[52,-80],[52,-100]], ...holes], { pane:"mask", interactive:false, stroke:false, fillColor:css("--paper"), fillOpacity:.72 }).addTo(map);
+  maskLayer = L.polygon([[[38,-100],[38,-80],[52,-80],[52,-100]], ...holes], { pane:"mask", interactive:false, stroke:false, fillColor:css("--paper"), fillOpacity:maskOpacity() }).addTo(map);
 }
 
 /* ---------- detailed creeks, lakes and trout water, one file per county ---------- */
@@ -976,6 +979,7 @@ function openForm(kind, rec, prefill){
   $("fWt").value = r.weight_lb ? String(+r.weight_lb) : ""; $("fWtHint").textContent = r.weight_lb ? wtTxt(r.weight_lb) : ""; syncWeightRow(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
+  $("fMore").open = !!($("fTrip").value || $("fSpotLink").value); renderSpeciesChips();
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path);
@@ -1078,6 +1082,27 @@ $("entryForm").addEventListener("submit", async ev => {
     console.error(e);
     err.textContent = e && e.userMessage ? e.userMessage : "Couldn't save. Check your connection and try again.";
   }finally{ btn.disabled = false; btn.textContent = label; }
+});
+
+/* species: one tap on what you usually catch, instead of typing on a phone keyboard */
+function renderSpeciesChips(){
+  const n = {}; catches.forEach(c => { if(c.species) n[c.species] = (n[c.species] || 0) + fishOf(c); });
+  const mine = Object.entries(n).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  const base = [...$("speciesList").querySelectorAll("option")].map(o => o.value || o.textContent);
+  const list = [...new Set([...mine, ...base])].slice(0, 6);
+  const cur = $("fSpecies").value.trim().toLowerCase();
+  $("spChips").innerHTML = list.map(s => `<button type="button" class="chip sm" data-sp="${esc(s)}" aria-pressed="${s.toLowerCase() === cur}">${esc(s)}</button>`).join("");
+}
+$("spChips").addEventListener("click", e => { const b = e.target.closest("[data-sp]"); if(!b) return; $("fSpecies").value = b.dataset.sp; renderSpeciesChips(); $("fLen").focus({ preventScroll:true }); });
+$("fSpecies").addEventListener("input", renderSpeciesChips);
+/* phone keyboard: keep the field being typed in visible above it */
+$("entryForm").addEventListener("focusin", e => {
+  if(!e.target.matches("input:not([type=file]):not([type=checkbox]), textarea") || innerWidth > 760) return;
+  setTimeout(() => e.target.scrollIntoView({ block:"center", behavior:"smooth" }), 320);
+});
+if(window.visualViewport) visualViewport.addEventListener("resize", () => {
+  const kb = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop);
+  document.documentElement.style.setProperty("--kb", kb > 80 ? kb + "px" : "0px");
 });
 
 
@@ -2602,6 +2627,18 @@ function placeCoach(s){
     const w = Math.min(340, vw - 32), cy = (box.top + box.bottom) / 2;
     const below = s.at === "#map" ? false : cy < vh / 2;
     sheet.style.cssText = `position:fixed;width:${w}px;left:${Math.max(16, Math.min(vw - w - 16, (box.left + box.right) / 2 - w / 2))}px;${below ? `top:${Math.min(vh - 220, box.bottom + pad + 12)}px` : `bottom:${Math.max(16, vh - (s.at === "#map" ? box.bottom - 24 : box.top - pad - 12))}px`};max-height:${Math.round(vh * .5)}px`;
+    // keep the card off the thing it's pointing at: try below, above, then beside it
+    if(s.at !== "#map"){
+      const h = Math.min(sheet.offsetHeight || 260, vh * .5), m = 12, cx = (box.left + box.right) / 2;
+      const clampX = x => Math.max(16, Math.min(vw - w - 16, x)), clampY = y => Math.max(16, Math.min(vh - h - 16, y));
+      const tries = [
+        { l:clampX(cx - w / 2), t:box.bottom + pad + m }, { l:clampX(cx - w / 2), t:box.top - pad - m - h },
+        { l:box.left - pad - m - w, t:clampY(cy - h / 2) }, { l:box.right + pad + m, t:clampY(cy - h / 2) }];
+      const hits = c => !(c.l + w <= x1 || c.l >= x2 || c.t + h <= y1 || c.t >= y2);
+      const fits = c => c.l >= 8 && c.t >= 8 && c.l + w <= vw - 8 && c.t + h <= vh - 8 && !hits(c);
+      const pick = (below ? tries : [tries[1], tries[0], tries[2], tries[3]]).find(fits);
+      if(pick) Object.assign(sheet.style, { left:pick.l + "px", top:pick.t + "px", bottom:"auto" });
+    }
   }, 280));
 }
 window.addEventListener("resize", () => { if(!$("guide").hidden) placeCoach(guideSteps[guideStep]); });

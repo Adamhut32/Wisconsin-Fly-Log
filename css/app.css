@@ -566,3 +566,12 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .item.out .th{background:transparent;border:1.5px dashed var(--spot);color:var(--spot)}
 .mk-out{position:absolute;transform:translate(-50%,-50%);min-width:18px;height:18px;padding:0 4px;border-radius:9px;border:2px dashed var(--spot);background:var(--paper);color:var(--spot);font:700 10px/14px system-ui,sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .chiprow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+/* logging form on phones */
+.spchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 10px;padding-bottom:2px}
+.spchips::-webkit-scrollbar{display:none}
+.chip.sm{min-height:30px;padding:5px 10px;font-size:12.5px;white-space:nowrap;flex:none}
+details.more{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+details.more summary{cursor:pointer;font-weight:600;color:var(--muted);font-size:.92em}
+.scrim .sheet{padding-bottom:calc(var(--kb, 0px) + 20px + env(safe-area-inset-bottom,0px))}
+/* messages sit near the top so they never cover Add spot / Log a catch */
+.toast{bottom:auto!important;top:calc(104px + env(safe-area-inset-top,0px))}

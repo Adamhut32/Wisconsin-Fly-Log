@@ -95,6 +95,18 @@ function placeCoach(s){
     const w = Math.min(340, vw - 32), cy = (box.top + box.bottom) / 2;
     const below = s.at === "#map" ? false : cy < vh / 2;
     sheet.style.cssText = `position:fixed;width:${w}px;left:${Math.max(16, Math.min(vw - w - 16, (box.left + box.right) / 2 - w / 2))}px;${below ? `top:${Math.min(vh - 220, box.bottom + pad + 12)}px` : `bottom:${Math.max(16, vh - (s.at === "#map" ? box.bottom - 24 : box.top - pad - 12))}px`};max-height:${Math.round(vh * .5)}px`;
+    // keep the card off the thing it's pointing at: try below, above, then beside it
+    if(s.at !== "#map"){
+      const h = Math.min(sheet.offsetHeight || 260, vh * .5), m = 12, cx = (box.left + box.right) / 2;
+      const clampX = x => Math.max(16, Math.min(vw - w - 16, x)), clampY = y => Math.max(16, Math.min(vh - h - 16, y));
+      const tries = [
+        { l:clampX(cx - w / 2), t:box.bottom + pad + m }, { l:clampX(cx - w / 2), t:box.top - pad - m - h },
+        { l:box.left - pad - m - w, t:clampY(cy - h / 2) }, { l:box.right + pad + m, t:clampY(cy - h / 2) }];
+      const hits = c => !(c.l + w <= x1 || c.l >= x2 || c.t + h <= y1 || c.t >= y2);
+      const fits = c => c.l >= 8 && c.t >= 8 && c.l + w <= vw - 8 && c.t + h <= vh - 8 && !hits(c);
+      const pick = (below ? tries : [tries[1], tries[0], tries[2], tries[3]]).find(fits);
+      if(pick) Object.assign(sheet.style, { left:pick.l + "px", top:pick.t + "px", bottom:"auto" });
+    }
   }, 280));
 }
 window.addEventListener("resize", () => { if(!$("guide").hidden) placeCoach(guideSteps[guideStep]); });

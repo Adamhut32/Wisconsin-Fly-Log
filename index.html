@@ -153,23 +153,25 @@
             <select id="fMethod"><option value="fly">Fly</option><option value="spin">Spinning</option><option value="baitcast">Baitcasting</option><option value="ice">Ice fishing</option><option value="trolling">Trolling</option><option value="other">Other</option></select></div>
           <div class="field" id="fForRow"><label for="fFor">Whose fish?</label><select id="fFor"><option value="">Mine</option></select></div>
         </div>
+        <div class="spchips" id="spChips"></div>
         <div class="grid3">
-          <div class="field"><label for="fSpecies">Species</label><input id="fSpecies" list="speciesList" placeholder="Brown trout"></div>
+          <div class="field"><label for="fSpecies">Species</label><input id="fSpecies" list="speciesList" placeholder="Brown trout" autocapitalize="sentences" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="next"></div>
           <div class="field"><label for="fLen">Length (in)</label><input id="fLen" inputmode="decimal" placeholder="14"></div>
           <div class="field"><label for="fCount">Fish</label><input id="fCount" type="number" min="0" value="1"></div>
         </div>
         <div class="field" id="fWtRow" style="margin-top:12px" hidden><label for="fWt">Weight (lb)</label><input id="fWt" inputmode="decimal" placeholder="3.5, or 3 lb 8 oz" autocomplete="off"><span class="hint" id="fWtHint"></span></div>
         <button class="link" type="button" id="fWtAdd" style="margin-top:6px">+ Add weight</button>
         <div class="grid2" style="margin-top:12px">
-          <div class="field"><label for="fFly" id="fFlyLbl">Fly</label><input id="fFly" list="flyList" placeholder="#16 Elk Hair Caddis"></div>
+          <div class="field"><label for="fFly" id="fFlyLbl">Fly</label><input id="fFly" list="flyList" placeholder="#16 Elk Hair Caddis" autocapitalize="words" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="next"></div>
           <div class="field"><label for="fDate">Date</label><input id="fDate" type="date"></div>
         </div>
         <div class="field" style="margin-top:12px"><label for="fWaterName">Water</label><input id="fWaterName" list="waterNear" maxlength="120" placeholder="Fills in from the location" autocomplete="off"><datalist id="waterNear"></datalist>
           <span class="hint" id="waterHint"></span></div>
-        <div class="grid2" style="margin-top:12px">
+        <details class="more" id="fMore"><summary>Trip and spot</summary>
+        <div class="grid2" style="margin-top:8px">
           <div class="field"><label for="fTrip">Trip</label><select id="fTrip"><option value="">No trip</option></select></div>
           <div class="field"><label for="fSpotLink">At spot</label><select id="fSpotLink"><option value="">None</option></select></div>
-        </div>
+        </div></details>
       </div>
 
       <div id="spotFields" hidden>

@@ -170,6 +170,7 @@ function openForm(kind, rec, prefill){
   $("fWt").value = r.weight_lb ? String(+r.weight_lb) : ""; $("fWtHint").textContent = r.weight_lb ? wtTxt(r.weight_lb) : ""; syncWeightRow(); fillForOptions(); $("fFor").value = "";
   fillTripOptions(rec ? rec.trip_id : (r.trip_id || (tripFor($("fDate").value)?.id)));
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
+  $("fMore").open = !!($("fTrip").value || $("fSpotLink").value); renderSpeciesChips();
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path);
@@ -272,4 +273,25 @@ $("entryForm").addEventListener("submit", async ev => {
     console.error(e);
     err.textContent = e && e.userMessage ? e.userMessage : "Couldn't save. Check your connection and try again.";
   }finally{ btn.disabled = false; btn.textContent = label; }
+});
+
+/* species: one tap on what you usually catch, instead of typing on a phone keyboard */
+function renderSpeciesChips(){
+  const n = {}; catches.forEach(c => { if(c.species) n[c.species] = (n[c.species] || 0) + fishOf(c); });
+  const mine = Object.entries(n).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  const base = [...$("speciesList").querySelectorAll("option")].map(o => o.value || o.textContent);
+  const list = [...new Set([...mine, ...base])].slice(0, 6);
+  const cur = $("fSpecies").value.trim().toLowerCase();
+  $("spChips").innerHTML = list.map(s => `<button type="button" class="chip sm" data-sp="${esc(s)}" aria-pressed="${s.toLowerCase() === cur}">${esc(s)}</button>`).join("");
+}
+$("spChips").addEventListener("click", e => { const b = e.target.closest("[data-sp]"); if(!b) return; $("fSpecies").value = b.dataset.sp; renderSpeciesChips(); $("fLen").focus({ preventScroll:true }); });
+$("fSpecies").addEventListener("input", renderSpeciesChips);
+/* phone keyboard: keep the field being typed in visible above it */
+$("entryForm").addEventListener("focusin", e => {
+  if(!e.target.matches("input:not([type=file]):not([type=checkbox]), textarea") || innerWidth > 760) return;
+  setTimeout(() => e.target.scrollIntoView({ block:"center", behavior:"smooth" }), 320);
+});
+if(window.visualViewport) visualViewport.addEventListener("resize", () => {
+  const kb = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop);
+  document.documentElement.style.setProperty("--kb", kb > 80 ? kb + "px" : "0px");
 });
