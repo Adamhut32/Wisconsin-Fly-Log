@@ -151,7 +151,8 @@ function renderMeTab(el){
       <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
     ${isStaff() && (pendingCount || flagCount || reportOpenCount) ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${[pendingCount ? `${pendingCount} account${pendingCount===1?"":"s"} waiting for approval` : "", reportOpenCount ? `${reportOpenCount} report${reportOpenCount===1?"":"s"}` : "", flagCount ? `${flagCount} catch flag${flagCount===1?"":"s"} to review` : ""].filter(Boolean).join(" · ")}</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
-    <span class="hint" id="nameMsg" role="alert"></span>${titlePickerHtml()}
+    <span class="hint" id="nameMsg" role="alert"></span>
+    <div class="row2" style="margin-top:4px"><span class="muted">${profile?.username ? `Username <b style="color:var(--ink)">@${esc(profile.username)}</b>` : "No username yet"}</span><button class="link" type="button" data-a="uname">${profile?.username ? "Change" : "Pick one"}</button></div>${titlePickerHtml()}
     <div class="row2" style="margin-top:14px">
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>

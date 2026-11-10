@@ -1278,7 +1278,7 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
     if(applyGate()){ routeChannel(); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
@@ -1802,7 +1802,7 @@ function renderFriendsTab(el){
     <div style="margin-top:10px">${friendsView !== "people" ? "" : `<div class="code" style="margin:4px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
-    <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search anglers by name" aria-label="Search anglers by name" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
+    <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search by name or @username" aria-label="Search anglers by name or username" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
     ${nameResultsHtml()}
     <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}${body}</div>`;
   if($("addFriendForm")) $("addFriendForm").addEventListener("submit", async e => {
@@ -1855,8 +1855,8 @@ function nameResultsHtml(){
   const rel = p => p.relation === "friend" ? `<span class="pill fished">Friends</span>` : p.relation === "sent" ? `<span class="pill">Request sent</span>`
     : p.relation === "received" ? `<button class="btn sm ink" type="button" data-fview="people">Respond</button>` : `<button class="btn sm ink" type="button" data-addid="${esc(p.id)}">Add friend</button>`;
   return `<div id="nameResults" style="margin-top:8px">${nameResults.length ? `<ul class="list">${nameResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name, "", p.avatar_path)}
-      <span class="t"><b class="wrap">${esc(p.display_name)}${p.title ? ` <span class="pill ttl">${esc(p.title)}</span>` : ""}</b><small>${+p.mutual ? `${p.mutual} mutual friend${+p.mutual === 1 ? "" : "s"}` : "Coulee angler"}</small></span>
-      <span class="num">${rel(p)}</span></li>`).join("")}</ul>` : `<p class="muted">No anglers named "${esc(nameQ)}". Check the spelling, or ask for their friend code.</p>`}
+      <span class="t"><b class="wrap">${esc(p.display_name)}${p.title ? ` <span class="pill ttl">${esc(p.title)}</span>` : ""}</b><small>${esc([p.username ? "@" + p.username : "", +p.mutual ? `${p.mutual} mutual friend${+p.mutual === 1 ? "" : "s"}` : p.username ? "" : "Coulee angler"].filter(Boolean).join(" · "))}</small></span>
+      <span class="num">${rel(p)}</span></li>`).join("")}</ul>` : `<p class="muted">No anglers found for "${esc(nameQ)}". Check the spelling, or ask for their @username or friend code.</p>`}
     <button class="link" type="button" data-nameclear>Clear search</button></div>`;
 }
 $("log").addEventListener("click", async e => {
@@ -2067,7 +2067,8 @@ function renderMeTab(el){
       <span class="row2"><label class="btn sm" for="avFile">${profile?.avatar_path ? "Change picture" : "Add a picture"}</label><input type="file" id="avFile" accept="image/*" class="vh">${profile?.avatar_path ? `<button class="link danger" type="button" data-a="avremove">Remove</button>` : ""}</span></div></div>
     ${isStaff() && (pendingCount || flagCount || reportOpenCount) ? `<div class="card notice" style="margin:4px 0 12px"><p><b>${[pendingCount ? `${pendingCount} account${pendingCount===1?"":"s"} waiting for approval` : "", reportOpenCount ? `${reportOpenCount} report${reportOpenCount===1?"":"s"}` : "", flagCount ? `${flagCount} catch flag${flagCount===1?"":"s"} to review` : ""].filter(Boolean).join(" · ")}</b></p><div class="row2"><button class="btn sm ink" type="button" data-me="creator">Review</button></div></div>` : ""}
     <form id="nameForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="meName" value="${esc(profile?.display_name || "")}" maxlength="40" aria-label="Your name"><button class="btn" type="submit">Save name</button></form>
-    <span class="hint" id="nameMsg" role="alert"></span>${titlePickerHtml()}
+    <span class="hint" id="nameMsg" role="alert"></span>
+    <div class="row2" style="margin-top:4px"><span class="muted">${profile?.username ? `Username <b style="color:var(--ink)">@${esc(profile.username)}</b>` : "No username yet"}</span><button class="link" type="button" data-a="uname">${profile?.username ? "Change" : "Pick one"}</button></div>${titlePickerHtml()}
     <div class="row2" style="margin-top:14px">
       <button class="btn sm" type="button" data-me="help">Help</button>
       <button class="btn sm" type="button" data-me="suggest">Suggestions</button>
@@ -3868,6 +3869,54 @@ function blockedHtml(){
   if(!blocks.size) return "";
   return `<h4><span>Blocked</span><span>${blocks.size}</span></h4><ul class="list">${[...blocks].map(id => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b>${esc(nameOf(id))}</b></span><button class="link" type="button" data-blk="${esc(id)}" data-on="0">Unblock</button></li>`).join("")}</ul>`;
 }
+
+
+/* ---------- unique @usernames: everyone picks one; friends can find you by it ---------- */
+function suggestUsername(){
+  const base = (profile?.display_name || me?.email?.split("@")[0] || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "").slice(0, 16);
+  return base.length >= 3 ? base : "";
+}
+let unameTimer = null, unameRequired = false;
+function openUsername(required){
+  unameRequired = !!required;
+  $("unameTitle").textContent = profile?.username ? "Change your username" : "Pick your username";
+  $("unameLater").hidden = unameRequired;
+  $("unameIn").value = profile?.username || suggestUsername();
+  $("unameMsg").className = "hint"; $("unameMsg").textContent = "3 to 20 letters, numbers, _ or .";
+  $("unameScrim").hidden = false; setTimeout(() => { $("unameIn").focus(); checkUname(); }, 60);
+}
+function closeUsername(){ $("unameScrim").hidden = true; }
+const cleanUname = v => v.toLowerCase().replace(/^@+/, "").replace(/\s+/g, "");
+async function checkUname(){
+  const v = cleanUname($("unameIn").value), msg = $("unameMsg");
+  if(!v || v === profile?.username){ msg.className = "hint"; msg.textContent = "3 to 20 letters, numbers, _ or ."; return; }
+  const { data, error } = await sb.rpc("username_check", { u:v });
+  if(cleanUname($("unameIn").value) !== v || error) return;
+  msg.className = data ? "hint bad" : "hint ok"; msg.textContent = data || `@${v} is available.`;
+}
+$("unameIn").addEventListener("input", () => {
+  const el = $("unameIn"), v = cleanUname(el.value); if(v !== el.value) el.value = v;
+  clearTimeout(unameTimer); unameTimer = setTimeout(checkUname, 350);
+});
+$("unameLater").onclick = closeUsername;
+$("unameScrim").addEventListener("click", e => { if(e.target === $("unameScrim") && !unameRequired) closeUsername(); });
+$("unameForm").addEventListener("submit", async e => {
+  e.preventDefault(); const v = cleanUname($("unameIn").value), msg = $("unameMsg"), btn = $("unameSave");
+  if(v === profile?.username){ closeUsername(); return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc("set_username", { u:v });
+  btn.disabled = false;
+  if(error){ msg.className = "hint bad"; msg.textContent = /taken|reserved|Use |Start|period|Pick/.test(error.message) ? error.message : "Couldn't save it. Check your connection and try again."; return; }
+  profile = { ...profile, username:data }; saveCache(); closeUsername(); toast(`You're @${data}`); renderLog();
+});
+document.addEventListener("click", e => { if(e.target.closest('[data-a="uname"]')) openUsername(false); });
+// existing accounts pick one the next time the app opens (after the What's new / setup screens are out of the way)
+let unameAsked = false;
+setInterval(() => {
+  if(unameAsked || !me || !profile || profile.username || profile.status !== "approved" || !navigator.onLine) return;
+  if([...document.querySelectorAll(".scrim")].some(s => !s.hidden)) return;
+  unameAsked = true; openUsername(true);
+}, 2000);
 
 
 /* ---------- which creek or lake a catch came from, worked out from its location ---------- */

@@ -263,6 +263,18 @@
 </div>
 
 <!-- what's new -->
+<div class="scrim guide" id="unameScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="unameTitle">
+    <div class="eyebrow">New in Coulee</div>
+    <h3 id="unameTitle">Pick your username</h3>
+    <p class="muted" id="unameLead">Friends can find you by your @username. Your name still shows on your catches.</p>
+    <form id="unameForm" novalidate>
+      <div class="uname"><span>@</span><input id="unameIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" aria-label="Username"></div>
+      <span class="hint" id="unameMsg" role="alert">3 to 20 letters, numbers, _ or .</span>
+      <div class="actions"><button class="btn link" type="button" id="unameLater" hidden>Cancel</button><button class="btn ink" type="submit" id="unameSave">Save username</button></div>
+    </form>
+  </div>
+</div>
 <div class="scrim guide" id="news" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="newsTitle">
     <div class="eyebrow">What's new</div>

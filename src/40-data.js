@@ -197,7 +197,7 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
     if(applyGate()){ routeChannel(); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }

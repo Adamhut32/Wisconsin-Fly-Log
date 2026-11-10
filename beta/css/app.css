@@ -554,3 +554,7 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .galn{position:absolute;right:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;white-space:nowrap;pointer-events:none}
 .post .gal.ph{display:flex;aspect-ratio:auto;margin:0;border-radius:0;background:none}
 .post .gal.ph img{aspect-ratio:4/3;background:var(--fish-soft)}
+.uname{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--paper);padding-left:10px;margin:10px 0 4px}
+.uname span{color:var(--muted);font-weight:700}
+.uname input{border:0;background:transparent;padding-left:4px;outline:none;box-shadow:none}
+.uname:focus-within{outline:2px solid var(--fish);outline-offset:1px}

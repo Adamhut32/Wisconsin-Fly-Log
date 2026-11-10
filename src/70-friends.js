@@ -93,7 +93,7 @@ function renderFriendsTab(el){
     <div style="margin-top:10px">${friendsView !== "people" ? "" : `<div class="code" style="margin:4px 0 12px"><span>Your friend code</span><b>${esc(profile?.friend_code || "······")}</b><button class="btn sm" type="button" data-a="sharecode">Share</button></div>
     <form id="addFriendForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="friendCode" placeholder="Friend's code" autocapitalize="characters" maxlength="8" aria-label="Friend's code" style="font-family:var(--f-data);letter-spacing:.12em"><button class="btn ink" type="submit">Add</button></form>
     <span class="hint" id="friendMsg" role="alert"></span>
-    <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search anglers by name" aria-label="Search anglers by name" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
+    <form id="nameSearchForm" class="row2" novalidate style="flex-wrap:nowrap;margin-top:8px"><input id="nameQ" type="search" placeholder="Or search by name or @username" aria-label="Search anglers by name or username" value="${esc(nameQ)}" autocomplete="off"><button class="btn" type="submit">Search</button></form>
     ${nameResultsHtml()}
     <label class="check" style="margin-top:10px"><input type="checkbox" id="showFriendsBox" ${showFriends?"checked":""}> Show friends' catches on the map</label>`}${body}</div>`;
   if($("addFriendForm")) $("addFriendForm").addEventListener("submit", async e => {
@@ -146,8 +146,8 @@ function nameResultsHtml(){
   const rel = p => p.relation === "friend" ? `<span class="pill fished">Friends</span>` : p.relation === "sent" ? `<span class="pill">Request sent</span>`
     : p.relation === "received" ? `<button class="btn sm ink" type="button" data-fview="people">Respond</button>` : `<button class="btn sm ink" type="button" data-addid="${esc(p.id)}">Add friend</button>`;
   return `<div id="nameResults" style="margin-top:8px">${nameResults.length ? `<ul class="list">${nameResults.map(p => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(p.id, p.display_name, "", p.avatar_path)}
-      <span class="t"><b class="wrap">${esc(p.display_name)}${p.title ? ` <span class="pill ttl">${esc(p.title)}</span>` : ""}</b><small>${+p.mutual ? `${p.mutual} mutual friend${+p.mutual === 1 ? "" : "s"}` : "Coulee angler"}</small></span>
-      <span class="num">${rel(p)}</span></li>`).join("")}</ul>` : `<p class="muted">No anglers named "${esc(nameQ)}". Check the spelling, or ask for their friend code.</p>`}
+      <span class="t"><b class="wrap">${esc(p.display_name)}${p.title ? ` <span class="pill ttl">${esc(p.title)}</span>` : ""}</b><small>${esc([p.username ? "@" + p.username : "", +p.mutual ? `${p.mutual} mutual friend${+p.mutual === 1 ? "" : "s"}` : p.username ? "" : "Coulee angler"].filter(Boolean).join(" · "))}</small></span>
+      <span class="num">${rel(p)}</span></li>`).join("")}</ul>` : `<p class="muted">No anglers found for "${esc(nameQ)}". Check the spelling, or ask for their @username or friend code.</p>`}
     <button class="link" type="button" data-nameclear>Clear search</button></div>`;
 }
 $("log").addEventListener("click", async e => {
