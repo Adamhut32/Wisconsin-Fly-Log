@@ -3,7 +3,7 @@
 pane("hill", 396, false);
 const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
   { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4,
-    bounds:L.latLngBounds([[42.0, -93.3], [47.6, -86.2]]) }   // only Wisconsin: outside its data the service sends blank grey tiles);
+    bounds:L.latLngBounds([[42.0, -93.3], [47.6, -86.2]]) });   // only Wisconsin: outside its data the service sends blank grey tiles
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){
   const on = terrainOn && mapView === "field";
