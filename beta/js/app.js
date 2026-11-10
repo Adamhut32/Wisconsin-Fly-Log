@@ -675,7 +675,7 @@ function catchPopup(c){
   const head = `${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}`;
   return popupShell("catch", c, `<h3>${head}</h3>${c.water?`<div class="meta"><b>${esc(c.water)}</b></div>`:""}<div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""}${spot?` · ${esc(spot.name)}`:""}</div>
     ${trip?`<div class="meta">Trip: <button class="link" data-a="trip" data-id="${esc(trip.id)}">${esc(trip.name)}</button></div>`:""}
-    ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
+    ${photoGallery(c)}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
     <div class="meta" style="margin-top:4px">${VIS[c.visibility]||""}${c._pending?" · Waiting to sync":""}</div>`);
 }
@@ -686,7 +686,7 @@ function friendCatchPopup(c){
     <h3>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</h3>
     <div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""} · ${esc(countyName(c.county))}</div>
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
-    ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
+    ${photoGallery(c)}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
     <div class="row">${c.lat!=null?`<a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
   return div;
@@ -842,7 +842,17 @@ function parseTiff(v, start){
 }
 
 /* ---------- catch / spot form ---------- */
-let photoDate = null, photoExif = null;
+let photoDate = null, photoExif = null, ph2File = null, ph2Url = null, ph2Removed = false;
+function setPh2(url, title){
+  $("ph2Pv").style.backgroundImage = url ? `url('${url}')` : ""; $("ph2Pv").textContent = url ? "" : "+";
+  $("ph2Title").textContent = title; $("ph2Del").hidden = !url;
+}
+$("fPhoto2").addEventListener("change", () => {
+  const f = $("fPhoto2").files[0]; if(!f) return;
+  ph2File = f; ph2Removed = false; if(ph2Url) URL.revokeObjectURL(ph2Url); ph2Url = URL.createObjectURL(f);
+  setPh2(ph2Url, "Second photo added");
+});
+$("ph2Del").onclick = () => { ph2File = null; ph2Removed = true; $("fPhoto2").value = ""; setPh2(null, "Add a second photo"); };
 let formKind = "catch", editing = null, photoFile = null, photoPreviewUrl = null, picking = false, pickMarker = null, tripTouched = false, visibility = "county";
 function setKind(k){
   formKind = k;
@@ -968,6 +978,8 @@ function openForm(kind, rec, prefill){
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path);
+  ph2File = null; ph2Removed = false; $("fPhoto2").value = "";
+  const p2 = morePaths(rec)[0]; setPh2(p2 ? photoSrc(p2) : null, p2 ? "Second photo saved · tap to replace" : "Add a second photo");
   if(r.photo_path) setPhotoPreview(url, "Photo saved", "Choose another to replace it");
   else setPhotoPreview(null, "Add a photo", "Location and date fill in from the photo when it has them");
   coordHint();
@@ -1026,7 +1038,7 @@ $("entryForm").addEventListener("submit", async ev => {
   try{
     const base = { id: editing ? editing.id : uuid(), lat: c ? c.lat : null, lng: c ? c.lng : null, county: c ? countyAt(c.lat,c.lng) : (editing?.county || null),
       notes: $("fNotes").value.trim() || null, visibility };
-    let rec, table, blob = null;
+    let rec, table, blob = null, second = null;
     if(formKind==="catch"){
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
@@ -1037,6 +1049,9 @@ $("entryForm").addEventListener("submit", async ev => {
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
       if(blob){ try{ rec.photo_hash = await dhash(blob); }catch(e){ rec.photo_hash = null; } rec.photo_meta = photoMeta(photoExif, c); }
       if($("fCount").value === "") rec.count = 1;
+      if(ph2File){ btn.textContent = "Preparing photos…"; const b2 = await shrink(ph2File); let h2 = null; try{ h2 = await dhash(b2); }catch(e){} second = { blob:b2, hash:h2 }; }
+      else if(ph2Removed) second = { remove:true };
+      if(second && !rec.photo_path && !blob && second.blob){ blob = second.blob; rec.photo_hash = second.hash; second = null; }   // only one photo: it becomes the main one
     } else {
       table = "spots";
       rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value, share_with: visibility !== "private" && shareWith ? [...shareWith] : null };
@@ -1052,7 +1067,7 @@ $("entryForm").addEventListener("submit", async ev => {
       closeForm(); toast(`Sent to ${fname}. It joins their log when they accept it.`); return;
     }
     const before = table === "catches" && !wasEditing ? catches.slice() : null;
-    await saveRecord(table, rec, blob, wasEditing);
+    await saveRecord(table, rec, blob, wasEditing, second);
     if(before) setTimeout(() => celebrate(rec, before), 350);
     closeForm();
     const where = rec.county ? countyName(rec.county) : "your log";
@@ -1077,7 +1092,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
@@ -1096,6 +1111,16 @@ const idb = (() => {
 /* ---------- photo display: short-lived signed links, fetched in batches ---------- */
 const photoCache = {}, pendingPhotoUrls = {};
 let photoWant = new Set(), photoTimer = null;
+// extra photo paths of a catch (own catches store [{p,h}], friends' come as plain paths)
+const morePaths = c => (c && c.more_photos ? c.more_photos.map(x => typeof x === "string" ? x : x && x.p).filter(Boolean) : []);
+// one photo, or a swipeable pair
+function photoGallery(c, cls){
+  const urls = [c.photo_path, ...morePaths(c)].filter(Boolean).map(photoSrc).filter(Boolean);
+  const alt = esc(c.species || "Catch") + " photo";
+  if(!urls.length) return "";
+  if(urls.length === 1) return `<img ${cls ? `class="${cls}"` : ""} src="${urls[0]}" alt="${alt}" loading="lazy">`;
+  return `<div class="galw ${cls ? cls + "w" : ""}"><div class="gal ${cls || ""}">${urls.map((u, i) => `<img src="${u}" alt="${alt} ${i + 1} of ${urls.length}" loading="lazy">`).join("")}</div><span class="galn">${urls.length} photos · swipe</span></div>`;
+}
 function photoSrc(path){
   if(!path) return "";
   if(pendingPhotoUrls[path]) return pendingPhotoUrls[path];
@@ -1136,6 +1161,10 @@ async function flush(){
       const job = outbox[0];
       try{
         if(job.op === "upsert"){
+          for(const p of job.more || []){
+            const b = await idb.get(p);
+            if(b){ const { error } = await sb.storage.from("photos").upload(p, b, { contentType:"image/jpeg", upsert:true }); if(error) throw error; }
+          }
           if(job.photo){
             const blob = await idb.get(job.photo);
             if(blob){
@@ -1152,12 +1181,15 @@ async function flush(){
             });
           }
           if(job.oldPhoto) await sb.storage.from("photos").remove([job.oldPhoto]);
+          if(job.oldMore?.length) await sb.storage.from("photos").remove(job.oldMore);
+          for(const p of job.more || []) await idb.del(p).catch(()=>{});
           if(job.photo){ await idb.del(job.photo).catch(()=>{}); }
           const rec = listFor(job.table).find(r => r.id === job.row.id); if(rec) delete rec._pending;
         } else if(job.op === "delete"){
           const { error } = await sb.from(job.table).delete().eq("id", job.id);
           if(error) throw error;
-          if(job.photo) await sb.storage.from("photos").remove([job.photo]);
+          const gone = [job.photo, ...(job.more || [])].filter(Boolean);
+          if(gone.length) await sb.storage.from("photos").remove(gone);
         }
         outbox.shift(); saveOutbox(); syncFailing = false;
       }catch(e){
@@ -1175,7 +1207,7 @@ window.addEventListener("online", () => { loadAll(); flush(); });
 window.addEventListener("offline", () => { updateSync(); if(loadState === "ready") { loadState = "offline"; renderLog(); } });
 setInterval(() => { if(outbox.length) flush(); }, 30000);
 
-async function saveRecord(table, rec, blob, isEdit){
+async function saveRecord(table, rec, blob, isEdit, second){
   if(!me) throw Object.assign(new Error("signed out"), { userMessage:"Sign in to save." });
   const job = { op:"upsert", table, row: pick(table, rec), isNew: !isEdit };
   if(blob){
@@ -1185,8 +1217,19 @@ async function saveRecord(table, rec, blob, isEdit){
     if(isEdit && rec.photo_path) job.oldPhoto = rec.photo_path;
     rec.photo_path = path; job.row.photo_path = path; job.photo = path;
   }
+  // second photo: second = { blob, hash } to add/replace, or { remove:true }
+  if(second && table === "catches"){
+    const old = morePaths(isEdit ? (listFor(table).find(r => r.id === rec.id) || {}) : {});
+    if(second.blob){
+      const path = `${me.id}/${rec.id}-2-${Date.now()}.jpg`;
+      await idb.put(path, second.blob); pendingPhotoUrls[path] = URL.createObjectURL(second.blob);
+      rec.more_photos = [{ p:path, h:second.hash || null }]; job.more = [path];
+    } else if(second.remove) rec.more_photos = null;
+    job.row.more_photos = rec.more_photos ?? null;
+    if((second.blob || second.remove) && old.length) job.oldMore = old.filter(p => !pendingPhotoUrls[p]);
+  }
   // newer edits of the same record replace a waiting one
-  outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id && !j.photo));
+  outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id && !j.photo && !j.more));
   outbox.push(job); saveOutbox();
   const list = listFor(table).filter(r => r.id !== rec.id);
   const prev = listFor(table).find(r => r.id === rec.id) || {};
@@ -1200,7 +1243,7 @@ async function removeRecord(kind, rec){
   if(table === "spots") catches.forEach(c => { if(c.spot_id === rec.id) c.spot_id = null; });
   if(table === "trips") catches.forEach(c => { if(c.trip_id === rec.id) c.trip_id = null; });
   outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id));
-  outbox.push({ op:"delete", table, id:rec.id, photo: rec.photo_path && !pendingPhotoUrls[rec.photo_path] ? rec.photo_path : null });
+  outbox.push({ op:"delete", table, id:rec.id, photo: rec.photo_path && !pendingPhotoUrls[rec.photo_path] ? rec.photo_path : null, more: morePaths(rec).filter(p => !pendingPhotoUrls[p]) });
   saveOutbox(); saveCache(); renderAll();
   toast(`${kind === "catch" ? "Catch" : kind === "spot" ? "Spot" : "Trip"} deleted`);
   flush();
@@ -1719,7 +1762,7 @@ function renderFriendsTab(el){
   let body = "";
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
-    body = posts.length ? `<div class="feed">${posts.map(c => { const url = photoSrc(c.photo_path); return `<article class="post">${url?`<img class="ph" src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
+    body = posts.length ? `<div class="feed">${posts.map(c => { return `<article class="post">${photoGallery(c, "ph")}
       <div class="pb"><span class="who">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}${titlePill(c.user_id)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
       <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
@@ -3406,7 +3449,7 @@ const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/servi
   { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4,
     bounds:L.latLngBounds([[42.0, -93.3], [47.6, -86.2]]) });   // only Wisconsin: outside its data the service sends blank grey tiles
 // the shading is blended onto what's beneath it; give it a plain paper backdrop so it never shows as grey rectangles
-pane("hillbase", 394, false);
+pane("hillbase", 379, false);   // under the land and fishing-region tints, so it only fills the background
 const hillBase = L.rectangle([[-85, -180], [85, 180]], { pane:"hillbase", stroke:false, fillOpacity:1, interactive:false, className:"hillbase" });
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){

@@ -11,7 +11,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"]
 };
@@ -30,6 +30,16 @@ const idb = (() => {
 /* ---------- photo display: short-lived signed links, fetched in batches ---------- */
 const photoCache = {}, pendingPhotoUrls = {};
 let photoWant = new Set(), photoTimer = null;
+// extra photo paths of a catch (own catches store [{p,h}], friends' come as plain paths)
+const morePaths = c => (c && c.more_photos ? c.more_photos.map(x => typeof x === "string" ? x : x && x.p).filter(Boolean) : []);
+// one photo, or a swipeable pair
+function photoGallery(c, cls){
+  const urls = [c.photo_path, ...morePaths(c)].filter(Boolean).map(photoSrc).filter(Boolean);
+  const alt = esc(c.species || "Catch") + " photo";
+  if(!urls.length) return "";
+  if(urls.length === 1) return `<img ${cls ? `class="${cls}"` : ""} src="${urls[0]}" alt="${alt}" loading="lazy">`;
+  return `<div class="galw ${cls ? cls + "w" : ""}"><div class="gal ${cls || ""}">${urls.map((u, i) => `<img src="${u}" alt="${alt} ${i + 1} of ${urls.length}" loading="lazy">`).join("")}</div><span class="galn">${urls.length} photos · swipe</span></div>`;
+}
 function photoSrc(path){
   if(!path) return "";
   if(pendingPhotoUrls[path]) return pendingPhotoUrls[path];
@@ -70,6 +80,10 @@ async function flush(){
       const job = outbox[0];
       try{
         if(job.op === "upsert"){
+          for(const p of job.more || []){
+            const b = await idb.get(p);
+            if(b){ const { error } = await sb.storage.from("photos").upload(p, b, { contentType:"image/jpeg", upsert:true }); if(error) throw error; }
+          }
           if(job.photo){
             const blob = await idb.get(job.photo);
             if(blob){
@@ -86,12 +100,15 @@ async function flush(){
             });
           }
           if(job.oldPhoto) await sb.storage.from("photos").remove([job.oldPhoto]);
+          if(job.oldMore?.length) await sb.storage.from("photos").remove(job.oldMore);
+          for(const p of job.more || []) await idb.del(p).catch(()=>{});
           if(job.photo){ await idb.del(job.photo).catch(()=>{}); }
           const rec = listFor(job.table).find(r => r.id === job.row.id); if(rec) delete rec._pending;
         } else if(job.op === "delete"){
           const { error } = await sb.from(job.table).delete().eq("id", job.id);
           if(error) throw error;
-          if(job.photo) await sb.storage.from("photos").remove([job.photo]);
+          const gone = [job.photo, ...(job.more || [])].filter(Boolean);
+          if(gone.length) await sb.storage.from("photos").remove(gone);
         }
         outbox.shift(); saveOutbox(); syncFailing = false;
       }catch(e){
@@ -109,7 +126,7 @@ window.addEventListener("online", () => { loadAll(); flush(); });
 window.addEventListener("offline", () => { updateSync(); if(loadState === "ready") { loadState = "offline"; renderLog(); } });
 setInterval(() => { if(outbox.length) flush(); }, 30000);
 
-async function saveRecord(table, rec, blob, isEdit){
+async function saveRecord(table, rec, blob, isEdit, second){
   if(!me) throw Object.assign(new Error("signed out"), { userMessage:"Sign in to save." });
   const job = { op:"upsert", table, row: pick(table, rec), isNew: !isEdit };
   if(blob){
@@ -119,8 +136,19 @@ async function saveRecord(table, rec, blob, isEdit){
     if(isEdit && rec.photo_path) job.oldPhoto = rec.photo_path;
     rec.photo_path = path; job.row.photo_path = path; job.photo = path;
   }
+  // second photo: second = { blob, hash } to add/replace, or { remove:true }
+  if(second && table === "catches"){
+    const old = morePaths(isEdit ? (listFor(table).find(r => r.id === rec.id) || {}) : {});
+    if(second.blob){
+      const path = `${me.id}/${rec.id}-2-${Date.now()}.jpg`;
+      await idb.put(path, second.blob); pendingPhotoUrls[path] = URL.createObjectURL(second.blob);
+      rec.more_photos = [{ p:path, h:second.hash || null }]; job.more = [path];
+    } else if(second.remove) rec.more_photos = null;
+    job.row.more_photos = rec.more_photos ?? null;
+    if((second.blob || second.remove) && old.length) job.oldMore = old.filter(p => !pendingPhotoUrls[p]);
+  }
   // newer edits of the same record replace a waiting one
-  outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id && !j.photo));
+  outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id && !j.photo && !j.more));
   outbox.push(job); saveOutbox();
   const list = listFor(table).filter(r => r.id !== rec.id);
   const prev = listFor(table).find(r => r.id === rec.id) || {};
@@ -134,7 +162,7 @@ async function removeRecord(kind, rec){
   if(table === "spots") catches.forEach(c => { if(c.spot_id === rec.id) c.spot_id = null; });
   if(table === "trips") catches.forEach(c => { if(c.trip_id === rec.id) c.trip_id = null; });
   outbox = outbox.filter(j => !(j.op === "upsert" && j.table === table && j.row.id === rec.id));
-  outbox.push({ op:"delete", table, id:rec.id, photo: rec.photo_path && !pendingPhotoUrls[rec.photo_path] ? rec.photo_path : null });
+  outbox.push({ op:"delete", table, id:rec.id, photo: rec.photo_path && !pendingPhotoUrls[rec.photo_path] ? rec.photo_path : null, more: morePaths(rec).filter(p => !pendingPhotoUrls[p]) });
   saveOutbox(); saveCache(); renderAll();
   toast(`${kind === "catch" ? "Catch" : kind === "spot" ? "Spot" : "Trip"} deleted`);
   flush();

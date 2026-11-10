@@ -98,7 +98,7 @@ function catchPopup(c){
   const head = `${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}`;
   return popupShell("catch", c, `<h3>${head}</h3>${c.water?`<div class="meta"><b>${esc(c.water)}</b></div>`:""}<div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""}${spot?` · ${esc(spot.name)}`:""}</div>
     ${trip?`<div class="meta">Trip: <button class="link" data-a="trip" data-id="${esc(trip.id)}">${esc(trip.name)}</button></div>`:""}
-    ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
+    ${photoGallery(c)}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
     <div class="meta" style="margin-top:4px">${VIS[c.visibility]||""}${c._pending?" · Waiting to sync":""}</div>`);
 }
@@ -109,7 +109,7 @@ function friendCatchPopup(c){
     <h3>${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${c.weight_lb?` · ${wtTxt(c.weight_lb)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</h3>
     <div class="meta">${esc(fmtDate(c.caught_on))}${c.fly?` · ${esc(c.fly)}`:""} · ${esc(countyName(c.county))}</div>
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
-    ${url?`<img src="${url}" alt="${esc(c.species||"Catch")} photo" loading="lazy">`:""}
+    ${photoGallery(c)}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
     <div class="row">${c.lat!=null?`<a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
   return div;

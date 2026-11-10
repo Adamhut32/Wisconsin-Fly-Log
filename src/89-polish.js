@@ -5,7 +5,7 @@ const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/servi
   { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4,
     bounds:L.latLngBounds([[42.0, -93.3], [47.6, -86.2]]) });   // only Wisconsin: outside its data the service sends blank grey tiles
 // the shading is blended onto what's beneath it; give it a plain paper backdrop so it never shows as grey rectangles
-pane("hillbase", 394, false);
+pane("hillbase", 379, false);   // under the land and fishing-region tints, so it only fills the background
 const hillBase = L.rectangle([[-85, -180], [85, 180]], { pane:"hillbase", stroke:false, fillOpacity:1, interactive:false, className:"hillbase" });
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){

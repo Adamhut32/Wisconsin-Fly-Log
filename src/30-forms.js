@@ -37,7 +37,17 @@ function parseTiff(v, start){
 }
 
 /* ---------- catch / spot form ---------- */
-let photoDate = null, photoExif = null;
+let photoDate = null, photoExif = null, ph2File = null, ph2Url = null, ph2Removed = false;
+function setPh2(url, title){
+  $("ph2Pv").style.backgroundImage = url ? `url('${url}')` : ""; $("ph2Pv").textContent = url ? "" : "+";
+  $("ph2Title").textContent = title; $("ph2Del").hidden = !url;
+}
+$("fPhoto2").addEventListener("change", () => {
+  const f = $("fPhoto2").files[0]; if(!f) return;
+  ph2File = f; ph2Removed = false; if(ph2Url) URL.revokeObjectURL(ph2Url); ph2Url = URL.createObjectURL(f);
+  setPh2(ph2Url, "Second photo added");
+});
+$("ph2Del").onclick = () => { ph2File = null; ph2Removed = true; $("fPhoto2").value = ""; setPh2(null, "Add a second photo"); };
 let formKind = "catch", editing = null, photoFile = null, photoPreviewUrl = null, picking = false, pickMarker = null, tripTouched = false, visibility = "county";
 function setKind(k){
   formKind = k;
@@ -163,6 +173,8 @@ function openForm(kind, rec, prefill){
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path);
+  ph2File = null; ph2Removed = false; $("fPhoto2").value = "";
+  const p2 = morePaths(rec)[0]; setPh2(p2 ? photoSrc(p2) : null, p2 ? "Second photo saved · tap to replace" : "Add a second photo");
   if(r.photo_path) setPhotoPreview(url, "Photo saved", "Choose another to replace it");
   else setPhotoPreview(null, "Add a photo", "Location and date fill in from the photo when it has them");
   coordHint();
@@ -221,7 +233,7 @@ $("entryForm").addEventListener("submit", async ev => {
   try{
     const base = { id: editing ? editing.id : uuid(), lat: c ? c.lat : null, lng: c ? c.lng : null, county: c ? countyAt(c.lat,c.lng) : (editing?.county || null),
       notes: $("fNotes").value.trim() || null, visibility };
-    let rec, table, blob = null;
+    let rec, table, blob = null, second = null;
     if(formKind==="catch"){
       table = "catches";
       if(photoFile){ btn.textContent = "Preparing photo…"; blob = await shrink(photoFile); }
@@ -232,6 +244,9 @@ $("entryForm").addEventListener("submit", async ev => {
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
       if(blob){ try{ rec.photo_hash = await dhash(blob); }catch(e){ rec.photo_hash = null; } rec.photo_meta = photoMeta(photoExif, c); }
       if($("fCount").value === "") rec.count = 1;
+      if(ph2File){ btn.textContent = "Preparing photos…"; const b2 = await shrink(ph2File); let h2 = null; try{ h2 = await dhash(b2); }catch(e){} second = { blob:b2, hash:h2 }; }
+      else if(ph2Removed) second = { remove:true };
+      if(second && !rec.photo_path && !blob && second.blob){ blob = second.blob; rec.photo_hash = second.hash; second = null; }   // only one photo: it becomes the main one
     } else {
       table = "spots";
       rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value, share_with: visibility !== "private" && shareWith ? [...shareWith] : null };
@@ -247,7 +262,7 @@ $("entryForm").addEventListener("submit", async ev => {
       closeForm(); toast(`Sent to ${fname}. It joins their log when they accept it.`); return;
     }
     const before = table === "catches" && !wasEditing ? catches.slice() : null;
-    await saveRecord(table, rec, blob, wasEditing);
+    await saveRecord(table, rec, blob, wasEditing, second);
     if(before) setTimeout(() => celebrate(rec, before), 350);
     closeForm();
     const where = rec.county ? countyName(rec.county) : "your log";
