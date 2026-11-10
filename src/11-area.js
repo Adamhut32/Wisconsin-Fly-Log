@@ -2,7 +2,7 @@
 /* ---------- creeks for every county on screen once you zoom in, so water reads across county lines ---------- */
 pane("area", 429);               // above the fade outside an open county, below the open county itself
 const AREA_ZOOM = 9.5;
-const areaRenderer = L.canvas({ pane:"area", tolerance:6, padding:.6 });
+const areaRenderer = L.canvas({ pane:"area", tolerance:6, padding:canvasPad() });
 const areaGroups = {};           // county id -> { g, streams, extra }
 const areaOn = new Set();        // counties drawn right now
 let areaWant = new Set(), countyBounds = null;
@@ -82,7 +82,9 @@ async function updateArea(){
     if(areaAgain){ areaAgain = false; updateArea(); }
   }
 }
-map.on("moveend zoomend", updateArea);
+// heavy work waits until the map settles, instead of running after every scroll-zoom step
+let settleTimer = null;
+map.on("moveend zoomend", () => { clearTimeout(settleTimer); settleTimer = setTimeout(() => { updateArea(); setTimeout(updateHd, 30); document.dispatchEvent(new Event("mapsettled")); }, 220); });
 
 /* ---------- detailed creek lines (DNR 24K, ~3 m) once you're zoomed in close; light lines otherwise ---------- */
 const HD_ZOOM = 12;
@@ -105,11 +107,10 @@ async function updateHd(){
     if(changed){ drawLabels(); document.dispatchEvent(new Event("areachange")); }
   }finally{ hdBusy = false; if(hdAgain){ hdAgain = false; setTimeout(updateHd, 0); } }
 }
-map.on("zoomend moveend", () => setTimeout(updateHd, 50));
 document.addEventListener("areachange", () => setTimeout(updateHd, 0));
 /* zoomed in, the county "fish caught here" shading would sit over the creeks: fade it out */
 let areaShade = null;
-map.on("zoomend", () => { const z = Math.round(map.getZoom() * 2) / 2; if(z !== areaShade){ areaShade = z; countyLayer.setStyle(countyStyle); } });
+document.addEventListener("mapsettled", () => { const z = Math.round(map.getZoom() * 2) / 2; if(z !== areaShade){ areaShade = z; countyLayer.setStyle(countyStyle); } });
 document.addEventListener("mapview", () => countyLayer.setStyle(countyStyle));
 /* the creek canvas sits over the counties, so a tap on open land opens that county */
 // (taps on open land are handled by the county highlight in 89-countytap.js)

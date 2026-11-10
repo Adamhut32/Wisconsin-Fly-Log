@@ -72,6 +72,8 @@ function setMask(id){
 const waterCache = {}, troutCache = {};
 let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], detailLabelsExtra = [];
 /* the creek data has a point every ~60 m, so lines look jagged up close; round the corners (Chaikin) so they read like water */
+// how far past the screen edge to pre-draw: generous on phones (quick swipes), modest on big monitors (huge canvases are slow)
+const canvasPad = () => innerWidth * innerHeight > 1.2e6 ? .2 : innerWidth > 700 ? .35 : .5;
 function smoothPath(pts, n = 2){
   if(pts.length < 3) return pts;
   // detailed lines (a point every ~30 m or closer) already curve; only round off sparse ones
@@ -156,7 +158,7 @@ function drawDetail(id, w, t){
   if(detailLayer){ map.removeLayer(detailLayer); detailLayer = null; }
   if(detailRenderer){ map.removeLayer(detailRenderer); detailRenderer = null; }
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
-  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:.6 });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
+  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:canvasPad() });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
     const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     if(name && name !== "Unnamed"){ p.on("click", e => openWaterPopup(e, name, waterType(name))); detailLakes.push({ name, poly:p }); }
@@ -201,7 +203,7 @@ async function loadNearby(id){
   const lb = {}; countyLayer.eachLayer(l => lb[l.feature.id] = l.getBounds());
   const around = lb[id].pad(0.35);
   const ids = Object.keys(lb).filter(k => k !== id && around.intersects(lb[k]));
-  const R = nearbyRenderer = L.canvas({ pane:"nearby", padding:.6 });
+  const R = nearbyRenderer = L.canvas({ pane:"nearby", padding:canvasPad() });
   const layer = nearbyLayer = L.layerGroup().addTo(map);
   await Promise.all(ids.map(async k => {
     let w, t;
@@ -238,7 +240,14 @@ map.on("zoomstart", () => { labelCanvas.style.visibility = "hidden"; });
 map.on("zoomend", () => { labelCanvas.style.visibility = ""; drawLabels(); });
 let labelQueued = false;
 function drawLabels(){ if(labelQueued) return; labelQueued = true; requestAnimationFrame(() => { labelQueued = false; renderLabels(); }); }
-map.on("move zoom resize viewreset", drawLabels);
+// while the map is moving, refresh names at most ~8 times a second (every frame was the main cause of zoom lag)
+let labelMoveAt = 0, labelMoveTimer = null;
+map.on("move zoom", () => {
+  const now = performance.now();
+  if(now - labelMoveAt > 120){ labelMoveAt = now; drawLabels(); }
+  clearTimeout(labelMoveTimer); labelMoveTimer = setTimeout(drawLabels, 130);
+});
+map.on("resize viewreset moveend", drawLabels);
 function renderLabels(){
   const el = map.getContainer(), W = el.clientWidth, H = el.clientHeight, dpr = window.devicePixelRatio || 1;
   if(labelCanvas.width !== W*dpr || labelCanvas.height !== H*dpr){ labelCanvas.width = W*dpr; labelCanvas.height = H*dpr; labelCanvas.style.width = W+"px"; labelCanvas.style.height = H+"px"; }

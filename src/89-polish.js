@@ -4,11 +4,14 @@ pane("hill", 396, false);
 const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
   { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4,
     bounds:L.latLngBounds([[42.0, -93.3], [47.6, -86.2]]) });   // only Wisconsin: outside its data the service sends blank grey tiles
+// the shading is blended onto what's beneath it; give it a plain paper backdrop so it never shows as grey rectangles
+pane("hillbase", 394, false);
+const hillBase = L.rectangle([[-85, -180], [85, 180]], { pane:"hillbase", stroke:false, fillOpacity:1, interactive:false, className:"hillbase" });
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){
   const on = terrainOn && mapView === "field";
-  if(on && !map.hasLayer(hillLayer)) hillLayer.addTo(map);
-  if(!on && map.hasLayer(hillLayer)) map.removeLayer(hillLayer);
+  if(on && !map.hasLayer(hillLayer)){ hillBase.addTo(map); hillLayer.addTo(map); }
+  if(!on && map.hasLayer(hillLayer)){ map.removeLayer(hillLayer); map.removeLayer(hillBase); }
   const b = $("terrainToggle");
   if(b){ b.hidden = mapView !== "field"; b.setAttribute("aria-pressed", String(terrainOn)); b.textContent = terrainOn ? "Terrain on" : "Terrain off"; }
 }
@@ -38,6 +41,6 @@ function updateFlow(){
   }
   flowLayer = g.addTo(map);
 }
-map.on("moveend zoomend", updateFlow);
+document.addEventListener("mapsettled", updateFlow);
 document.addEventListener("mapview", updateFlow);
 document.addEventListener("areachange", updateFlow);

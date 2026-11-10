@@ -155,6 +155,8 @@ function setMask(id){
 const waterCache = {}, troutCache = {};
 let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], detailLabelsExtra = [];
 /* the creek data has a point every ~60 m, so lines look jagged up close; round the corners (Chaikin) so they read like water */
+// how far past the screen edge to pre-draw: generous on phones (quick swipes), modest on big monitors (huge canvases are slow)
+const canvasPad = () => innerWidth * innerHeight > 1.2e6 ? .2 : innerWidth > 700 ? .35 : .5;
 function smoothPath(pts, n = 2){
   if(pts.length < 3) return pts;
   // detailed lines (a point every ~30 m or closer) already curve; only round off sparse ones
@@ -239,7 +241,7 @@ function drawDetail(id, w, t){
   if(detailLayer){ map.removeLayer(detailLayer); detailLayer = null; }
   if(detailRenderer){ map.removeLayer(detailRenderer); detailRenderer = null; }
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
-  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:.6 });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
+  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:canvasPad() });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
     const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     if(name && name !== "Unnamed"){ p.on("click", e => openWaterPopup(e, name, waterType(name))); detailLakes.push({ name, poly:p }); }
@@ -284,7 +286,7 @@ async function loadNearby(id){
   const lb = {}; countyLayer.eachLayer(l => lb[l.feature.id] = l.getBounds());
   const around = lb[id].pad(0.35);
   const ids = Object.keys(lb).filter(k => k !== id && around.intersects(lb[k]));
-  const R = nearbyRenderer = L.canvas({ pane:"nearby", padding:.6 });
+  const R = nearbyRenderer = L.canvas({ pane:"nearby", padding:canvasPad() });
   const layer = nearbyLayer = L.layerGroup().addTo(map);
   await Promise.all(ids.map(async k => {
     let w, t;
@@ -321,7 +323,14 @@ map.on("zoomstart", () => { labelCanvas.style.visibility = "hidden"; });
 map.on("zoomend", () => { labelCanvas.style.visibility = ""; drawLabels(); });
 let labelQueued = false;
 function drawLabels(){ if(labelQueued) return; labelQueued = true; requestAnimationFrame(() => { labelQueued = false; renderLabels(); }); }
-map.on("move zoom resize viewreset", drawLabels);
+// while the map is moving, refresh names at most ~8 times a second (every frame was the main cause of zoom lag)
+let labelMoveAt = 0, labelMoveTimer = null;
+map.on("move zoom", () => {
+  const now = performance.now();
+  if(now - labelMoveAt > 120){ labelMoveAt = now; drawLabels(); }
+  clearTimeout(labelMoveTimer); labelMoveTimer = setTimeout(drawLabels, 130);
+});
+map.on("resize viewreset moveend", drawLabels);
 function renderLabels(){
   const el = map.getContainer(), W = el.clientWidth, H = el.clientHeight, dpr = window.devicePixelRatio || 1;
   if(labelCanvas.width !== W*dpr || labelCanvas.height !== H*dpr){ labelCanvas.width = W*dpr; labelCanvas.height = H*dpr; labelCanvas.style.width = W+"px"; labelCanvas.style.height = H+"px"; }
@@ -453,7 +462,7 @@ new MutationObserver(restyleBase).observe(document.documentElement, { attributes
 /* ---------- creeks for every county on screen once you zoom in, so water reads across county lines ---------- */
 pane("area", 429);               // above the fade outside an open county, below the open county itself
 const AREA_ZOOM = 9.5;
-const areaRenderer = L.canvas({ pane:"area", tolerance:6, padding:.6 });
+const areaRenderer = L.canvas({ pane:"area", tolerance:6, padding:canvasPad() });
 const areaGroups = {};           // county id -> { g, streams, extra }
 const areaOn = new Set();        // counties drawn right now
 let areaWant = new Set(), countyBounds = null;
@@ -533,7 +542,9 @@ async function updateArea(){
     if(areaAgain){ areaAgain = false; updateArea(); }
   }
 }
-map.on("moveend zoomend", updateArea);
+// heavy work waits until the map settles, instead of running after every scroll-zoom step
+let settleTimer = null;
+map.on("moveend zoomend", () => { clearTimeout(settleTimer); settleTimer = setTimeout(() => { updateArea(); setTimeout(updateHd, 30); document.dispatchEvent(new Event("mapsettled")); }, 220); });
 
 /* ---------- detailed creek lines (DNR 24K, ~3 m) once you're zoomed in close; light lines otherwise ---------- */
 const HD_ZOOM = 12;
@@ -556,11 +567,10 @@ async function updateHd(){
     if(changed){ drawLabels(); document.dispatchEvent(new Event("areachange")); }
   }finally{ hdBusy = false; if(hdAgain){ hdAgain = false; setTimeout(updateHd, 0); } }
 }
-map.on("zoomend moveend", () => setTimeout(updateHd, 50));
 document.addEventListener("areachange", () => setTimeout(updateHd, 0));
 /* zoomed in, the county "fish caught here" shading would sit over the creeks: fade it out */
 let areaShade = null;
-map.on("zoomend", () => { const z = Math.round(map.getZoom() * 2) / 2; if(z !== areaShade){ areaShade = z; countyLayer.setStyle(countyStyle); } });
+document.addEventListener("mapsettled", () => { const z = Math.round(map.getZoom() * 2) / 2; if(z !== areaShade){ areaShade = z; countyLayer.setStyle(countyStyle); } });
 document.addEventListener("mapview", () => countyLayer.setStyle(countyStyle));
 /* the creek canvas sits over the counties, so a tap on open land opens that county */
 // (taps on open land are handled by the county highlight in 89-countytap.js)
@@ -2322,7 +2332,7 @@ function renderGuide(){
   };
 }
 async function finishGuide(){
-  $("guide").hidden = true; $("coachRing").hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
+  $("guide").hidden = true; $("coachRing").hidden = true; coachDim.hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
   if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
     await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
 }
@@ -2331,10 +2341,14 @@ $("guideBack").onclick = () => { if(guideStep > 0){ guideStep--; renderGuide(); 
 $("guideSkip").onclick = finishGuide;
 
 /* coach marks: point at the real thing on screen */
+// the ring's darkening must sit at the top of the page, or the app's layout clips it
+document.body.appendChild($("coachRing"));
+// darken everything except a hole around the item (a cut-out overlay; big box-shadows don't draw reliably everywhere)
+const coachDim = document.createElement("div"); coachDim.className = "coachDim"; coachDim.hidden = true; document.body.appendChild(coachDim);
 function placeCoach(s){
   const g = $("guide"), ring = $("coachRing"), sheet = g.querySelector(".sheet");
   const el = s.at && document.querySelector(s.at);
-  if(!el){ g.classList.remove("coach"); ring.hidden = true; sheet.style.cssText = ""; return; }
+  if(!el){ g.classList.remove("coach"); ring.hidden = true; coachDim.hidden = true; sheet.style.cssText = ""; return; }
   if(s.open && typeof panelCollapsed !== "undefined" && panelCollapsed) setCollapsed(false, false);
   if(s.at === "#map" || s.at === ".search" || s.at === ".locbtn" || s.at === "#addCatchBtn"){ if(tab !== "map") setTab("map"); }
   g.classList.add("coach");
@@ -2344,6 +2358,9 @@ function placeCoach(s){
     const pad = s.at === "#map" ? -12 : 6, vw = innerWidth, vh = innerHeight;
     Object.assign(ring.style, { left:box.left - pad + "px", top:box.top - pad + "px", width:(box.right - box.left) + pad * 2 + "px", height:(box.bottom - box.top) + pad * 2 + "px" });
     ring.hidden = false;
+    const x1 = box.left - pad, y1 = box.top - pad, x2 = box.right + pad, y2 = box.bottom + pad;
+    coachDim.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${x1}px ${y1}px, ${x1}px ${y2}px, ${x2}px ${y2}px, ${x2}px ${y1}px, ${x1}px ${y1}px)`;
+    coachDim.hidden = false;
     const w = Math.min(340, vw - 32), cy = (box.top + box.bottom) / 2;
     const below = s.at === "#map" ? false : cy < vh / 2;
     sheet.style.cssText = `position:fixed;width:${w}px;left:${Math.max(16, Math.min(vw - w - 16, (box.left + box.right) / 2 - w / 2))}px;${below ? `top:${Math.min(vh - 220, box.bottom + pad + 12)}px` : `bottom:${Math.max(16, vh - (s.at === "#map" ? box.bottom - 24 : box.top - pad - 12))}px`};max-height:${Math.round(vh * .5)}px`;
@@ -3388,11 +3405,14 @@ pane("hill", 396, false);
 const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
   { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4,
     bounds:L.latLngBounds([[42.0, -93.3], [47.6, -86.2]]) });   // only Wisconsin: outside its data the service sends blank grey tiles
+// the shading is blended onto what's beneath it; give it a plain paper backdrop so it never shows as grey rectangles
+pane("hillbase", 394, false);
+const hillBase = L.rectangle([[-85, -180], [85, 180]], { pane:"hillbase", stroke:false, fillOpacity:1, interactive:false, className:"hillbase" });
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){
   const on = terrainOn && mapView === "field";
-  if(on && !map.hasLayer(hillLayer)) hillLayer.addTo(map);
-  if(!on && map.hasLayer(hillLayer)) map.removeLayer(hillLayer);
+  if(on && !map.hasLayer(hillLayer)){ hillBase.addTo(map); hillLayer.addTo(map); }
+  if(!on && map.hasLayer(hillLayer)){ map.removeLayer(hillLayer); map.removeLayer(hillBase); }
   const b = $("terrainToggle");
   if(b){ b.hidden = mapView !== "field"; b.setAttribute("aria-pressed", String(terrainOn)); b.textContent = terrainOn ? "Terrain on" : "Terrain off"; }
 }
@@ -3422,7 +3442,7 @@ function updateFlow(){
   }
   flowLayer = g.addTo(map);
 }
-map.on("moveend zoomend", updateFlow);
+document.addEventListener("mapsettled", updateFlow);
 document.addEventListener("mapview", updateFlow);
 document.addEventListener("areachange", updateFlow);
 

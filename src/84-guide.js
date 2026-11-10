@@ -63,7 +63,7 @@ function renderGuide(){
   };
 }
 async function finishGuide(){
-  $("guide").hidden = true; $("coachRing").hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
+  $("guide").hidden = true; $("coachRing").hidden = true; coachDim.hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
   if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
     await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
 }
@@ -72,10 +72,14 @@ $("guideBack").onclick = () => { if(guideStep > 0){ guideStep--; renderGuide(); 
 $("guideSkip").onclick = finishGuide;
 
 /* coach marks: point at the real thing on screen */
+// the ring's darkening must sit at the top of the page, or the app's layout clips it
+document.body.appendChild($("coachRing"));
+// darken everything except a hole around the item (a cut-out overlay; big box-shadows don't draw reliably everywhere)
+const coachDim = document.createElement("div"); coachDim.className = "coachDim"; coachDim.hidden = true; document.body.appendChild(coachDim);
 function placeCoach(s){
   const g = $("guide"), ring = $("coachRing"), sheet = g.querySelector(".sheet");
   const el = s.at && document.querySelector(s.at);
-  if(!el){ g.classList.remove("coach"); ring.hidden = true; sheet.style.cssText = ""; return; }
+  if(!el){ g.classList.remove("coach"); ring.hidden = true; coachDim.hidden = true; sheet.style.cssText = ""; return; }
   if(s.open && typeof panelCollapsed !== "undefined" && panelCollapsed) setCollapsed(false, false);
   if(s.at === "#map" || s.at === ".search" || s.at === ".locbtn" || s.at === "#addCatchBtn"){ if(tab !== "map") setTab("map"); }
   g.classList.add("coach");
@@ -85,6 +89,9 @@ function placeCoach(s){
     const pad = s.at === "#map" ? -12 : 6, vw = innerWidth, vh = innerHeight;
     Object.assign(ring.style, { left:box.left - pad + "px", top:box.top - pad + "px", width:(box.right - box.left) + pad * 2 + "px", height:(box.bottom - box.top) + pad * 2 + "px" });
     ring.hidden = false;
+    const x1 = box.left - pad, y1 = box.top - pad, x2 = box.right + pad, y2 = box.bottom + pad;
+    coachDim.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${x1}px ${y1}px, ${x1}px ${y2}px, ${x2}px ${y2}px, ${x2}px ${y1}px, ${x1}px ${y1}px)`;
+    coachDim.hidden = false;
     const w = Math.min(340, vw - 32), cy = (box.top + box.bottom) / 2;
     const below = s.at === "#map" ? false : cy < vh / 2;
     sheet.style.cssText = `position:fixed;width:${w}px;left:${Math.max(16, Math.min(vw - w - 16, (box.left + box.right) / 2 - w / 2))}px;${below ? `top:${Math.min(vh - 220, box.bottom + pad + 12)}px` : `bottom:${Math.max(16, vh - (s.at === "#map" ? box.bottom - 24 : box.top - pad - 12))}px`};max-height:${Math.round(vh * .5)}px`;

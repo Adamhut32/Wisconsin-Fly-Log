@@ -18,7 +18,18 @@ beta = root / "beta"
 
 def joined():
     parts = sorted((root / "src").glob("*.js"))
-    return "\n".join(p.read_text() for p in parts), [p.name for p in parts]
+    js = "\n".join(p.read_text() for p in parts)
+    check(js)
+    return js, [p.name for p in parts]
+
+def check(js):
+    """Refuse to build an app that can't start: run Node's syntax check when Node is available."""
+    import shutil as _sh, subprocess, tempfile
+    if not _sh.which("node"): return
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f: f.write(js)
+    r = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
+    pathlib.Path(f.name).unlink()
+    if r.returncode: sys.exit("build stopped, the app has a syntax error:\n" + r.stderr.strip()[:800])
 
 BETA_MARK = "\n// --- test version settings (removed when released) ---\n"
 SHARED = ("vendor/", "icons/")
