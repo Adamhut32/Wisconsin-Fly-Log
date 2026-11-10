@@ -72,6 +72,7 @@ function renderGroupTrip(el, t){
     ${t.notes ? `<p style="margin:6px 0 10px">${esc(t.notes)}</p>` : ""}
     ${tripPeopleHtml(t, false)}
     <div class="row2" style="margin:8px 0 4px"><button class="btn sm fish" type="button" data-a="logtrip">${icon("i-fish")}Log a catch</button><button class="btn sm" type="button" data-a="newouting">Log time on the water</button></div>
+    ${tripAlbumHtml(t, mineC.filter(c => c.photo_path))}
     ${!g ? `<p class="status">Loading the group's catches…</p>` : ""}
     ${days.map(d => { const mine = mineC.filter(c => c.caught_on === d), gd = groupDayHtml(t, d), n = mine.reduce((a, c) => a + fishOf(c), 0) + gd.fish;
       return `<div class="day"><h5>${esc(fmtDate(d, { weekday:"long", month:"short", day:"numeric" }))}<span>${n} fish</span></h5>
@@ -173,3 +174,46 @@ function outingMarkers(){
     markerLayer.addLayer(m);
   }
 }
+
+/* ---------- trip album: everyone's fish photos plus photos anyone on the trip posts ---------- */
+function tripAlbumHtml(t, mineWithPhotos){
+  const g = tripGroup[t.id];
+  const items = [
+    ...mineWithPhotos.map(c => ({ src:photoSrc(c.photo_path), go:"c:" + c.id, label:c.species || "Catch", d:c.caught_on })),
+    ...(g ? g.catches.filter(c => c.photo_path).map(c => ({ src:photoSrc(c.photo_path), view:c.photo_path, cap:`${c.display_name}: ${c.species || "Fish"}${c.length_in ? " · " + lenTxt(c.length_in) : ""}`, label:c.species || "Catch", d:c.caught_on })) : []),
+    ...(g ? (g.photos || []).map(p => ({ src:photoSrc(p.path), view:p.path, cap:[p.display_name, p.caption].filter(Boolean).join(": "), label:"Trip photo", d:p.taken_on, mine:p.user_id === me.id ? p.id : "" })) : [])
+  ].sort((a, b) => (a.d || "").localeCompare(b.d || ""));
+  const canPost = !!g && (trips.some(x => x.id === t.id) || t.my_status === "joined");
+  if(!items.length && !canPost) return "";
+  return `<div class="album">${items.length ? `<div class="strip">${items.map(i => `<button type="button" ${i.go ? `data-go="${esc(i.go)}"` : `data-pview="${esc(i.view)}" data-cap="${esc(i.cap || "")}" data-mine="${esc(i.mine || "")}"`} aria-label="${esc(i.label)} photo" style="background-image:url('${i.src}')"></button>`).join("")}</div>` : ""}
+    ${canPost ? `<label class="btn sm" style="margin-top:6px">${icon("i-plus")}Add trip photo<input type="file" accept="image/*" class="vh" data-tphoto="${esc(t.id)}"></label><small class="muted" style="margin-left:8px">Camp, the water, the crew. 3 a day each.</small>` : ""}</div>`;
+}
+$("log").addEventListener("change", async e => {
+  const inp = e.target.closest("[data-tphoto]"); if(!inp || !inp.files[0]) return;
+  const tid = inp.dataset.tphoto, t = tripOf(tid) || trips.find(x => x.id === tid), file = inp.files[0]; inp.value = "";
+  if(!navigator.onLine){ toast("Trip photos need a connection. Try again when you have signal."); return; }
+  toast("Adding photo…");
+  try{
+    let day = null; try{ const ex = readExif(await file.arrayBuffer()); const m = ex?.date?.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m) day = `${m[1]}-${m[2]}-${m[3]}`; }catch(_){}
+    if(!day || day < t.start_date || day > t.end_date) day = todayStr() >= t.start_date && todayStr() <= t.end_date ? todayStr() : t.start_date;
+    const blob = await shrink(file), path = `${me.id}/trip-${tid}-${Date.now()}.jpg`;
+    const up = await sb.storage.from("photos").upload(path, blob, { contentType:"image/jpeg" }); if(up.error) throw up.error;
+    pendingPhotoUrls[path] = URL.createObjectURL(blob);
+    const { error } = await sb.from("trip_photos").insert({ id:uuid(), trip_id:tid, path, taken_on:day });
+    if(error){ sb.storage.from("photos").remove([path]); toast(/3 trip photos/.test(error.message) ? "You can post 3 trip photos per day." : "Couldn't add the photo. Try again."); return; }
+    toast("Photo added to the trip"); loadTripGroup(tid);
+  }catch(err){ console.error(err); toast("Couldn't add the photo. Try again."); }
+});
+// tap a group photo to see it big
+$("log").addEventListener("click", e => {
+  const b = e.target.closest("[data-pview]"); if(!b) return;
+  const v = document.createElement("div"); v.className = "pview"; v.setAttribute("role", "dialog");
+  v.innerHTML = `<img src="${photoSrc(b.dataset.pview)}" alt=""><div class="pcap">${esc(b.dataset.cap || "")}${b.dataset.mine ? ` <button class="link danger" type="button" data-pdel="${esc(b.dataset.mine)}">Delete my photo</button>` : ""}</div>`;
+  v.addEventListener("click", async ev => {
+    const d = ev.target.closest("[data-pdel]");
+    if(d){ if(!confirmTap(d, "Tap again to delete")) return; const tid = tripOpen; const { error } = await sb.from("trip_photos").delete().eq("id", d.dataset.pdel);
+      if(!error) sb.storage.from("photos").remove([b.dataset.pview]); toast(error ? "Couldn't delete it." : "Photo deleted"); v.remove(); loadTripGroup(tid); return; }
+    v.remove();
+  });
+  document.body.appendChild(v);
+});

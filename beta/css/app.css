@@ -575,3 +575,8 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--muted);font-size
 .scrim .sheet{padding-bottom:calc(var(--kb, 0px) + 20px + env(safe-area-inset-bottom,0px))}
 /* messages sit near the top so they never cover Add spot / Log a catch */
 .toast{bottom:auto!important;top:calc(104px + env(safe-area-inset-top,0px))}
+.album{margin:8px 0 6px}
+.pview{position:fixed;inset:0;z-index:1600;background:rgba(10,10,8,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.pview img{max-width:100%;max-height:82vh;border-radius:8px;object-fit:contain}
+.pview .pcap{color:#fff;margin-top:10px;text-align:center;font-weight:600}
+.pview .link.danger{color:#ff9b85;margin-left:8px}

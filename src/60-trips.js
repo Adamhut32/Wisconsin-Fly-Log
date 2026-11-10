@@ -48,7 +48,7 @@ function renderTrip(el, t){
     ${hrs.all ? `<p style="margin:0 0 6px"><b>On the water:</b> ${fmtHours(hrs.all)}${s.fish + gFish ? ` · ${((s.fish + gFish) / hrs.all).toFixed(1)} fish per hour` : ""}${gFish ? ` · the group caught ${gFish} more` : ""}</p>` : gFish ? `<p style="margin:0 0 6px">The group caught ${gFish} more fish.</p>` : ""}
     ${tripPeopleHtml(t, true)}
     ${tripPlanHtml(t)}
-    ${photos.length ? `<div class="strip">${photos.map(c => `<button type="button" data-go="c:${esc(c.id)}" aria-label="${esc(c.species||"Catch")} photo" style="background-image:url('${photoSrc(c.photo_path)}')"></button>`).join("")}</div>` : ""}
+    ${tripAlbumHtml(t, photos)}
     <div class="row2" style="margin:8px 0 4px">
       <button class="btn sm fish" type="button" data-a="logtrip">${icon("i-fish")}Log a catch</button>
       <button class="btn sm" type="button" data-a="newouting">Time on the water</button>
@@ -60,7 +60,9 @@ function renderTrip(el, t){
       return `<div class="day"><h5>${esc(fmtDate(d, { weekday:"long", month:"short", day:"numeric" }))}<span>${n} fish</span></h5>
         ${list.length ? `<ul class="list">${list.map(itemCatch).join("")}</ul>` : ""}${gd.html}${!list.length && !gd.any ? `<p class="skunk">${d > todayStr() ? "Still to come" : "No fish logged"}</p>` : ""}</div>`; }).join("")}
     ${(() => { const out = cs.filter(c => !days.includes(c.caught_on)); return out.length ? `<div class="day"><h5>Outside the trip dates<span>${out.length}</span></h5><ul class="list">${out.map(itemCatch).join("")}</ul></div>` : ""; })()}
-    <p class="note">${t.shared ? "Friends can see this trip and the catches in it that aren't private." : "This trip is private."}</p>`;
+    <p class="note">${(() => { const crew = (tripGroup[t.id]?.people || []).filter(p => p.status === "joined").length;
+      return t.shared ? `Friends can see this trip and the catches in it that aren't private.${crew ? " Everyone on the trip sees the whole group's log." : ""}`
+        : crew ? "Only the people on this trip can see it." : "Only you can see this trip. Invite friends and they'll see it too."; })()}</p>`;
 }
 function openTrip(id){ expandPanel(); tripOpen = id; tab = "trips"; renderLog(); $("log").scrollTop = 0; fitTrip(); }
 function fitTrip(){

@@ -146,3 +146,6 @@ begin
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-coulee-secret', sec), timeout_milliseconds := 5000);
 exception when others then null;
 end $$;
+
+-- (applied separately as migration "trip_photos": trip_photos table with 3-per-person-per-day limit,
+--  photo viewing for trip members, and trip_group returning everyone's trip photos)
