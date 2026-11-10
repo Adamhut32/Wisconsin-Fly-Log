@@ -580,3 +580,4 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--muted);font-size
 .pview img{max-width:100%;max-height:82vh;border-radius:8px;object-fit:contain}
 .pview .pcap{color:#fff;margin-top:10px;text-align:center;font-weight:600}
 .pview .link.danger{color:#ff9b85;margin-left:8px}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}

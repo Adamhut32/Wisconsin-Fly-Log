@@ -1,0 +1,2 @@
+-- applied as migration "delete_my_account": public.delete_my_account('DELETE') removes the signed-in angler's auth user,
+-- which cascades to the profile and all their data. The founder account is refused. The app deletes photo/avatar files first.

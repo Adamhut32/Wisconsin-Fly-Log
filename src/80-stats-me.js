@@ -180,7 +180,8 @@ function renderMeTab(el){
     <div class="card"><p>${catches.length} catches, ${spots.length} spots and ${trips.length} trips.</p><div class="row2"><button class="btn sm" type="button" data-a="export">Download a copy</button></div></div>
     <h4><span>Map data</span></h4>
     <p class="muted" style="margin:0">Streams, lakes, trout classes, trout regulations and public lands come from the Wisconsin DNR. Regulations change; check the current DNR rules before you fish.</p>
-    <div class="row2" style="margin-top:22px"><button class="btn" type="button" data-a="signout">Sign out</button></div>`;
+    <div class="row2" style="margin-top:22px"><button class="btn" type="button" data-a="signout">Sign out</button></div>
+    ${profile?.role === "creator" ? "" : `<div class="row2" style="margin-top:18px"><button class="link danger" type="button" data-a="delacct">Delete my account</button></div><div data-delslot></div>`}`;
   $("nameForm").addEventListener("submit", async e => {
     e.preventDefault(); const v = $("meName").value.trim(); const msg = $("nameMsg");
     if(!v){ msg.className = "hint bad"; msg.textContent = "Enter a name."; return; }
