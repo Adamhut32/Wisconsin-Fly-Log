@@ -525,3 +525,11 @@ ul.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .personbar[hidden]{display:none}
 .legend #pinsToggle{display:inline-block}
 #map.nopins .cbadge{display:none}
+/* map key folds to one button */
+.legend .lgkey{display:block;flex-basis:100%;text-align:left;background:none;border:0;padding:0 0 4px;font:600 11px/1.2 var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer}
+.legend.folded{padding:6px 10px}
+.legend.folded > :not(.lgkey){display:none !important}
+.legend.folded .lgkey{padding:0}
+/* photo cards don't take over the phone screen */
+.leaflet-popup-content .pop img{max-height:min(34vh,220px);width:100%;object-fit:cover}
+.cpop .pop h3{margin-bottom:2px}

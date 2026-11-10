@@ -33,6 +33,7 @@ let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
 let mapPerson = null;
+let waterTapAt = 0, countyOpenZoom = null; // last creek/lake tap time; zoom a county was opened at
 let hidePins = false; // "My pins off": hide every spot, catch and fish count, e.g. to show someone the map // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me
@@ -110,17 +111,21 @@ const REGION_AT = { "Driftless Area":[43.55,-90.55], "Northwoods":[45.95,-89.9],
 const regionNames = L.layerGroup(Object.entries(REGION_AT).map(([n,p]) => L.marker(p, { interactive:false, keyboard:false, pane:"stateline", icon:L.divIcon({ className:"", html:`<div class="rname" style="color:var(${REGION_TINT[n]}-ink)">${n}</div>`, iconSize:[0,0] }) }))).addTo(map);
 
 let countyLayer;
+// mapView is declared in a later file; read it safely while the map is first built
+const curView = () => { try{ return mapView; }catch(e){ return "field"; } };
 function countyStyle(f){
   const s = countyStats(f.id);
   const max = Math.max(1, ...counties.map(c => countyStats(c.id).fish));
-  const heat = (s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0)) * (map.getZoom() >= 9.5 ? 0.25 : 1);
+  // full strength statewide, fading out as you zoom in (and softer over satellite/topo) so it never sits on top of the water
+  const z = map.getZoom(), fade = z < 7.5 ? 1 : Math.max(.12, 1 - (z - 7.5) * .45);
+  const heat = (s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0)) * fade * (curView() !== "field" ? .55 : 1);
   if(currentCounty === f.id) return { color: css("--ink"), weight: 2.4, fillColor: css("--land"), fillOpacity: 0 };
   return { color: css("--county-edge"), weight: 0.8, fillColor: s.fish ? css("--fish") : css("--spot"), fillOpacity: heat };
 }
 countyLayer = L.geoJSON(GEO.counties, {
   style: countyStyle,
   onEachFeature: (f, layer) => {
-    layer.on("click", e => { if(picking){ handlePick(e.latlng); return; } if(currentCounty === f.id) return; openCounty(f.id); });
+    layer.on("click", e => { if(picking){ handlePick(e.latlng); return; } if(currentCounty === f.id || currentCounty || map.getZoom() >= AREA_ZOOM) return; openCounty(f.id); });
     layer.on("mouseover", () => { if(currentCounty === f.id) return; layer.setStyle({ fillColor:css("--hl"), fillOpacity:.5, color:css("--ink"), weight:2 }); layer.bringToFront(); });
     layer.on("mouseout", () => { layer.setStyle(countyStyle(f)); });
     layer.bindTooltip(f.properties.name + " County", { sticky:true, direction:"top", opacity:.95 });
@@ -206,7 +211,11 @@ function setHover(name){
 }
 function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
-  L.popup({ maxWidth:300, autoPanPadding:[20,20] }).setLatLng(e.latlng).setContent(waterPopup(name, kind, e.latlng, trout, cid)).openOn(map);
+  const el = waterPopup(name, kind, e.latlng, trout, cid), here = countyAt(e.latlng.lat, e.latlng.lng);
+  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="link" type="button" data-opencounty="${esc(here)}">Open ${esc(countyName(here))}</button>`; el.appendChild(r); }
+  waterTapAt = Date.now();
+  L.popup({ maxWidth:300 }).setLatLng(e.latlng).setContent(el).openOn(map);
+  if(here && here !== currentCounty) outlineCounty(here);
 }
 let detailPromise = null;
 function showDetail(id){
@@ -551,15 +560,10 @@ map.on("zoomend moveend", () => setTimeout(updateHd, 50));
 document.addEventListener("areachange", () => setTimeout(updateHd, 0));
 /* zoomed in, the county "fish caught here" shading would sit over the creeks: fade it out */
 let areaShade = null;
-map.on("zoomend", () => { const on = map.getZoom() >= AREA_ZOOM; if(on !== areaShade){ areaShade = on; countyLayer.setStyle(countyStyle); } });
+map.on("zoomend", () => { const z = Math.round(map.getZoom() * 2) / 2; if(z !== areaShade){ areaShade = z; countyLayer.setStyle(countyStyle); } });
+document.addEventListener("mapview", () => countyLayer.setStyle(countyStyle));
 /* the creek canvas sits over the counties, so a tap on open land opens that county */
-map.on("click", e => {
-  if(picking) return;
-  const t = e.originalEvent && e.originalEvent.target;
-  if(!t || t.tagName !== "CANVAS" || !t.closest(".leaflet-area-pane, .leaflet-detail-pane")) return;
-  const id = countyAt(e.latlng.lat, e.latlng.lng);
-  if(id && id !== currentCounty) openCounty(id);
-});
+// (taps on open land are handled by the county highlight in 89-countytap.js)
 
 
 /* ---------- markers and popups ---------- */
@@ -781,11 +785,12 @@ function renderAll(){ if(renderQueued) return; renderQueued = true; requestAnima
 function openCounty(id){
   currentCounty = id; $("backBtn").hidden = false;
   const layer = countyLayer.getLayers().find(l => l.feature.id === id);
-  if(layer) map.fitBounds(layer.getBounds(), { padding:[24,24] });
+  if(layer){ map.fitBounds(layer.getBounds(), { padding:[24,24] }); countyOpenZoom = map.getBoundsZoom(layer.getBounds(), false, L.point(48, 48)); }
+  clearOutline();
   if(tab !== "map") tab = "map";
   countyLayer.setStyle(countyStyle); setMask(id); updateZoomLayers(); renderLog(); showDetail(id);
 }
-function backToState(){ currentCounty = null; clearDetail(); setMask(null); $("backBtn").hidden = true; fitState(); countyLayer.setStyle(countyStyle); updateZoomLayers(); renderLog(); }
+function backToState(){ currentCounty = null; countyOpenZoom = null; clearOutline(); clearDetail(); setMask(null); $("backBtn").hidden = true; fitState(); countyLayer.setStyle(countyStyle); updateZoomLayers(); renderLog(); }
 $("backBtn").addEventListener("click", backToState);
 
 
@@ -981,7 +986,7 @@ function handlePick(ll){
 }
 map.on("click", e => {
   if(picking){ handlePick(e.latlng); return; }
-  if(currentCounty){ const cid = countyAt(e.latlng.lat, e.latlng.lng); if(cid && cid !== currentCounty) openCounty(cid); }
+  tapCounty(e.latlng);
 });
 
 /* shrink photos before upload; re-encoding also drops the photo's hidden GPS data */
@@ -1042,7 +1047,7 @@ $("entryForm").addEventListener("submit", async ev => {
     closeForm();
     const where = rec.county ? countyName(rec.county) : "your log";
     toast(navigator.onLine ? `${table==="catches"?"Catch":"Spot"} saved in ${where}` : `Saved on this phone. It will sync when you're back online.`);
-    if(rec.county && !currentCounty && !wasEditing) openCounty(rec.county);
+    if(rec.lat != null && !wasEditing && !map.getBounds().pad(-.1).contains([rec.lat, rec.lng])) map.panTo([rec.lat, rec.lng]);   // show it, without jumping into the county
   }catch(e){
     console.error(e);
     err.textContent = e && e.userMessage ? e.userMessage : "Couldn't save. Check your connection and try again.";
@@ -1227,7 +1232,7 @@ async function loadAll(){
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
-    loadInbox(); touchActive(); setTimeout(nudgeOfflineRefresh, 4000); setTimeout(backfillHashes, 4000); setTimeout(backfillWaters, 6000);
+    loadInbox(); touchActive(); setTimeout(nudgeOfflineRefresh, 4000); listenFriends(); setTimeout(backfillHashes, 4000); setTimeout(backfillWaters, 6000);
     loadAvatars([...follows.map(f => f.user_id), ...friendCatches.map(c => c.user_id)].filter(id => !people[id]));
   }catch(e){
     console.error("load", e);
@@ -1841,6 +1846,20 @@ function requestsBannerHtml(){
     ${incoming.map(f => `<div class="reqrow">${avHtml(f.requester, nm(f))}<span class="t"><b class="wrap">${esc(nm(f))}</b><small>Wants to be fishing friends</small></span>
       <span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></div>`).join("")}</div>`;
 }
+
+/* ---------- live: a friend request (or an accept) shows up within a second or two while the app is open ---------- */
+let friendLive = null;
+function listenFriends(){
+  if(friendLive || !me || typeof sb.channel !== "function") return;
+  try{
+    const kick = () => setTimeout(pollFriends, 300);
+    friendLive = sb.channel("friends-" + me.id)
+      .on("postgres_changes", { event:"*", schema:"public", table:"friendships", filter:`addressee=eq.${me.id}` }, kick)
+      .on("postgres_changes", { event:"*", schema:"public", table:"friendships", filter:`requester=eq.${me.id}` }, kick)
+      .subscribe();
+  }catch(e){ friendLive = null; }
+}
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") pollFriends(); });
 
 
 /* ---------- stats ---------- */
@@ -3083,6 +3102,54 @@ $("log").addEventListener("click", async e => {
 });
 
 
+/* ---------- tapping the map close in highlights a county instead of jumping into it ---------- */
+pane("outline", 432, false);
+let outlineLayer = null;
+function clearOutline(){ if(outlineLayer){ map.removeLayer(outlineLayer); outlineLayer = null; } }
+function outlineCounty(id){
+  clearOutline();
+  if(!byId[id]) return;
+  outlineLayer = L.geoJSON(byId[id], { pane:"outline", interactive:false, style:{ color:css("--hl"), weight:3, opacity:.95, fill:true, fillColor:css("--hl"), fillOpacity:.06 } }).addTo(map);
+}
+function tapCounty(latlng){
+  if(Date.now() - waterTapAt < 400) return;            // the tap landed on a creek or lake: its card already has "Open county"
+  const id = countyAt(latlng.lat, latlng.lng);
+  if(!id || id === currentCounty) return;
+  if(!currentCounty && map.getZoom() < AREA_ZOOM) return; // statewide: the county polygon's own tap opens it
+  outlineCounty(id);
+  const s = countyStats(id);
+  L.popup({ maxWidth:240, className:"cpop" }).setLatLng(latlng).setContent(`<div class="pop"><h3>${esc(countyName(id))}</h3>
+    <div class="meta">${s.spots} spot${s.spots === 1 ? "" : "s"} · ${s.fish} fish</div>
+    <div class="row"><button class="btn sm ink" type="button" data-opencounty="${esc(id)}">Open county</button></div></div>`).openOn(map);
+}
+map.on("popupclose", () => setTimeout(() => { if(!map._popup || !map.hasLayer(map._popup)) clearOutline(); }, 0));
+document.addEventListener("click", e => { const b = e.target.closest("[data-opencounty]"); if(!b) return; map.closePopup(); openCounty(b.dataset.opencounty); });
+
+/* ---------- zooming well out of an open county leaves it, like "All of Wisconsin" (without moving the map) ---------- */
+map.on("zoomend", () => {
+  if(!currentCounty || picking || countyOpenZoom == null) return;
+  if(map.getZoom() <= countyOpenZoom - 1.5) leaveCounty();
+});
+function leaveCounty(){
+  currentCounty = null; countyOpenZoom = null; clearDetail(); setMask(null); $("backBtn").hidden = true;
+  countyLayer.setStyle(countyStyle); updateZoomLayers(); renderLog(); setTimeout(updateArea, 0);
+}
+
+/* ---------- cards stay clear of the search bar and the buttons ---------- */
+L.Popup.mergeOptions({ autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 110) });
+
+/* ---------- phone: the map key folds down to one small button ---------- */
+(() => {
+  const lg = $("legend"); if(!lg) return;
+  const b = document.createElement("button"); b.type = "button"; b.className = "lgkey"; lg.prepend(b);
+  const small = () => window.innerWidth < 700;
+  let open = lsGet("fl.legendOpen", !small());
+  const sync = () => { lg.classList.toggle("folded", !open); b.textContent = open ? "Hide key" : "Map key"; b.setAttribute("aria-expanded", String(open)); };
+  b.onclick = () => { open = !open; lsSet("fl.legendOpen", open); sync(); };
+  sync();
+})();
+
+
 /* ---------- a friend's map: only what they share with you, in friend blue ---------- */
 
 function personName(id){ return people[id]?.display_name || friendCatches.find(c => c.user_id === id)?.display_name || friendSpots.find(s => s.user_id === id)?.display_name || follows.find(f => f.user_id === id)?.display_name || "Friend"; }
@@ -3102,7 +3169,7 @@ function openPersonMap(id){
   const items = [...friendCatches, ...friendSpots].filter(x => x.user_id === id && x.lat != null);
   const pts = items.map(x => [x.lat, x.lng]), cids = [...new Set(items.map(x => x.county).filter(Boolean))];
   if(cids.length === 1){ // all in one county: open it so the creeks are there, then frame their fish
-    openCounty(cids[0]); setTimeout(() => map.fitBounds(L.latLngBounds(pts).pad(.3), { maxZoom:13, padding:[60,60] }), 700);
+    map.fitBounds(L.latLngBounds(pts).pad(.3), { maxZoom:13, padding:[60,60] });
   } else { backToState(); if(pts.length) setTimeout(() => map.fitBounds(L.latLngBounds(pts).pad(.2), { maxZoom:9, padding:[60,60] }), 300); }
 }
 function closePersonMap(){
@@ -3161,7 +3228,6 @@ function locateMe(){
       L.circle([lat, lng], { radius:acc, pane:"me", color:"#2F7BF5", weight:1, fillColor:"#2F7BF5", fillOpacity:.12, interactive:false }),
       L.marker([lat, lng], { pane:"me", icon:L.divIcon({ className:"", html:`<div class="hereDot"></div>`, iconSize:[18,18], iconAnchor:[9,9] }), keyboard:false })
     ]).addTo(map);
-    if(hereFix.cid && currentCounty !== hereFix.cid) openCounty(hereFix.cid);
     map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration:.7 });
     const near = await watersNear(lat, lng).catch(() => []);
     const pop = L.popup({ className:"hpop", offset:[0, -6], maxWidth:300, autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 90) }).setLatLng([lat, lng]).setContent(hereHtml(hereFix, near));
@@ -3320,7 +3386,8 @@ function triageHtml(s){ return s.category || s.triage_note ? `<p class="triage">
 /* ---------- terrain shading: soft hillshade under the field map, so coulees and ridges show ---------- */
 pane("hill", 396, false);
 const hillLayer = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}",
-  { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4 });
+  { pane:"hill", minZoom:7, maxNativeZoom:16, maxZoom:18, crossOrigin:true, updateWhenIdle:false, keepBuffer:4,
+    bounds:L.latLngBounds([[42.0, -93.3], [47.6, -86.2]]) }   // only Wisconsin: outside its data the service sends blank grey tiles);
 let terrainOn = lsGet("fl.terrain", true);
 function syncTerrain(){
   const on = terrainOn && mapView === "field";

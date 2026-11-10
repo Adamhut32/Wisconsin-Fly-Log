@@ -28,17 +28,21 @@ const REGION_AT = { "Driftless Area":[43.55,-90.55], "Northwoods":[45.95,-89.9],
 const regionNames = L.layerGroup(Object.entries(REGION_AT).map(([n,p]) => L.marker(p, { interactive:false, keyboard:false, pane:"stateline", icon:L.divIcon({ className:"", html:`<div class="rname" style="color:var(${REGION_TINT[n]}-ink)">${n}</div>`, iconSize:[0,0] }) }))).addTo(map);
 
 let countyLayer;
+// mapView is declared in a later file; read it safely while the map is first built
+const curView = () => { try{ return mapView; }catch(e){ return "field"; } };
 function countyStyle(f){
   const s = countyStats(f.id);
   const max = Math.max(1, ...counties.map(c => countyStats(c.id).fish));
-  const heat = (s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0)) * (map.getZoom() >= 9.5 ? 0.25 : 1);
+  // full strength statewide, fading out as you zoom in (and softer over satellite/topo) so it never sits on top of the water
+  const z = map.getZoom(), fade = z < 7.5 ? 1 : Math.max(.12, 1 - (z - 7.5) * .45);
+  const heat = (s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0)) * fade * (curView() !== "field" ? .55 : 1);
   if(currentCounty === f.id) return { color: css("--ink"), weight: 2.4, fillColor: css("--land"), fillOpacity: 0 };
   return { color: css("--county-edge"), weight: 0.8, fillColor: s.fish ? css("--fish") : css("--spot"), fillOpacity: heat };
 }
 countyLayer = L.geoJSON(GEO.counties, {
   style: countyStyle,
   onEachFeature: (f, layer) => {
-    layer.on("click", e => { if(picking){ handlePick(e.latlng); return; } if(currentCounty === f.id) return; openCounty(f.id); });
+    layer.on("click", e => { if(picking){ handlePick(e.latlng); return; } if(currentCounty === f.id || currentCounty || map.getZoom() >= AREA_ZOOM) return; openCounty(f.id); });
     layer.on("mouseover", () => { if(currentCounty === f.id) return; layer.setStyle({ fillColor:css("--hl"), fillOpacity:.5, color:css("--ink"), weight:2 }); layer.bringToFront(); });
     layer.on("mouseout", () => { layer.setStyle(countyStyle(f)); });
     layer.bindTooltip(f.properties.name + " County", { sticky:true, direction:"top", opacity:.95 });
@@ -124,7 +128,11 @@ function setHover(name){
 }
 function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
-  L.popup({ maxWidth:300, autoPanPadding:[20,20] }).setLatLng(e.latlng).setContent(waterPopup(name, kind, e.latlng, trout, cid)).openOn(map);
+  const el = waterPopup(name, kind, e.latlng, trout, cid), here = countyAt(e.latlng.lat, e.latlng.lng);
+  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="link" type="button" data-opencounty="${esc(here)}">Open ${esc(countyName(here))}</button>`; el.appendChild(r); }
+  waterTapAt = Date.now();
+  L.popup({ maxWidth:300 }).setLatLng(e.latlng).setContent(el).openOn(map);
+  if(here && here !== currentCounty) outlineCounty(here);
 }
 let detailPromise = null;
 function showDetail(id){

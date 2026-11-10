@@ -33,6 +33,7 @@ let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
 let mapPerson = null;
+let waterTapAt = 0, countyOpenZoom = null; // last creek/lake tap time; zoom a county was opened at
 let hidePins = false; // "My pins off": hide every spot, catch and fish count, e.g. to show someone the map // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me

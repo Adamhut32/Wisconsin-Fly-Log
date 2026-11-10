@@ -190,3 +190,17 @@ function requestsBannerHtml(){
     ${incoming.map(f => `<div class="reqrow">${avHtml(f.requester, nm(f))}<span class="t"><b class="wrap">${esc(nm(f))}</b><small>Wants to be fishing friends</small></span>
       <span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm ink" type="button" data-accept="${esc(f.id)}">Accept</button><button class="btn sm" type="button" data-decline="${esc(f.id)}">Decline</button></span></div>`).join("")}</div>`;
 }
+
+/* ---------- live: a friend request (or an accept) shows up within a second or two while the app is open ---------- */
+let friendLive = null;
+function listenFriends(){
+  if(friendLive || !me || typeof sb.channel !== "function") return;
+  try{
+    const kick = () => setTimeout(pollFriends, 300);
+    friendLive = sb.channel("friends-" + me.id)
+      .on("postgres_changes", { event:"*", schema:"public", table:"friendships", filter:`addressee=eq.${me.id}` }, kick)
+      .on("postgres_changes", { event:"*", schema:"public", table:"friendships", filter:`requester=eq.${me.id}` }, kick)
+      .subscribe();
+  }catch(e){ friendLive = null; }
+}
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") pollFriends(); });

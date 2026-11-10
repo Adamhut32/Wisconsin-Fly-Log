@@ -218,9 +218,10 @@ function renderAll(){ if(renderQueued) return; renderQueued = true; requestAnima
 function openCounty(id){
   currentCounty = id; $("backBtn").hidden = false;
   const layer = countyLayer.getLayers().find(l => l.feature.id === id);
-  if(layer) map.fitBounds(layer.getBounds(), { padding:[24,24] });
+  if(layer){ map.fitBounds(layer.getBounds(), { padding:[24,24] }); countyOpenZoom = map.getBoundsZoom(layer.getBounds(), false, L.point(48, 48)); }
+  clearOutline();
   if(tab !== "map") tab = "map";
   countyLayer.setStyle(countyStyle); setMask(id); updateZoomLayers(); renderLog(); showDetail(id);
 }
-function backToState(){ currentCounty = null; clearDetail(); setMask(null); $("backBtn").hidden = true; fitState(); countyLayer.setStyle(countyStyle); updateZoomLayers(); renderLog(); }
+function backToState(){ currentCounty = null; countyOpenZoom = null; clearOutline(); clearDetail(); setMask(null); $("backBtn").hidden = true; fitState(); countyLayer.setStyle(countyStyle); updateZoomLayers(); renderLog(); }
 $("backBtn").addEventListener("click", backToState);

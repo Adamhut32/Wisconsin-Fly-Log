@@ -191,7 +191,7 @@ function handlePick(ll){
 }
 map.on("click", e => {
   if(picking){ handlePick(e.latlng); return; }
-  if(currentCounty){ const cid = countyAt(e.latlng.lat, e.latlng.lng); if(cid && cid !== currentCounty) openCounty(cid); }
+  tapCounty(e.latlng);
 });
 
 /* shrink photos before upload; re-encoding also drops the photo's hidden GPS data */
@@ -252,7 +252,7 @@ $("entryForm").addEventListener("submit", async ev => {
     closeForm();
     const where = rec.county ? countyName(rec.county) : "your log";
     toast(navigator.onLine ? `${table==="catches"?"Catch":"Spot"} saved in ${where}` : `Saved on this phone. It will sync when you're back online.`);
-    if(rec.county && !currentCounty && !wasEditing) openCounty(rec.county);
+    if(rec.lat != null && !wasEditing && !map.getBounds().pad(-.1).contains([rec.lat, rec.lng])) map.panTo([rec.lat, rec.lng]);   // show it, without jumping into the county
   }catch(e){
     console.error(e);
     err.textContent = e && e.userMessage ? e.userMessage : "Couldn't save. Check your connection and try again.";

@@ -109,12 +109,7 @@ map.on("zoomend moveend", () => setTimeout(updateHd, 50));
 document.addEventListener("areachange", () => setTimeout(updateHd, 0));
 /* zoomed in, the county "fish caught here" shading would sit over the creeks: fade it out */
 let areaShade = null;
-map.on("zoomend", () => { const on = map.getZoom() >= AREA_ZOOM; if(on !== areaShade){ areaShade = on; countyLayer.setStyle(countyStyle); } });
+map.on("zoomend", () => { const z = Math.round(map.getZoom() * 2) / 2; if(z !== areaShade){ areaShade = z; countyLayer.setStyle(countyStyle); } });
+document.addEventListener("mapview", () => countyLayer.setStyle(countyStyle));
 /* the creek canvas sits over the counties, so a tap on open land opens that county */
-map.on("click", e => {
-  if(picking) return;
-  const t = e.originalEvent && e.originalEvent.target;
-  if(!t || t.tagName !== "CANVAS" || !t.closest(".leaflet-area-pane, .leaflet-detail-pane")) return;
-  const id = countyAt(e.latlng.lat, e.latlng.lng);
-  if(id && id !== currentCounty) openCounty(id);
-});
+// (taps on open land are handled by the county highlight in 89-countytap.js)

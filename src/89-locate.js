@@ -35,7 +35,6 @@ function locateMe(){
       L.circle([lat, lng], { radius:acc, pane:"me", color:"#2F7BF5", weight:1, fillColor:"#2F7BF5", fillOpacity:.12, interactive:false }),
       L.marker([lat, lng], { pane:"me", icon:L.divIcon({ className:"", html:`<div class="hereDot"></div>`, iconSize:[18,18], iconAnchor:[9,9] }), keyboard:false })
     ]).addTo(map);
-    if(hereFix.cid && currentCounty !== hereFix.cid) openCounty(hereFix.cid);
     map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration:.7 });
     const near = await watersNear(lat, lng).catch(() => []);
     const pop = L.popup({ className:"hpop", offset:[0, -6], maxWidth:300, autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 90) }).setLatLng([lat, lng]).setContent(hereHtml(hereFix, near));

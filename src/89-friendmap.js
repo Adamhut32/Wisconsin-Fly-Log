@@ -18,7 +18,7 @@ function openPersonMap(id){
   const items = [...friendCatches, ...friendSpots].filter(x => x.user_id === id && x.lat != null);
   const pts = items.map(x => [x.lat, x.lng]), cids = [...new Set(items.map(x => x.county).filter(Boolean))];
   if(cids.length === 1){ // all in one county: open it so the creeks are there, then frame their fish
-    openCounty(cids[0]); setTimeout(() => map.fitBounds(L.latLngBounds(pts).pad(.3), { maxZoom:13, padding:[60,60] }), 700);
+    map.fitBounds(L.latLngBounds(pts).pad(.3), { maxZoom:13, padding:[60,60] });
   } else { backToState(); if(pts.length) setTimeout(() => map.fitBounds(L.latLngBounds(pts).pad(.2), { maxZoom:9, padding:[60,60] }), 300); }
 }
 function closePersonMap(){
