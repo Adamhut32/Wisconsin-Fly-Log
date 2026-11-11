@@ -80,7 +80,7 @@ landingLayer.addTo(map); crossLayer.addTo(map);
 document.addEventListener("mapsettled", syncPlaces);
 function syncPlaceKey(){
   const a = $("landingToggle"), c = $("crossToggle");
-  a.setAttribute("aria-pressed", String(showLandings)); a.textContent = showLandings ? "Landings and parking on" : "Landings and parking off";
+  a.setAttribute("aria-pressed", String(showLandings)); a.textContent = showLandings ? "Boat landings on" : "Boat landings off";
   c.setAttribute("aria-pressed", String(showCrossings)); c.textContent = showCrossings ? "Road crossings on" : "Road crossings off";
 }
 $("landingToggle").onclick = () => { showLandings = !showLandings; lsSet("fl.landings", showLandings); syncPlaceKey(); syncPlaces(); if(showLandings && map.getZoom() < PLACE_ZOOM && !currentCounty) toast("Boat landings show when you zoom in a bit."); };

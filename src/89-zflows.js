@@ -6,7 +6,15 @@ const FLOW_TTL = 15 * 60000, GAUGE_ZOOM = 8.75;
 let gauges = null, flowNow = lsGet("fl.flows", { at:0, q:{}, t:{} }), flowBusy = null, showGauges = lsGet("fl.gauges", true);
 const gaugeLayer = L.layerGroup().addTo(map), gaugeDetail = {}, wxCache = {};
 const usgs = async (path, params) => { const r = await fetch(USGS + path + "?" + new URLSearchParams(params)); if(!r.ok) throw new Error("usgs " + r.status); return r.json(); };
-async function loadGauges(){ if(!gauges){ try{ const r = await fetch(dataUrl("gauges.json")); gauges = r.ok ? await r.json() : []; }catch(e){ gauges = []; } } return gauges; }
+// what's normal for each gauge at each week of the year: [p10, p25, p75, p90], from the monthly data refresh
+let flowNorms = null;
+async function loadNorms(){ if(!flowNorms){ try{ const r = await fetch(dataUrl("flownorms.json")); flowNorms = r.ok ? await r.json() : {}; }catch(e){ flowNorms = {}; } } return flowNorms; }
+function normFor(id){
+  const w = flowNorms && flowNorms[id]; if(!w) return null;
+  const d = new Date(), doy = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 86400000), r = w[Math.min(52, Math.floor(doy / 7))];
+  return r && r.every(Number.isFinite) ? { 10:r[0], 25:r[1], 75:r[2], 90:r[3] } : null;
+}
+async function loadGauges(){ if(!gauges){ try{ const r = await fetch(dataUrl("gauges.json")); gauges = r.ok ? await r.json() : []; }catch(e){ gauges = []; } await loadNorms(); } return gauges; }
 async function loadFlows(){
   if(Date.now() - flowNow.at < FLOW_TTL || !navigator.onLine) return flowNow;
   return (flowBusy ||= (async () => {
@@ -32,12 +40,14 @@ function flowBand(v, pct){
 async function gaugeDetails(id){
   const c = gaugeDetail[id]; if(c && Date.now() - c.at < 30 * 60000) return c;
   const d = new Date(), md = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  await loadNorms();
+  const local = normFor(id);
   const [series, stats] = await Promise.all([
     usgs("ogcapi/v0/collections/continuous/items", { f:"json", monitoring_location_id:id, parameter_code:"00060", time:"P7D", limit:"3000", properties:"time,value", skipGeometry:"true" }).catch(() => null),
-    usgs("statistics/v0/observationNormals", { monitoring_location_id:id, parameter_code:"00060", computation_type:"percentile", start_date:md, end_date:md }).catch(() => null) ]);
+    local ? null : usgs("statistics/v0/observationNormals", { monitoring_location_id:id, parameter_code:"00060", computation_type:"percentile", start_date:md, end_date:md }).catch(() => null) ]);
   const pts = ((series && series.features) || []).map(f => [Date.parse(f.properties.time), parseFloat(f.properties.value)]).filter(p => Number.isFinite(p[1])).sort((a, b) => a[0] - b[0]);
-  let pct = null;
-  try{ const v = stats.features[0].properties.data[0].values[0]; pct = {}; v.percentiles.forEach((p, i) => pct[+p] = parseFloat(v.values[i])); if(!Number.isFinite(pct[10]) || !Number.isFinite(pct[90])) pct = null; }catch(e){}
+  let pct = local;
+  if(!pct) try{ const v = stats.features[0].properties.data[0].values[0]; pct = {}; v.percentiles.forEach((p, i) => pct[+p] = parseFloat(v.values[i])); if(!Number.isFinite(pct[10]) || !Number.isFinite(pct[90])) pct = null; }catch(e){}
   return (gaugeDetail[id] = { at:Date.now(), pts, pct });
 }
 function sparkline(pts, pct){
@@ -57,7 +67,7 @@ function trendText(pts){
   return d > .15 ? `Rising: up ${Math.round(d * 100)}% since yesterday` : d < -.15 ? `Dropping: down ${Math.round(-d * 100)}% since yesterday` : w > .3 ? `Up ${Math.round(w * 100)}% over the week, steady today` : w < -.3 ? `Down ${Math.round(-w * 100)}% over the week, steady today` : "Steady this week";
 }
 function gaugeBody(g, det){
-  const q = flowNow.q[g[0]], t = flowNow.t[g[0]], band = q && det ? flowBand(q[0], det.pct) : null, f = t ? toF(t[0]) : null;
+  const q = flowNow.q[g[0]], t = flowNow.t[g[0]], band = q ? flowBand(q[0], det ? det.pct : normFor(g[0])) : null, f = t ? toF(t[0]) : null;
   return `${q ? `<div class="flowbig"><b>${cfs(q[0])}</b> cfs${band ? ` <span class="pill flow-${band.k}">${band.t}</span>` : ""}</div><div class="meta">Read ${readAgo(q[1])}${det && det.pts.length ? " · " + esc(trendText(det.pts)) : ""}</div>` : `<p class="muted">No recent reading from this gauge.</p>`}
     ${f != null ? `<div class="meta${f >= 68 ? " warm" : ""}">Water ${Math.round(f)}°F${f >= 68 ? ". Warm for trout: fish early, or give them a rest" : ""}</div>` : ""}
     ${det ? sparkline(det.pts, det.pct) : q ? `<p class="status">Loading the last 7 days…</p>` : ""}`;
@@ -101,7 +111,7 @@ waterPopupExtras.push((div, info) => {
   loadGauges().then(async () => {
     const hit = nearestGauge(info.name, info.ll); if(!hit) return;
     await loadFlows(); const q = flowNow.q[hit.g[0]]; if(!q) return;
-    const paint = det => { const band = det ? flowBand(q[0], det.pct) : null, t = flowNow.t[hit.g[0]], f = t ? toF(t[0]) : null;
+    const paint = det => { const band = flowBand(q[0], det ? det.pct : normFor(hit.g[0])), t = flowNow.t[hit.g[0]], f = t ? toF(t[0]) : null;
       slot.innerHTML = `<div class="regs"><b>Flow</b><div><span>Now</span>${cfs(q[0])} cfs${band ? ` · ${band.t.toLowerCase()}` : ""}</div>${det && det.pts.length ? `<div><span>Trend</span>${esc(trendText(det.pts))}</div>` : ""}${f != null ? `<div><span>Water</span>${Math.round(f)}°F${f >= 68 ? " (warm for trout)" : ""}</div>` : ""}
         <small>${esc(hit.g[1])}, ${hit.mi < 1 ? "right here" : Math.round(hit.mi) + " mi away"} · read ${readAgo(q[1])} · <button class="link" type="button" data-gauge="${esc(hit.g[0])}">7-day chart</button></small></div>`; map._popup && map._popup.update(); };
     paint(gaugeDetail[hit.g[0]] || null); if(navigator.onLine) gaugeDetails(hit.g[0]).then(paint).catch(() => {});
