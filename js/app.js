@@ -33,7 +33,7 @@ let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
 let mapPerson = null;
-let waterTapAt = 0, countyOpenZoom = null; // last creek/lake tap time; zoom a county was opened at
+let waterTapAt = 0, featureTaps = 0, countyOpenZoom = null; // last creek/lake tap time; zoom a county was opened at
 let hidePins = false; // "My pins off": hide every spot, catch and fish count, e.g. to show someone the map // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me
@@ -65,17 +65,26 @@ const fishOf = c => (c.count ?? 1);
 const lenTxt = v => v == null || v === "" ? "" : `${+v}″`;
 
 /* ---------- derived numbers ---------- */
-function countyStats(id){
-  let s=0,f=0;
-  if(hidePins) return { spots:0, fish:0 };
-  if(mapPerson){ // looking at a friend's map: count what they share
-    for(const x of friendSpots) if(x.user_id===mapPerson && x.county===id) s++;
-    for(const c of friendCatches) if(c.user_id===mapPerson && c.county===id) f+=fishOf(c);
-    return { spots:s, fish:f };
+// One pass over your spots and catches gives every county's numbers. The result is kept only for the current burst of work
+// (restyling all 72 counties asks for each county's numbers, and the busiest county's, 72 times over).
+let countyMemo = null;
+function countyTally(){
+  if(countyMemo) return countyMemo;
+  const by = {}, at = id => (by[id] ||= { spots:0, fish:0 });
+  if(!hidePins){
+    if(mapPerson){ // looking at a friend's map: count what they share
+      for(const x of friendSpots) if(x.user_id === mapPerson && x.county) at(x.county).spots++;
+      for(const c of friendCatches) if(c.user_id === mapPerson && c.county) at(c.county).fish += fishOf(c);
+    } else {
+      for(const x of spots) if(x.county) at(x.county).spots++;
+      for(const c of catches) if(c.county) at(c.county).fish += fishOf(c);
+    }
   }
-  for(const x of spots) if(x.county===id) s++; for(const c of catches) if(c.county===id) f+=fishOf(c);
-  return { spots:s, fish:f };
+  let max = 1; for(const id in by) if(byId[id] && by[id].fish > max) max = by[id].fish;
+  countyMemo = { by, max }; queueMicrotask(() => { countyMemo = null; });
+  return countyMemo;
 }
+function countyStats(id){ const o = countyTally().by[id]; return o ? { spots:o.spots, fish:o.fish } : { spots:0, fish:0 }; }
 function totals(){
   const ids = new Set([...spots.map(s=>s.county), ...catches.map(c=>c.county)].filter(Boolean));
   return { spots:spots.length, fish:catches.reduce((a,c)=>a+fishOf(c),0), counties:ids.size };
@@ -91,6 +100,8 @@ const pane = (n, z, pe) => { map.createPane(n); const p = map.getPane(n); p.styl
 pane("base", 380, false); pane("water", 420, false); pane("stateline", 425, false); pane("mask", 428, false); pane("detail", 430);
 pane("nearby", 426, false);
 let detailRenderer = null, nearbyRenderer = null, nearbyLayer = null;
+// how close a tap has to be to a creek to count: a fingertip is wider than a mouse pointer
+const TAP_TOL = matchMedia("(pointer:coarse)").matches ? 13 : 6;
 
 /* graticule — every half degree, like a printed field map */
 const gratLayer = L.layerGroup([]).addTo(map);
@@ -115,7 +126,7 @@ let countyLayer;
 const curView = () => { try{ return mapView; }catch(e){ return "field"; } };
 function countyStyle(f){
   const s = countyStats(f.id);
-  const max = Math.max(1, ...counties.map(c => countyStats(c.id).fish));
+  const max = countyTally().max;
   // full strength statewide, fading out as you zoom in (and softer over satellite/topo) so it never sits on top of the water
   const z = map.getZoom(), fade = z < 7.5 ? 1 : Math.max(.12, 1 - (z - 7.5) * .45);
   const heat = (s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0)) * fade * (curView() !== "field" ? .55 : 1);
@@ -176,6 +187,19 @@ function smoothPath(pts, n = 2){
 // rounding only shows up close in; skip it when zoomed out so drawing stays quick
 const llPaths = paths => { const sm = map.getZoom() >= 12; return paths.map(pa => { const ll = pa.map(q => [q[1], q[0]]); return sm ? smoothPath(ll) : ll; }); };
 function streamWeight(o){ return o >= 6 ? 3 : o >= 5 ? 2.5 : o >= 4 ? 2 : o >= 3 ? 1.6 : o >= 2 ? 1.25 : 0.95; }
+/* Line widths follow the zoom, like a printed map drawn at different scales: fine lines when a whole county is on screen
+   (so creeks don't clot into blobs), full weight up close. Each line remembers its full-size width (_bw). */
+const lineScale = z => z < 9.25 ? .5 : z < 10.25 ? .62 : z < 11.25 ? .8 : z < 12.5 ? 1 : z < 14 ? 1.12 : 1.28;
+const sizedLine = (ll, o, bw) => { const k = lineScale(map.getZoom()), l = L.polyline(ll, { ...o, weight:bw * k }); l._bw = bw; l._bk = k; return l; };
+function restyleLines(onZoom){
+  // on a zoom the layers are about to be redrawn anyway, so only the widths are changed here (no second redraw)
+  const k = lineScale(map.getZoom()), fix = l => { if(l._bw && l._bk !== k){ l._bk = k; if(onZoom === true) l.options.weight = l._bw * k; else l.setStyle({ weight:l._bw * k }); } };
+  if(detailLayer) detailLayer.eachLayer(fix);
+  if(nearbyLayer) nearbyLayer.eachLayer(fix);
+  for(const more of restyleMore) more(fix);
+}
+const restyleMore = [];   // other files add their own line layers here
+map.on("zoomend", () => restyleLines(true));
 const TROUT = { 1:{ label:"Class I", tok:"--t1" }, 2:{ label:"Class II", tok:"--t2" }, 3:{ label:"Class III", tok:"--t3" } };
 async function getJSON(cache, path, id){
   if(cache[id]) return cache[id];
@@ -211,14 +235,14 @@ function waterPopup(name, kind, ll, trout, cid){
 let hoverName = null;
 function setHover(name){
   if(hoverName === name) return; hoverName = name;
-  for(const s of [...detailStreams, ...areaStreams()]){ const on = name && s.name === name; s.line.setStyle(on ? { color:css("--hl"), weight:s.w + 2.2 } : { color:css("--stream"), weight:s.w }); }
+  for(const s of [...detailStreams, ...areaStreams()]){ const on = name && s.name === name; const k = lineScale(map.getZoom()); s.line._bk = k; s.line.setStyle(on ? { color:css("--hl"), weight:(s.w + 2.2) * k } : { color:css("--stream"), weight:s.w * k }); }
   drawLabels();
 }
 function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
   const el = waterPopup(name, kind, e.latlng, trout, cid), here = countyAt(e.latlng.lat, e.latlng.lng);
   if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="link" type="button" data-opencounty="${esc(here)}">Open ${esc(countyName(here))}</button>`; el.appendChild(r); }
-  waterTapAt = Date.now();
+  waterTapAt = Date.now(); featureTaps++;
   L.popup({ maxWidth:300 }).setLatLng(e.latlng).setContent(el).openOn(map);
   if(here && here !== currentCounty) outlineCounty(here);
 }
@@ -244,7 +268,7 @@ function drawDetail(id, w, t){
   if(detailLayer){ map.removeLayer(detailLayer); detailLayer = null; }
   if(detailRenderer){ map.removeLayer(detailRenderer); detailRenderer = null; }
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
-  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:canvasPad() });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
+  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:TAP_TOL, padding:canvasPad() });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
     const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     if(name && name !== "Unnamed"){ p.on("click", e => openWaterPopup(e, name, waterType(name))); detailLakes.push({ name, poly:p }); }
@@ -258,7 +282,7 @@ function drawDetail(id, w, t){
   /* trout class bands sit under the creek line, like a highlighter on a paper map */
   if(t) for(const [name, c, mi, orw, paths] of t.t){
     if(!TROUT[c]) continue;
-    const band = L.polyline(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
     g.addLayer(band);
@@ -269,9 +293,9 @@ function drawDetail(id, w, t){
     if(!paths.length) continue;
     const ll = llPaths(paths);
     const wgt = streamWeight(order);
-    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
+    g.addLayer(sizedLine(ll, { renderer:R, interactive:false, color:css("--land"), opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt + 2.4));
     const unnamed = !name || name === "NA" || name === "Unnamed";
-    const line = L.polyline(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const line = sizedLine(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt);
     if(unnamed){ g.addLayer(line); continue; }   // unnamed creeks: drawn, but no label or card
     const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
     line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null));
@@ -283,6 +307,7 @@ function drawDetail(id, w, t){
     for(const [name, c, mi, orw, paths] of t.t){ if(!name || have.has(name.toLowerCase())) continue;
       detailLabelsExtra.push({ name, order:2, ll: paths.map(pa=>pa.map(q=>[q[1],q[0]])) }); } }
   detailLayer = g.addTo(map);
+  restyleLines();
 }
 /* creeks in the surrounding counties, drawn under the fade so they read as context */
 async function loadNearby(id){
@@ -296,8 +321,8 @@ async function loadNearby(id){
     try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + k + ".json"), k), getJSON(troutCache, dataUrl("water/trout/" + k + ".json"), k).catch(()=>null) ]); }catch(e){ return; }
     if(detailFor !== id || nearbyLayer !== layer) return;
     for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" }));
-    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), weight:5, opacity:.3, lineJoin:"round" }));
-    for(const [name, order, paths] of w.s) if(!((!name || name === "NA" || name === "Unnamed") && order >= 4)) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order), lineJoin:"round" }));
+    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), opacity:.3, lineJoin:"round" }, 5));
+    for(const [name, order, paths] of w.s) if(!((!name || name === "NA" || name === "Unnamed") && order >= 4)) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), lineJoin:"round" }, streamWeight(order)));
   }));
 }
 function clearDetail(){
@@ -326,19 +351,39 @@ map.on("zoomstart", () => { labelCanvas.style.visibility = "hidden"; });
 map.on("zoomend", () => { labelCanvas.style.visibility = ""; drawLabels(); });
 let labelQueued = false;
 function drawLabels(){ if(labelQueued) return; labelQueued = true; requestAnimationFrame(() => { labelQueued = false; renderLabels(); }); }
-// while the map is moving, refresh names at most ~8 times a second (every frame was the main cause of zoom lag)
-let labelMoveAt = 0, labelMoveTimer = null;
-map.on("move zoom", () => {
-  const now = performance.now();
-  if(now - labelMoveAt > 120){ labelMoveAt = now; drawLabels(); }
-  clearTimeout(labelMoveTimer); labelMoveTimer = setTimeout(drawLabels, 130);
+// The names are drawn a little past every edge of the screen and ride along with the map while it's dragged, so nothing is
+// redrawn mid-drag (redrawing them several times a second was the main cause of choppy panning). They're redrawn when the
+// map comes to rest, or mid-drag only once it has travelled far enough to run out of pre-drawn names.
+const LABEL_PAD = .22;
+let labelDrawnAt = null;
+map.on("move", () => {
+  if(!labelDrawnAt) return;
+  const o = map.getPixelBounds().min, el = map.getContainer();
+  if(Math.abs(o.x - labelDrawnAt.x) > el.clientWidth * LABEL_PAD * .7 || Math.abs(o.y - labelDrawnAt.y) > el.clientHeight * LABEL_PAD * .7) drawLabels();
 });
 map.on("resize viewreset moveend", drawLabels);
+// every creek point's place on the flat map, worked out once per line; turning that into a screen position is then one multiply
+const mercCache = new WeakMap();
+function merc(line){
+  let m = mercCache.get(line);
+  if(!m){ const n = line.length, a = new Float64Array(n * 2); let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+    for(let i = 0; i < n; i++){ const sn = Math.sin(line[i][0] * Math.PI / 180), x = (line[i][1] + 180) / 360, y = .5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI);
+      a[2*i] = x; a[2*i+1] = y; if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; }
+    m = { a, x0, x1, y0, y1 }; mercCache.set(line, m); }
+  return m;
+}
 function renderLabels(){
-  const el = map.getContainer(), W = el.clientWidth, H = el.clientHeight, dpr = window.devicePixelRatio || 1;
+  const el = map.getContainer(), vw = el.clientWidth, vh = el.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+  if(!vw || !vh) return;
+  // the drawing area reaches past the screen by padX/padY on every side; W and H below are that whole area
+  const padX = Math.round(vw * LABEL_PAD), padY = Math.round(vh * LABEL_PAD), W = vw + 2 * padX, H = vh + 2 * padY;
   if(labelCanvas.width !== W*dpr || labelCanvas.height !== H*dpr){ labelCanvas.width = W*dpr; labelCanvas.height = H*dpr; labelCanvas.style.width = W+"px"; labelCanvas.style.height = H+"px"; }
-  L.DomUtil.setPosition(labelCanvas, map.containerPointToLayerPoint([0,0]));
+  L.DomUtil.setPosition(labelCanvas, map.containerPointToLayerPoint([-padX, -padY]));
   const ctx = labelCanvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+  const org = map.getPixelBounds().min, scale = 256 * Math.pow(2, map.getZoom()), ox = org.x - padX, oy = org.y - padY;   // drawing-area pixel = flat-map position * scale - (ox, oy)
+  labelDrawnAt = { x:org.x, y:org.y };
+  const onScreen = p => p.x > padX + 2 && p.x < padX + vw - 2 && p.y > padY + 2 && p.y < padY + vh - 2;
+  const toArea = ll => { const p = map.latLngToContainerPoint(ll); return { x:p.x + padX, y:p.y + padY }; };
   const z = map.getZoom(), placed = [];
   const hits = (b) => placed.some(p => b.x < p.x+p.w && b.x+b.w > p.x && b.y < p.y+p.h && b.y+b.h > p.y);
   const halo = css("--land"), ink = css("--label");
@@ -363,12 +408,14 @@ function renderLabels(){
     // longest on-screen stretch of this water
     let best = null, bestLen = 0;
     for(const line of it.lines){
-      let run = [], len = 0;
+      const m = merc(line), a = m.a;
+      if(m.x1 * scale - ox < 4 || m.x0 * scale - ox > W - 4 || m.y1 * scale - oy < 4 || m.y0 * scale - oy > H - 4) continue;   // this piece is nowhere near the screen
+      let run = [], len = 0, lx = 0, ly = 0;
       const flush = () => { if(len > bestLen){ bestLen = len; best = run; } run = []; len = 0; };
-      for(const ll of line){ const p = map.latLngToContainerPoint(ll);
-        if(p.x < 4 || p.y < 4 || p.x > W-4 || p.y > H-4){ flush(); continue; }
-        if(run.length) len += Math.hypot(p.x-run[run.length-1].x, p.y-run[run.length-1].y);
-        run.push(p); }
+      for(let i = 0, n = a.length; i < n; i += 2){ const x = a[i] * scale - ox, y = a[i+1] * scale - oy;
+        if(x < 4 || y < 4 || x > W-4 || y > H-4){ flush(); continue; }
+        if(run.length){ const d = Math.hypot(x - lx, y - ly); if(d < 1.5) continue; len += d; }   // points closer than a pixel and a half add nothing
+        run.push({ x, y }); lx = x; ly = y; }
       flush();
     }
     if(!best || bestLen < tw + 16) continue;
@@ -388,7 +435,7 @@ function renderLabels(){
     for(let d0 = 0; d0 + tw <= L; d0 += 5){
       const a = at(d0), b = at(d0 + tw), chord = Math.hypot(b.x-a.x, b.y-a.y), straight = chord / tw;
       let turn = 0, prev = tan(d0); for(let d = d0 + 6; d <= d0 + tw; d += 6){ const t2 = tan(d); turn = Math.max(turn, Math.abs(Math.atan2(Math.sin(t2-prev), Math.cos(t2-prev)))); prev = t2; }
-      const score = straight - turn*0.15 - Math.abs((d0 + tw/2) - L/2) / L * 0.15;
+      const score = straight - turn*0.15 - Math.abs((d0 + tw/2) - L/2) / L * 0.15 + (onScreen(a) && onScreen(b) ? .6 : 0);   // a name you can see beats one waiting past the edge
       if(!pick || score > pick.score) pick = { d0, a, b, straight, turn, score };
     }
     if(!pick) continue;
@@ -428,7 +475,7 @@ function renderLabels(){
   if(detailFor){
     ctx.font = `italic 500 12px "Crimson Pro", Georgia, serif`; ctx.textAlign = "center";
     for(const l of detailLakes){
-      const b = l.poly.getBounds(); const a = map.latLngToContainerPoint(b.getNorthWest()), c = map.latLngToContainerPoint(b.getSouthEast());
+      const b = l.poly.getBounds(); const a = toArea(b.getNorthWest()), c = toArea(b.getSouthEast());
       const w = c.x - a.x, h = c.y - a.y; const tw = ctx.measureText(l.name).width;
       if(w < Math.min(tw*0.8, 90) || h < 12 || c.x < 0 || a.x > W || c.y < 0 || a.y > H) continue;
       const x = (a.x + c.x)/2, y = (a.y + c.y)/2;
@@ -465,10 +512,11 @@ new MutationObserver(restyleBase).observe(document.documentElement, { attributes
 /* ---------- creeks for every county on screen once you zoom in, so water reads across county lines ---------- */
 pane("area", 429);               // above the fade outside an open county, below the open county itself
 const AREA_ZOOM = 9.5;
-const areaRenderer = L.canvas({ pane:"area", tolerance:6, padding:canvasPad() });
+const areaRenderer = L.canvas({ pane:"area", tolerance:TAP_TOL, padding:canvasPad() });
 const areaGroups = {};           // county id -> { g, streams, extra }
 const areaOn = new Set();        // counties drawn right now
 let areaWant = new Set(), countyBounds = null;
+restyleMore.push(fix => { for(const id of areaOn) if(areaGroups[id]) areaGroups[id].g.eachLayer(fix); });
 function areaStreams(){ const out = []; for(const id of areaOn) if(areaGroups[id]) out.push(...areaGroups[id].streams); return out; }
 function areaExtra(){ const out = []; for(const id of areaOn) if(areaGroups[id]) out.push(...areaGroups[id].extra); return out; }
 function buildArea(id, w, t){
@@ -485,7 +533,7 @@ function buildArea(id, w, t){
   }
   if(t) for(const [name, c, mi, orw, paths] of t.t){
     if(!TROUT[c]) continue;
-    const band = L.polyline(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }, id));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
     g.addLayer(band);
@@ -495,9 +543,9 @@ function buildArea(id, w, t){
     const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
     if(!paths.length) continue;
     const ll = llPaths(paths), wgt = streamWeight(order);
-    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
+    g.addLayer(sizedLine(ll, { renderer:R, interactive:false, color:css("--land"), opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt + 2.4));
     const unnamed = !name || name === "NA" || name === "Unnamed";
-    const line = L.polyline(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const line = sizedLine(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt);
     if(unnamed){ g.addLayer(line); continue; }
     const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
     line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null, id));
@@ -521,6 +569,8 @@ async function updateArea(){
     }
     areaWant = want;
     for(const id of [...areaOn]) if(!want.has(id)){ map.removeLayer(areaGroups[id].g); areaOn.delete(id); }
+    // an empty creek canvas still covers the whole map and would swallow every tap meant for a county: let taps fall through it
+    map.getPane("area").style.pointerEvents = areaOn.size ? "" : "none";
     await Promise.all([...want].map(async id => {
       if(areaOn.has(id)) return;
       if(!areaGroups[id]){
@@ -534,6 +584,8 @@ async function updateArea(){
     // keep a handful of built counties for quick panning back, drop the rest
     const built = Object.keys(areaGroups).filter(id => !areaOn.has(id));
     for(const id of built.slice(0, Math.max(0, built.length - 10))) delete areaGroups[id];
+    map.getPane("area").style.pointerEvents = areaOn.size ? "" : "none";
+    restyleLines();   // counties kept from an earlier zoom get this zoom's line widths
     const any = areaOn.size > 0 || !!detailFor;
     if(any && map.hasLayer(riverLayer)) map.removeLayer(riverLayer);
     if(!any && !map.hasLayer(riverLayer)) map.addLayer(riverLayer);
@@ -592,8 +644,34 @@ function renderBadges(){
   }
 }
 const markerIndex = {};
+/* Catch pins that would sit on top of each other are gathered into one numbered pin until you zoom in far enough to tell them
+   apart. Tapping a numbered pin zooms in on its catches. */
+const CLUSTER_BELOW = 13.5, CLUSTER_PX = 34;
+let ownFish = [], friendFish = [], clusterPins = [];
+function groupPins(list, z){
+  const out = [];
+  for(const it of list){ const p = map.project(it.m.getLatLng(), z); let g = null;
+    for(const o of out) if(Math.abs(o.x - p.x) < CLUSTER_PX && Math.abs(o.y - p.y) < CLUSTER_PX){ g = o; break; }
+    if(g){ g.items.push(it); const n = g.items.length; g.x += (p.x - g.x) / n; g.y += (p.y - g.y) / n; } else out.push({ x:p.x, y:p.y, items:[it] }); }
+  return out.map(o => o.items);
+}
+function layoutPins(){
+  for(const c of clusterPins) c._home.removeLayer(c); clusterPins = [];
+  const z = map.getZoom();
+  for(const [list, home, cls] of [[ownFish, markerLayer, ""], [friendFish, friendLayer, " friend"]]){
+    for(const g of (z >= CLUSTER_BELOW ? list.map(x => [x]) : groupPins(list, z))){
+      if(g.length === 1){ if(!home.hasLayer(g[0].m)) home.addLayer(g[0].m); continue; }
+      for(const x of g) if(home.hasLayer(x.m)) home.removeLayer(x.m);
+      const b = L.latLngBounds(g.map(x => x.m.getLatLng()));
+      const cm = L.marker(b.getCenter(), { icon:L.divIcon({ className:"", html:`<div class="mk-cluster${cls}">${icon("i-fish")}<b>${g.length}</b></div>`, iconSize:[0,0] }), zIndexOffset:600, riseOnHover:true, title:`${g.length} catches here. Tap to zoom in.` });
+      cm.on("click", () => map.flyToBounds(b.pad(.6), { maxZoom:15, duration:.5 }));
+      cm._home = home; home.addLayer(cm); clusterPins.push(cm);
+    }
+  }
+}
+map.on("zoomend", layoutPins);
 function renderMarkers(){
-  markerLayer.clearLayers(); friendLayer.clearLayers();
+  markerLayer.clearLayers(); friendLayer.clearLayers(); ownFish = []; friendFish = []; clusterPins = [];
   if(hidePins){ $("legend").classList.remove("friends-on"); return; }
   for(const s of (mapPerson ? [] : spots)){
     const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot ${esc(s.status)}"></div>`, iconSize:[0,0] }), riseOnHover:true, title:s.name||"Spot" });
@@ -607,7 +685,7 @@ function renderMarkers(){
     const html = `<div class="mk-fish" ${bg}>${url?"":icon("i-fish")}${fishOf(c)>1?`<span class="n">${fishOf(c)}</span>`:""}</div>`;
     const m = L.marker([c.lat,c.lng], { icon:L.divIcon({ className:"", html, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:500, title:c.species||"Catch" });
     m.bindPopup(() => catchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
-    markerLayer.addLayer(m); markerIndex["c:"+c.id] = m;
+    ownFish.push({ m }); markerIndex["c:"+c.id] = m;
   }
   outingMarkers();
   for(const c of friendCatches){
@@ -617,7 +695,7 @@ function renderMarkers(){
     const html = `<div class="mk-fish friend${url ? " ph" : ""}" ${url ? `style="background-image:url('${url}')"` : ""}>${url ? "" : icon("i-fish")}${fishOf(c)>1?`<span class="n">${fishOf(c)}</span>`:""}${mapPerson ? "" : `<span class="mk-name">${esc(first)}</span>`}</div>`;
     const m = L.marker([c.lat,c.lng], { icon:L.divIcon({ className:"", html, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:300, title:`${c.display_name}: ${c.species||"Catch"}` });
     m.bindPopup(() => friendCatchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
-    friendLayer.addLayer(m); markerIndex["f:"+c.id] = m;
+    friendFish.push({ m }); markerIndex["f:"+c.id] = m;
   }
   for(const s of friendSpots){
     if(s.lat == null || (mapPerson ? s.user_id !== mapPerson : !showFriends)) continue;
@@ -625,6 +703,7 @@ function renderMarkers(){
     m.bindPopup(() => friendSpotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });
     friendLayer.addLayer(m); markerIndex["fs:"+s.id] = m;
   }
+  layoutPins();
   $("legend").classList.toggle("friends-on", !!mapPerson || (showFriends && (friendCatches.some(c => c.lat != null) || friendSpots.some(s => s.lat != null))));
 }
 function updateZoomLayers(){
@@ -790,7 +869,7 @@ function focusMarker(key){
   const m = markerIndex[key]; if(!m) return;
   const ll = m.getLatLng();
   if(key.startsWith("f:") && !showFriends){ showFriends = true; lsSet("fl.showFriends", true); }
-  map.flyTo(ll, Math.max(map.getZoom(), 12), { duration:.6 });
+  map.flyTo(ll, Math.max(map.getZoom(), 14), { duration:.6 });   // close enough that the pin stands on its own, not inside a numbered group
   map.once("moveend", () => { updateZoomLayers(); m.openPopup(); });
 }
 let renderQueued = false;
@@ -847,9 +926,10 @@ function parseTiff(v, start){
 
 /* ---------- catch / spot form ---------- */
 let photoDate = null, photoExif = null, ph2File = null, ph2Url = null, ph2Removed = false;
-function setPh2(url, title){
+let formOpenSeq = 0;
+function setPh2(url, title, has){
   $("ph2Pv").style.backgroundImage = url ? `url('${url}')` : ""; $("ph2Pv").textContent = url ? "" : "+";
-  $("ph2Title").textContent = title; $("ph2Del").hidden = !url;
+  $("ph2Title").textContent = title; $("ph2Del").hidden = !(url || has);
 }
 $("fPhoto2").addEventListener("change", () => {
   const f = $("fPhoto2").files[0]; if(!f) return;
@@ -982,11 +1062,14 @@ function openForm(kind, rec, prefill){
   $("fMore").open = !!($("fTrip").value || $("fSpotLink").value); renderSpeciesChips();
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
-  const url = photoSrc(r.photo_path);
+  const url = photoSrc(r.photo_path), openedFor = ++formOpenSeq;
   ph2File = null; ph2Removed = false; $("fPhoto2").value = "";
-  const p2 = morePaths(rec)[0]; setPh2(p2 ? photoSrc(p2) : null, p2 ? "Second photo saved · tap to replace" : "Add a second photo");
+  const p2 = morePaths(rec)[0]; setPh2(p2 ? photoSrc(p2) : null, p2 ? "Second photo saved · tap to replace" : "Add a second photo", !!p2);
   if(r.photo_path) setPhotoPreview(url, "Photo saved", "Choose another to replace it");
   else setPhotoPreview(null, "Add a photo", "Location and date fill in from the photo when it has them");
+  // the saved photos' links may still be on their way: show them as soon as they arrive (unless a new photo was picked meanwhile)
+  if(r.photo_path && !url) photoUrl(r.photo_path).then(u => { if(u && openedFor === formOpenSeq && !photoFile && !$("scrim").hidden) $("photoPv").style.backgroundImage = `url('${u}')`, $("photoPv").innerHTML = ""; });
+  if(p2 && !photoSrc(p2)) photoUrl(p2).then(u => { if(u && openedFor === formOpenSeq && !ph2File && !ph2Removed && !$("scrim").hidden) setPh2(u, "Second photo saved · tap to replace", true); });
   coordHint();
   $("scrim").hidden = false;
 }
@@ -1000,6 +1083,7 @@ document.addEventListener("keydown", e => { if(e.key === "Escape"){ if(picking) 
 /* pick on map */
 $("pickBtn").onclick = () => {
   picking = true; $("scrim").hidden = true; $("pickbar").hidden = false; $("fab").hidden = true;
+  if(panelFull) setFull(false);   // the map has to be showing to tap a place on it
   map.getContainer().style.cursor = "crosshair";
 };
 function endPick(){ picking = false; $("pickbar").hidden = true; $("fab").hidden = false; map.getContainer().style.cursor = ""; $("scrim").hidden = false; }
@@ -1011,9 +1095,38 @@ function handlePick(ll){
   setTimeout(() => { if(pickMarker){ map.removeLayer(pickMarker); pickMarker = null; } }, 2500);
   endPick(); coordHint();
 }
+/* The map is a stack of drawing layers: the open county's creeks sit over the surrounding counties' creeks, which sit over public land.
+   Only the top one hears a tap, so a tap it has no use for is handed down the stack, and finally to the county itself. */
+let passingTap = false;
+function passTapDown(e){
+  const ev = e.originalEvent; if(!ev) return false;
+  const before = featureTaps;
+  passingTap = true;
+  try{
+    for(const R of [detailRenderer, areaRenderer, accessRenderer]){
+      if(!R || !R._container || !map.hasLayer(R) || R._container === ev.target) continue;   // the layer that got the tap has had its say
+      R._onClick(ev);
+      if(featureTaps !== before) return true;
+    }
+  } finally { passingTap = false; }
+  return false;
+}
 map.on("click", e => {
+  if(passingTap) return;
   if(picking){ handlePick(e.latlng); return; }
+  if(Date.now() - waterTapAt < 400) return;   // a creek, lake or public land took this tap
+  if(passTapDown(e)) return;
   tapCounty(e.latlng);
+});
+/* computer: hovering a creek in a neighboring county lights it up, even under the open county's layer */
+let hoverPassAt = 0;
+map.getContainer().addEventListener("mousemove", ev => {
+  if(ev.buttons || ev.timeStamp - hoverPassAt < 40) return;   // not while dragging, and only ~25 times a second
+  hoverPassAt = ev.timeStamp;
+  if(!detailRenderer || !areaRenderer._container || !map.hasLayer(areaRenderer) || ev.target !== detailRenderer._container) return;
+  if(detailRenderer._hoveredLayer){ if(areaRenderer._hoveredLayer) areaRenderer._handleMouseOut(ev); }
+  else areaRenderer._onMouseMove(ev);
+  ev.target.style.cursor = !detailRenderer._hoveredLayer && areaRenderer._hoveredLayer ? "pointer" : "";
 });
 
 /* shrink photos before upload; re-encoding also drops the photo's hidden GPS data */
@@ -1135,37 +1248,82 @@ const idb = (() => {
   return { put:(k,v) => tx("readwrite", s => s.put(v, k)), get:k => tx("readonly", s => s.get(k)), del:k => tx("readwrite", s => s.delete(k)) };
 })();
 
-/* ---------- photo display: short-lived signed links, fetched in batches ---------- */
-const photoCache = {}, pendingPhotoUrls = {};
-let photoWant = new Set(), photoTimer = null;
+/* ---------- photo display: signed links, fetched in batches and remembered on this device ----------
+   Photos are private, so each needs a signed link. A link used to be asked for only when a list or the map drew the photo;
+   anything opened before the link arrived (the edit form, the big photo viewer) showed a blank and never caught up.
+   Now: links are remembered for a day, every screen that shows a photo is filled in when its link arrives, a photo that fails
+   to load asks for a fresh link once, and the service worker keeps photos you've seen so they open instantly and offline. */
+const PH_TTL = 24 * 3600;   // seconds a signed link lasts
+const photoCache = {}, pendingPhotoUrls = {}, photoWaiters = {};
+let photoWant = new Set(), photoTimer = null, photoRetry = 0, photoSaveTimer = null;
+const photoKey = () => "fl.ph." + (me?.id || "anon");
+// out-of-date links are kept too: with no signal they still open any photo this device has saved
+function loadPhotoCache(){ const saved = lsGet(photoKey(), {}); for(const [p, v] of Object.entries(saved)) if(!photoCache[p] && v && v[0]) photoCache[p] = { url:v[0], exp:v[1] || 0 }; }
+function savePhotoCache(){ clearTimeout(photoSaveTimer); photoSaveTimer = setTimeout(() => { const out = {};
+  for(const [p, c] of Object.entries(photoCache).filter(([, c]) => c.url && !c.url.startsWith("blob:")).sort((x, y) => (y[1].at || y[1].exp) - (x[1].at || x[1].exp)).slice(0, 400)) out[p] = [c.url, c.exp];
+  lsSet(photoKey(), out); }, 400); }
 // extra photo paths of a catch (own catches store [{p,h}], friends' come as plain paths)
 const morePaths = c => (c && c.more_photos ? c.more_photos.map(x => typeof x === "string" ? x : x && x.p).filter(Boolean) : []);
+// an <img> that fills itself in when its link arrives, and asks for a new link if it fails to load
+const phImg = (path, attrs) => `<img ${attrs || ""} src="${photoSrc(path)}" data-ph="${esc(path)}">`;
 // one photo, or a swipeable pair
 function photoGallery(c, cls){
-  const urls = [c.photo_path, ...morePaths(c)].filter(Boolean).map(photoSrc).filter(Boolean);
+  const paths = [c.photo_path, ...morePaths(c)].filter(Boolean);
   const alt = esc(c.species || "Catch") + " photo";
-  if(!urls.length) return "";
-  if(urls.length === 1) return `<img ${cls ? `class="${cls}"` : ""} src="${urls[0]}" alt="${alt}" loading="lazy">`;
-  return `<div class="galw ${cls ? cls + "w" : ""}"><div class="gal ${cls || ""}">${urls.map((u, i) => `<img src="${u}" alt="${alt} ${i + 1} of ${urls.length}" loading="lazy">`).join("")}</div><span class="galn">${urls.length} photos · swipe</span></div>`;
+  if(!paths.length || !paths.some(photoSrc)) return "";
+  if(paths.length === 1) return phImg(paths[0], `${cls ? `class="${cls}"` : ""} alt="${alt}" loading="lazy"`);
+  return `<div class="galw ${cls ? cls + "w" : ""}"><div class="gal ${cls || ""}">${paths.map((p, i) => phImg(p, `alt="${alt} ${i + 1} of ${paths.length}" loading="lazy"`)).join("")}</div><span class="galn">${paths.length} photos · swipe</span></div>`;
 }
+function wantPhoto(path){ photoWant.add(path); clearTimeout(photoTimer); photoTimer = setTimeout(fetchPhotoUrls, 60); }
 function photoSrc(path){
   if(!path) return "";
   if(pendingPhotoUrls[path]) return pendingPhotoUrls[path];
-  const c = photoCache[path];
-  if(c && c.exp > Date.now()) return c.url;
-  if(!c || !c.failed){ photoWant.add(path); clearTimeout(photoTimer); photoTimer = setTimeout(fetchPhotoUrls, 60); }
-  return c ? c.url : "";
+  const c = photoCache[path], now = Date.now();
+  if(c && c.exp > now) return c.url;
+  if(!c || !c.failed || now - c.failed > 30000) wantPhoto(path);
+  return c && c.url ? c.url : "";   // an out-of-date link still opens a photo this device has saved
+}
+// a promise for a working link: for screens that open once and aren't redrawn (forms, the photo viewer)
+function photoUrl(path){
+  if(!path) return Promise.resolve("");
+  const u = photoSrc(path), c = photoCache[path];
+  if(pendingPhotoUrls[path] || (c && c.exp > Date.now())) return Promise.resolve(u);
+  return new Promise(res => (photoWaiters[path] ||= []).push(res));
+}
+function hydratePhotos(){
+  for(const el of document.querySelectorAll("img[data-ph]")){ const u = photoSrc(el.dataset.ph); if(u && el.getAttribute("src") !== u) el.src = u; }
 }
 async function fetchPhotoUrls(){
-  const paths = [...photoWant]; photoWant = new Set();
-  if(!paths.length || !navigator.onLine || !me) return;
+  clearTimeout(photoTimer);
+  const paths = [...photoWant].filter(p => !pendingPhotoUrls[p]);
+  if(!paths.length){ photoWant = new Set(); return; }
+  if(!navigator.onLine || !me) return;   // still wanted: asked again when the connection is back
+  photoWant = new Set();
   try{
-    const { data, error } = await sb.storage.from("photos").createSignedUrls(paths, 60*60*6);
-    if(error) throw error;
-    for(const d of data){ if(d.signedUrl) photoCache[d.path] = { url:d.signedUrl, exp:Date.now() + 5.5*3600*1000 }; else photoCache[d.path] = { url:"", exp:0, failed:true }; }
-    renderAll();
-  }catch(e){ console.warn("photo links", e); }
+    const now = Date.now();
+    for(let i = 0; i < paths.length; i += 100){
+      const { data, error } = await sb.storage.from("photos").createSignedUrls(paths.slice(i, i + 100), PH_TTL);
+      if(error) throw error;
+      for(const d of data || []){ if(!d.path) continue;
+        if(d.signedUrl) photoCache[d.path] = { url:d.signedUrl, exp:now + (PH_TTL - 1800) * 1000, at:now };
+        else photoCache[d.path] = { url:photoCache[d.path]?.url || "", exp:0, failed:now, at:photoCache[d.path]?.at }; }
+    }
+    photoRetry = 0;
+    for(const p of paths){ const w = photoWaiters[p]; if(w){ delete photoWaiters[p]; const u = photoCache[p]?.url || ""; w.forEach(f => f(u)); } }
+    savePhotoCache(); hydratePhotos(); renderAll();
+  }catch(e){
+    console.warn("photo links", e);
+    for(const p of paths) photoWant.add(p);
+    photoRetry = Math.min(60000, (photoRetry || 2000) * 2); photoTimer = setTimeout(fetchPhotoUrls, photoRetry);
+  }
 }
+window.addEventListener("online", () => { if(photoWant.size) fetchPhotoUrls(); });
+// a photo that fails to load (an expired link, a dropped connection) asks for a fresh link once
+document.addEventListener("error", e => {
+  const el = e.target; if(!el || el.tagName !== "IMG" || !el.dataset.ph || el.dataset.phRetry) return;
+  el.dataset.phRetry = "1"; const c = photoCache[el.dataset.ph]; if(c) c.exp = 0; wantPhoto(el.dataset.ph);
+}, true);
+function forgetPhotos(){ try{ localStorage.removeItem(photoKey()); }catch(e){} try{ return caches.delete("flylog-photos").catch(() => {}); }catch(e){} }
 
 /* ---------- offline outbox ---------- */
 let outbox = [];
@@ -1278,6 +1436,7 @@ async function removeRecord(kind, rec){
 
 /* ---------- loading everything for the signed-in angler ---------- */
 async function loadAll(){
+  loadPhotoCache();
   if(!me || !navigator.onLine) return;
   try{
     const [c, s, t, fc, fs, ft, fr, pr, fo, an, su] = await Promise.all([
@@ -1309,9 +1468,10 @@ async function loadAll(){
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
     if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    for(const c of catches){ photoSrc(c.photo_path); morePaths(c).forEach(photoSrc); }   // ask for every photo link in one go, so nothing waits later
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
-    if(applyGate()){ routeChannel(); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
@@ -1426,7 +1586,7 @@ async function loadAccess(id){
   const col = css("--pub");
   for(const [kind, name, extra, rings] of rows){
     const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:col, weight: kind === "trout" || kind === "dnre" ? 1.4 : .8, dashArray: kind === "dnre" || kind === "trout" ? "4 3" : null, fillColor:col, fillOpacity: kind === "usfs" || kind === "cf" ? .12 : .26 });
-    p.on("click", e => { if(picking){ handlePick(e.latlng); return; } L.popup({ maxWidth:280 }).setLatLng(e.latlng).setContent(accessPopup(kind, name, extra)).openOn(map); });
+    p.on("click", e => { if(picking){ handlePick(e.latlng); return; } waterTapAt = Date.now(); featureTaps++; L.popup({ maxWidth:280 }).setLatLng(e.latlng).setContent(accessPopup(kind, name, extra)).openOn(map); });
     g.addLayer(p);
   }
   g.addTo(map);
@@ -1783,7 +1943,7 @@ $("log").addEventListener("change", async e => {
 $("log").addEventListener("click", e => {
   const b = e.target.closest("[data-pview]"); if(!b) return;
   const v = document.createElement("div"); v.className = "pview"; v.setAttribute("role", "dialog");
-  v.innerHTML = `<img src="${photoSrc(b.dataset.pview)}" alt=""><div class="pcap">${esc(b.dataset.cap || "")}${b.dataset.mine ? ` <button class="link danger" type="button" data-pdel="${esc(b.dataset.mine)}">Delete my photo</button>` : ""}</div>`;
+  v.innerHTML = `${phImg(b.dataset.pview, 'alt=""')}<div class="pcap">${esc(b.dataset.cap || "")}${b.dataset.mine ? ` <button class="link danger" type="button" data-pdel="${esc(b.dataset.mine)}">Delete my photo</button>` : ""}</div>`;
   v.addEventListener("click", async ev => {
     const d = ev.target.closest("[data-pdel]");
     if(d){ if(!confirmTap(d, "Tap again to delete")) return; const tid = tripOpen; const { error } = await sb.from("trip_photos").delete().eq("id", d.dataset.pdel);
@@ -2569,7 +2729,7 @@ $("log").addEventListener("click", async ev => {
   if(a.dataset.a === "signout"){
     if(outbox.length){ toast("Some entries haven't synced yet. Get back online first so nothing is lost."); return; }
     try{ const reg = await navigator.serviceWorker?.ready; const sub = await reg?.pushManager?.getSubscription(); if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); } }catch(e){}
-    await sb.auth.signOut(); location.reload();
+    await forgetPhotos(); await sb.auth.signOut(); location.reload();
   }
   if(a.dataset.a === "export"){
     const blob = new Blob([JSON.stringify({ exported_at:new Date().toISOString(), profile, trips, spots, catches }, null, 2)], { type:"application/json" });
@@ -2759,7 +2919,7 @@ function applyGate(){
   return s === "ok";
 }
 $("gateCheck").onclick = async () => { $("gateCheck").disabled = true; await loadAll(); $("gateCheck").disabled = false; if(accountState() === "pending") toast("Still waiting for approval."); };
-$("gateOut").onclick = $("termsOut").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+$("gateOut").onclick = $("termsOut").onclick = async () => { await forgetPhotos(); await sb.auth.signOut(); location.reload(); };
 $("termsOk").onclick = async () => {
   const msg = $("termsMsg"); msg.className = "hint bad";
   const upd = { terms_version:TERMS_VERSION, terms_at:new Date().toISOString() };
@@ -2921,38 +3081,89 @@ map.on("popupopen", () => document.getElementById("map").classList.add("popopen"
 map.on("popupclose", () => document.getElementById("map").classList.remove("popopen"));
 
 
-/* ---------- collapsible panel: drag the handle down for a full-screen map ---------- */
-const mainEl = document.querySelector(".main");
-let panelCollapsed = lsGet("fl.collapsed", false);
+/* ---------- the log panel ----------
+   Computer: a side panel you can hide. Phone: a sheet with three stops: closed (map only), half, and full screen.
+   Closed <-> half resizes the map so it stays centered. Half <-> full slides the sheet over the map without resizing it
+   (the map keeps drawing at its half size underneath), so the pull is smooth and follows your finger. */
+const mainEl = document.querySelector(".main"), logEl = document.querySelector("aside.log"), mapWrapEl = document.querySelector(".mapwrap");
+const isPhone = () => window.matchMedia("(max-width:760px)").matches;
+let panelCollapsed = isPhone() ? true : lsGet("fl.collapsed", false);   // a phone always opens on the map alone
+let panelFull = false;
+const mapH = () => mapWrapEl.offsetHeight;
+function panelLabel(){
+  $("grabLabel").textContent = panelFull ? "Pull down for the map" : "Pull up for your log";
+  $("grab").setAttribute("aria-expanded", String(!panelCollapsed));
+  $("grab").setAttribute("aria-label", panelFull ? "Shrink the panel to show the map" : panelCollapsed ? "Show the panel" : "Hide the panel");
+}
 function setCollapsed(v, save = true){
+  if(v && panelFull) setFull(false, true);
   panelCollapsed = v;
   mainEl.classList.toggle("collapsed", v);
-  $("grab").setAttribute("aria-expanded", String(!v));
-  $("panelShow").hidden = !v || window.matchMedia("(max-width:760px)").matches;
-  if(save) lsSet("fl.collapsed", v);
+  $("panelShow").hidden = !v || isPhone();
+  if(save && !isPhone()) lsSet("fl.collapsed", v);
+  panelLabel();
   setTimeout(() => { map.invalidateSize(); drawLabels(); }, 280);
 }
 function expandPanel(){ if(panelCollapsed) setCollapsed(false); }
+let liftDone = null;
+function setFull(v, instant){
+  if(v && (!isPhone() || panelCollapsed)) return;
+  panelFull = v; mainEl.classList.toggle("full", v); panelLabel();
+  if(liftDone){ logEl.removeEventListener("transitionend", liftDone); liftDone = null; }
+  if(v){
+    if(!mainEl.classList.contains("lift")){ logEl.style.transition = "none"; logEl.style.transform = `translateY(${mapH()}px)`; mainEl.classList.add("lift"); void logEl.offsetHeight; }
+    logEl.style.transition = instant ? "none" : ""; logEl.style.transform = "translateY(0)";
+    return;
+  }
+  if(!mainEl.classList.contains("lift")) return;
+  const done = liftDone = e => { if(e && e.target !== logEl) return; logEl.removeEventListener("transitionend", done); if(liftDone === done) liftDone = null;
+    mainEl.classList.remove("lift"); logEl.style.transform = ""; logEl.style.transition = ""; };
+  if(instant) return done();
+  logEl.style.transition = ""; logEl.style.transform = `translateY(${mapH()}px)`;
+  logEl.addEventListener("transitionend", done); setTimeout(() => { if(liftDone === done) done(); }, 400);
+}
+// anything that needs the map (jump to a pin, open a county, pick a place) brings a full-screen panel back down first
+for(const fn of ["flyTo", "fitBounds", "flyToBounds"]){ const orig = map[fn].bind(map); map[fn] = (...a) => { if(panelFull) setFull(false); return orig(...a); }; }
 (() => {
-  let y0 = null, x0 = 0, moved = false, startEl = null;
+  let y0 = null, x0 = 0, t0 = 0, moved = false, startEl = null, lifting = false, base = 0;
   // keep following the finger once it leaves the handle; on the tab bar only after a clear vertical pull, so taps still pick tabs
-  const down = e => { y0 = e.clientY; x0 = e.clientX; moved = false; startEl = e.currentTarget; if(startEl === $("grab")) try{ startEl.setPointerCapture(e.pointerId); }catch(_){} };
+  const down = e => { y0 = e.clientY; x0 = e.clientX; t0 = performance.now(); moved = false; lifting = false; startEl = e.currentTarget; if(startEl === $("grab")) try{ startEl.setPointerCapture(e.pointerId); }catch(_){} };
   const move = e => { if(y0 == null) return; const dy = e.clientY - y0, dx = e.clientX - x0;
-    if(!moved && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)){ moved = true; try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){} } };
+    if(!moved && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)){ moved = true; try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+      if(isPhone() && !panelCollapsed && (panelFull || dy < 0)){   // between half and full the sheet rides the finger
+        lifting = true; base = panelFull ? 0 : mapH(); logEl.style.transition = "none";
+        if(!mainEl.classList.contains("lift")){ logEl.style.transform = `translateY(${base}px)`; mainEl.classList.add("lift"); } } }
+    if(lifting) logEl.style.transform = `translateY(${Math.max(0, Math.min(mapH(), base + dy))}px)`;
+  };
   const up = e => {
     if(y0 == null) return;
-    const dy = e.clientY - y0, dx = e.clientX - x0; const fromGrab = startEl === $("grab"); y0 = null;
-    if(moved && Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)){ setCollapsed(dy > 0); return; }
-    if(!moved && fromGrab) setCollapsed(!panelCollapsed);
+    const dy = e.clientY - y0, dx = e.clientX - x0, fromGrab = startEl === $("grab"), fast = Math.abs(dy) / Math.max(1, performance.now() - t0) > .45; y0 = null;
+    if(lifting){ lifting = false;
+      if(panelFull) setFull(!(dy > 70 || (fast && dy > 24)));
+      else setFull(dy < -70 || (fast && dy < -24));
+      return; }
+    if(moved && Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)){
+      const wasClosed = panelCollapsed; setCollapsed(dy > 0);
+      if(wasClosed && dy < -innerHeight * .45) setTimeout(() => setFull(true), 60);   // one long pull from closed goes all the way up
+      return; }
+    if(!moved && fromGrab){ if(panelFull) setFull(false); else setCollapsed(!panelCollapsed); }
   };
+  const cancel = () => { if(lifting){ lifting = false; setFull(panelFull); } y0 = null; };
   for(const el of [$("grab"), document.querySelector(".tabs")]){
     el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", () => { y0 = null; });
+    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", cancel);
   }
+})();
+// with the panel closed the tabs' red dots are hidden, so the handle carries one whenever any tab has news
+(() => {
+  const dots = ["reqDot", "tDot", "meDot"].map($).filter(Boolean);
+  const sync = () => $("grab").classList.toggle("has-news", dots.some(d => !d.hidden));
+  const mo = new MutationObserver(sync); for(const d of dots) mo.observe(d, { attributes:true, attributeFilter:["hidden"] });
+  sync();
 })();
 $("panelHide").onclick = () => setCollapsed(true);
 $("panelShow").onclick = () => setCollapsed(false);
-window.matchMedia("(max-width:760px)").addEventListener?.("change", () => setCollapsed(panelCollapsed, false));
+window.matchMedia("(max-width:760px)").addEventListener?.("change", () => { if(panelFull) setFull(false, true); setCollapsed(panelCollapsed, false); });
 setCollapsed(panelCollapsed, false);
 
 /* ---------- what's new after an update ---------- */
@@ -3172,7 +3383,7 @@ function inboxHtml(){
   if(!gifts.length && !other.length) return "";
   return `${gifts.map(g => { const c = g.catch || {};
       return `<div class="card gift"><div class="acct-h">${avHtml(g.from_user, giftFrom(g))}<span class="t"><b class="wrap">${esc(giftFrom(g))} logged a fish for you</b><small>${esc([c.species || "Fish", c.length_in ? lenTxt(c.length_in) : "", c.caught_on ? fmtDate(c.caught_on) : "", c.county ? countyName(c.county) : "", METHODS[c.method] || ""].filter(Boolean).join(" · "))}</small></span></div>
-        ${g.photo_path ? `<img class="gph" src="${photoSrc(g.photo_path) || ""}" data-giftphoto="${esc(g.photo_path)}" alt="Photo of the fish">` : ""}
+        ${g.photo_path ? phImg(g.photo_path, `class="gph" data-giftphoto="${esc(g.photo_path)}" alt="Photo of the fish"`) : ""}
         <div class="row2"><button class="btn sm ink" type="button" data-giftyes="${esc(g.id)}">Add to my log</button><button class="btn sm" type="button" data-giftno="${esc(g.id)}">Not mine</button></div></div>`; }).join("")}
     ${other.slice(0, 5).map(n => `<div class="card notice slim"><p><b>${esc(n.title)}</b></p>${n.body ? `<p class="muted">${esc(n.body)}</p>` : ""}<button class="link" type="button" data-noticex="${esc(n.id)}">Dismiss</button></div>`).join("")}`;
 }
@@ -3451,10 +3662,9 @@ function outlineCounty(id){
   outlineLayer = L.geoJSON(byId[id], { pane:"outline", interactive:false, style:{ color:css("--hl"), weight:3, opacity:.95, fill:true, fillColor:css("--hl"), fillOpacity:.06 } }).addTo(map);
 }
 function tapCounty(latlng){
-  if(Date.now() - waterTapAt < 400) return;            // the tap landed on a creek or lake: its card already has "Open county"
   const id = countyAt(latlng.lat, latlng.lng);
   if(!id || id === currentCounty) return;
-  if(!currentCounty && map.getZoom() < AREA_ZOOM) return; // statewide: the county polygon's own tap opens it
+  if(!currentCounty && map.getZoom() < AREA_ZOOM){ openCounty(id); return; }   // statewide: a tap opens the county (the county shape's own tap usually got here first)
   outlineCounty(id);
   const s = countyStats(id);
   L.popup({ maxWidth:240, className:"cpop" }).setLatLng(latlng).setContent(`<div class="pop"><h3>${esc(countyName(id))}</h3>
@@ -3481,7 +3691,7 @@ L.Popup.mergeOptions({ autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBot
 (() => {
   const lg = $("legend"); if(!lg) return;
   const b = document.createElement("button"); b.type = "button"; b.className = "lgkey"; lg.prepend(b);
-  const small = () => window.innerWidth < 700;
+  const small = () => window.innerWidth < 700 || window.innerHeight < 520;   // phones, upright or on their side
   let open = lsGet("fl.legendOpen", !small());
   const sync = () => { lg.classList.toggle("folded", !open); b.textContent = open ? "Hide key" : "Map key"; b.setAttribute("aria-expanded", String(open)); };
   b.onclick = () => { open = !open; lsSet("fl.legendOpen", open); sync(); };
@@ -3526,7 +3736,7 @@ $("log").addEventListener("click", async ev => {
       if(error) throw error;
       try{ const reg = await navigator.serviceWorker?.ready; const sub = await reg?.pushManager?.getSubscription(); if(sub) await sub.unsubscribe(); }catch(e){}
       try{ for(const k of Object.keys(localStorage)) if(k.startsWith("fl.")) localStorage.removeItem(k); indexedDB.deleteDatabase("flylog"); }catch(e){}
-      await sb.auth.signOut().catch(() => {});
+      await forgetPhotos(); await sb.auth.signOut().catch(() => {});
       document.body.innerHTML = `<div style="max-width:420px;margin:20vh auto;padding:24px;font:16px/1.5 system-ui;text-align:center"><h2 style="font-family:Georgia,serif">Your account is deleted</h2><p>Everything you logged in Coulee has been removed. Thanks for fishing with us.</p><p><a href="./">Back to Coulee</a></p></div>`;
     }catch(e){
       a.disabled = false; msg.className = "hint bad";
@@ -3696,8 +3906,8 @@ function flagQueueHtml(){
     ${groups.length ? `<div class="stack">${groups.map(fs => { const f = fs[0], open = fs.some(x => x.status === "open");
       return `<div class="card flag${open ? "" : " done"}">
         <p class="muted" style="font-size:12.5px;margin:0">${esc(f.display_name)} · ${esc(f.species || "Fish")}${f.length_in ? ` · ${lenTxt(f.length_in)}` : ""} · ${esc(fmtDate(f.caught_on))} · ${esc(countyName(f.county))}${f.tournaments?.length ? ` · <b>In ${esc(f.tournaments.join(", "))}</b>` : ""}</p>
-        <div class="flagpics">${f.photo_path ? `<figure><img src="${photoSrc(f.photo_path)}" alt="Flagged photo" loading="lazy"><figcaption>This catch</figcaption></figure>` : ""}
-          ${f.other_photo ? `<figure><img src="${photoSrc(f.other_photo)}" alt="Matching photo" loading="lazy"><figcaption>Match: ${esc(f.other_name || "")}</figcaption></figure>` : ""}</div>
+        <div class="flagpics">${f.photo_path ? `<figure>${phImg(f.photo_path, 'alt="Flagged photo" loading="lazy"')}<figcaption>This catch</figcaption></figure>` : ""}
+          ${f.other_photo ? `<figure>${phImg(f.other_photo, 'alt="Matching photo" loading="lazy"')}<figcaption>Match: ${esc(f.other_name || "")}</figcaption></figure>` : ""}</div>
         <ul class="flagwhy">${fs.map(x => `<li><b>${esc(FLAG_LABEL[x.kind] || x.kind)}</b> ${esc(x.detail || "")}${x.status !== "open" ? ` <span class="pill ${x.status === "upheld" ? "priv" : "fished"}">${x.status === "upheld" ? "Hidden" : "Cleared"}</span>` : ""}</li>`).join("")}</ul>
         ${open ? `<div class="row2"><button class="btn sm" type="button" data-flagok="${esc(f.id)}">Looks fine</button><button class="btn sm" type="button" data-flaghide="${esc(f.id)}">Hide this catch…</button></div><div data-flagslot="${esc(f.id)}"></div>` : ""}</div>`; }).join("")}</div>`
       : `<p class="muted">Nothing to review. Every photo checks out.</p>`}`;
@@ -3815,6 +4025,15 @@ document.addEventListener("mapsettled", updateFlow);
 document.addEventListener("mapview", updateFlow);
 document.addEventListener("areachange", updateFlow);
 
+/* ---------- keeping the map smooth ---------- */
+// The soft shadow under the state outline only shows when you can see the whole state. Zoomed in it is off screen,
+// but the browser still re-blurs the whole (now enormous) shape on every zoom: so it's switched off up close.
+function syncStateShadow(){ const on = map.getZoom() < 8.5; stateFill.eachLayer(l => { if(l._path) l._path.classList.toggle("state-shadow", on); }); }
+map.on("zoomend", syncStateShadow); syncStateShadow();
+// the drifting-water animation rests while the map is being dragged or zoomed, so the two aren't fighting for the same frames
+map.on("movestart zoomstart", () => map.getContainer().classList.add("moving"));
+map.on("moveend zoomend", () => map.getContainer().classList.remove("moving"));
+
 
 /* ---------- weight ---------- */
 function parseWeight(v){
@@ -3930,30 +4149,70 @@ const PUSH_CATS = [["catches","Friends' catches"],["friends","Friend requests"],
 let pushStateV = null;
 const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+/* One notification sign-up per device. The live app and the test copy each have their own service worker, and each could hold
+   its own sign-up: two sign-ups on one phone meant every notification arrived twice. So the sign-up always lives with the live
+   app's worker (whichever version is open), and any sign-up found on another worker is removed. */
+const deviceId = () => { let d = lsGet("fl.device", null); if(!d){ d = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2)); lsSet("fl.device", d); } return d; };
+const swActive = reg => reg.active ? Promise.resolve(reg) : new Promise((res, rej) => { const w = reg.installing || reg.waiting; if(!w) return rej(new Error("no worker"));
+  w.addEventListener("statechange", () => { if(w.state === "activated") res(reg); else if(w.state === "redundant") rej(new Error("redundant")); }); });
+async function pushReg(){
+  if(CHANNEL !== "beta") return navigator.serviceWorker.ready;
+  const root = new URL("../", location.href).href;
+  const reg = await navigator.serviceWorker.getRegistration(root);
+  return reg && reg.scope === root ? swActive(reg) : swActive(await navigator.serviceWorker.register("../sw.js", { scope:"../" }));
+}
+async function allPushSubs(){   // every sign-up this device holds, across the live app and the test copy
+  const out = [];
+  for(const reg of await navigator.serviceWorker.getRegistrations()){ try{ const sub = await reg.pushManager.getSubscription(); if(sub) out.push({ reg, sub }); }catch(e){} }
+  return out;
+}
+async function savePushSub(sub){
+  const j = sub.toJSON(), dev = deviceId();
+  await sb.from("push_subscriptions").delete().eq("endpoint", j.endpoint);
+  await sb.from("push_subscriptions").delete().eq("user_id", me.id).eq("device_id", dev);
+  const { error } = await sb.from("push_subscriptions").insert({ user_id:me.id, endpoint:j.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth, ua:navigator.userAgent.slice(0, 120), device_id:dev });
+  if(error) throw error;
+}
+async function dropPushSub(sub){ try{ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); }catch(e){} try{ await sub.unsubscribe(); }catch(e){} }
+let pushTidied = false;
+async function tidyPush(){
+  if(pushTidied || !pushSupported() || !me || !navigator.onLine || Notification.permission !== "granted") return;
+  pushTidied = true;
+  try{
+    const main = await pushReg(), subs = await allPushSubs();
+    let keep = subs.find(x => x.reg.scope === main.scope)?.sub || null;
+    const extra = subs.filter(x => x.reg.scope !== main.scope);
+    if(!keep && extra.length){   // signed up only on the other copy: move it here if the phone allows it without a tap, else leave that one alone
+      try{ keep = await main.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64u(CFG.vapidPublic) }); }catch(e){ keep = null; }
+    }
+    if(!keep) return;
+    for(const x of extra) await dropPushSub(x.sub);
+    const { data } = await sb.from("push_subscriptions").select("id, device_id").eq("endpoint", keep.endpoint).maybeSingle();
+    if(!data || data.device_id !== deviceId()) await savePushSub(keep);
+  }catch(e){ console.warn("push tidy", e); pushTidied = false; }
+  refreshPushState();
+}
 async function refreshPushState(){
   let s;
   if(!pushSupported()) s = isIOS && !isStandalone ? "ios-install" : "unsupported";
   else if(Notification.permission === "denied") s = "denied";
-  else { try{ const reg = await navigator.serviceWorker.ready; s = (await reg.pushManager.getSubscription()) ? "on" : "off"; }catch(e){ s = "off"; } }
+  else { try{ s = (await allPushSubs()).length ? "on" : "off"; }catch(e){ s = "off"; } }
   if(s !== pushStateV){ pushStateV = s; if(tab === "me" && meView === "main") renderLog(); }
 }
 async function enablePush(){
   try{
     const perm = await Notification.requestPermission();
     if(perm !== "granted"){ toast(perm === "denied" ? "Notifications are blocked. Turn them on in Settings → Notifications → Coulee." : "Notifications weren't turned on."); return refreshPushState(); }
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await pushReg();
     const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64u(CFG.vapidPublic) });
-    const j = sub.toJSON();
-    await sb.from("push_subscriptions").delete().eq("endpoint", j.endpoint);
-    const { error } = await sb.from("push_subscriptions").insert({ user_id:me.id, endpoint:j.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth, ua:navigator.userAgent.slice(0, 120) });
-    if(error) throw error;
+    for(const x of await allPushSubs()) if(x.sub.endpoint !== sub.endpoint) await dropPushSub(x.sub);
+    await savePushSub(sub);
     toast("Notifications are on. Sending a test…"); sb.rpc("push_test");
   }catch(e){ console.error(e); toast("Couldn't turn on notifications. Try again."); }
   refreshPushState();
 }
 async function disablePush(){
-  try{ const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
-    if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); } }catch(e){}
+  try{ for(const x of await allPushSubs()) await dropPushSub(x.sub); }catch(e){}
   toast("Notifications are off on this device."); refreshPushState();
 }
 function notifyCardHtml(){
