@@ -1,0 +1,209 @@
+{
+ "boat": [
+  {
+   "LMS_BOAT_LANDING_NAME": "Pretty Lake",
+   "LANDING_TYPE_CODE": "RAMP",
+   "RAMP_TYPE_CODE": "Gravel",
+   "ADA_ACCESSIBLE_FEATURE_CODE": "No",
+   "OWNERSHIP_NAME_TEXT": "TOWNSHIP",
+   "LL_LAT_DD_AMT": 42.95306866,
+   "LL_LONG_DD_AMT": -88.50120511,
+   "WATERBODY_NAME_TEXT": "Pretty Lake",
+   "COUNTY_NAME_TEXT": "Waukesha",
+   "ABANDON_FLAG": "No"
+  },
+  {
+   "LMS_BOAT_LANDING_NAME": "Ashippun Lake Boat Ramp",
+   "LANDING_TYPE_CODE": "RAMP",
+   "RAMP_TYPE_CODE": "Concrete Panels",
+   "ADA_ACCESSIBLE_FEATURE_CODE": "Yes",
+   "OWNERSHIP_NAME_TEXT": "STATE(DNR)",
+   "LL_LAT_DD_AMT": 43.15806752,
+   "LL_LONG_DD_AMT": -88.47606358,
+   "WATERBODY_NAME_TEXT": "Ashippun Lake",
+   "COUNTY_NAME_TEXT": "Waukesha",
+   "ABANDON_FLAG": "No"
+  },
+  {
+   "LMS_BOAT_LANDING_NAME": "Williams Bay Boat Ramp",
+   "LANDING_TYPE_CODE": "RAMP",
+   "RAMP_TYPE_CODE": "Concrete",
+   "ADA_ACCESSIBLE_FEATURE_CODE": "No",
+   "OWNERSHIP_NAME_TEXT": "VILLAGE",
+   "LL_LAT_DD_AMT": 42.57847416,
+   "LL_LONG_DD_AMT": -88.53586496,
+   "WATERBODY_NAME_TEXT": "Lake Geneva",
+   "COUNTY_NAME_TEXT": "Walworth",
+   "ABANDON_FLAG": "No"
+  },
+  {
+   "LMS_BOAT_LANDING_NAME": "Shangrila-Benet Lake",
+   "LANDING_TYPE_CODE": "RAMP",
+   "RAMP_TYPE_CODE": "Gravel",
+   "ADA_ACCESSIBLE_FEATURE_CODE": "No",
+   "OWNERSHIP_NAME_TEXT": "TOWNSHIP",
+   "LL_LAT_DD_AMT": 42.50383435,
+   "LL_LONG_DD_AMT": -88.06544743,
+   "WATERBODY_NAME_TEXT": "Benet Lake",
+   "COUNTY_NAME_TEXT": "Kenosha",
+   "ABANDON_FLAG": "No"
+  },
+  {
+   "LMS_BOAT_LANDING_NAME": "Forest Lake Carry-In",
+   "LANDING_TYPE_CODE": "CARRY-IN",
+   "RAMP_TYPE_CODE": "Unimproved",
+   "ADA_ACCESSIBLE_FEATURE_CODE": "No",
+   "OWNERSHIP_NAME_TEXT": "COUNTY",
+   "LL_LAT_DD_AMT": 43.10289463,
+   "LL_LONG_DD_AMT": -88.40762427,
+   "WATERBODY_NAME_TEXT": "Forest Lake",
+   "COUNTY_NAME_TEXT": "Waukesha",
+   "ABANDON_FLAG": "No"
+  }
+ ],
+ "parking": [],
+ "shore": [
+  {
+   "FACILITY_NAME_TEXT": "MAUTHE LAKE FISHING PIER",
+   "WATERBODY_NAME_TEXT": "MAUTHE LAKE",
+   "COUNTY_NAME_TEXT": "FOND DU LAC",
+   "LL_LAT_DD_AMT": 43.60071982,
+   "LL_LONG_DD_AMT": -88.17840075,
+   "MORE_INFO_URL": "http://dnrmaps.wi.gov/LF_ShowDetails/shorefishing.aspx?ID=21"
+  },
+  {
+   "FACILITY_NAME_TEXT": "VILLAGE OF ARGYLE SHORE FISHING STATION",
+   "WATERBODY_NAME_TEXT": "EAST BRANCH OF THE PECATONICA RIVER",
+   "COUNTY_NAME_TEXT": "LAFAYETTE",
+   "LL_LAT_DD_AMT": 42.70185947,
+   "LL_LONG_DD_AMT": -89.87064197,
+   "MORE_INFO_URL": "http://dnrmaps.wi.gov/LF_ShowDetails/shorefishing.aspx?ID=82"
+  },
+  {
+   "FACILITY_NAME_TEXT": "GERBER LAKE FISHING PIER",
+   "WATERBODY_NAME_TEXT": "Little Gerber Lake",
+   "COUNTY_NAME_TEXT": "SHEBOYGAN",
+   "LL_LAT_DD_AMT": 43.80916642,
+   "LL_LONG_DD_AMT": -87.95554947,
+   "MORE_INFO_URL": "http://dnrmaps.wi.gov/LF_ShowDetails/shorefishing.aspx?ID=50"
+  },
+  {
+   "FACILITY_NAME_TEXT": "EAGLE RIVER FISHING PIER",
+   "WATERBODY_NAME_TEXT": "SILVER LAKE",
+   "COUNTY_NAME_TEXT": "VILAS",
+   "LL_LAT_DD_AMT": 45.92313315,
+   "LL_LONG_DD_AMT": -89.23821768,
+   "MORE_INFO_URL": "http://dnrmaps.wi.gov/LF_ShowDetails/shorefishing.aspx?ID=53"
+  },
+  {
+   "FACILITY_NAME_TEXT": "BUTTERNUT LAKE FISHING PIER",
+   "WATERBODY_NAME_TEXT": "BUTTERNUT LAKE",
+   "COUNTY_NAME_TEXT": "FOREST",
+   "LL_LAT_DD_AMT": -88.97566908,
+   "LL_LONG_DD_AMT": 45.91321096,
+   "MORE_INFO_URL": "http://dnrmaps.wi.gov/LF_ShowDetails/shorefishing.aspx?ID=23"
+  }
+ ],
+ "lake": [
+  {
+   "LAKE_NAME": "Perch Lake",
+   "WBIC": 2488300.0,
+   "LAKE_CLASS": "Simple - Two Story",
+   "COUNTY": "St Croix",
+   "AREA_ACRES_": 43.0,
+   "MAXDEP_FT": 63.0,
+   "DESCRIPT": "Simple two story lakes are characterized by simple fish communities, typically with fewer than 4 different groups of sportfish present (e.g., panfish, bass, and trout). They are small in area but deep, cold, and well-oxygenated with good water quality. There are 58 simple two story lakes in Wisconsin, scattered across all parts of the state but most in the north. ",
+   "FISHERIES": "Simple two story lakes can support good action for smallmouth bass, and the cold, well-oxygenated deep layer can support trout populations. "
+  },
+  {
+   "LAKE_NAME": "Indianhead Flowage",
+   "WBIC": 2634400.0,
+   "LAKE_CLASS": "Complex - Riverine",
+   "COUNTY": "Polk",
+   "AREA_ACRES_": 776.0,
+   "MAXDEP_FT": 57.0,
+   "DESCRIPT": "Complex riverine lakes are characterized by complex fish communities, typically with 4 or more different groups of sportfish present. Water tends to flow though these lakes quickly (on average less than 15 day residence-time), so they can function similarly to rivers, and often have relatively low clarity. There are 183 complex riverine lakes in Wisconsin, scattered across all parts of the state. ",
+   "FISHERIES": "Complex riverine lakes often support great fisheries for riverine species like smallmouth bass, and in some systems, walleye. "
+  },
+  {
+   "LAKE_NAME": "Orr Lake",
+   "WBIC": 2635600.0,
+   "LAKE_CLASS": "Simple - Warm - Dark",
+   "COUNTY": "Polk",
+   "AREA_ACRES_": 25.0,
+   "MAXDEP_FT": 12.0,
+   "DESCRIPT": "Simple warm dark lakes are characterized by simple fish communities, typically with fewer than 4 different groups of sportfish (e.g., panfish and some bass or northern pike). Water temperatures tend to be warmer than average, and water is less clear than average. They tend to be small in surface area.  This is the most common class of lake in Wisconsin, with 1,650 simple warm dark lakes  scattered across all parts of the state.",
+   "FISHERIES": "Simple warm dark lakes can provide great opportunities for action for black crappie, and often also support bluegill and largemouth bass. They rarely have any walleye or muskellunge."
+  },
+  {
+   "LAKE_NAME": "Round Lake",
+   "WBIC": 2494000.0,
+   "LAKE_CLASS": "Simple - Warm - Dark",
+   "COUNTY": "Polk",
+   "AREA_ACRES_": 39.0,
+   "MAXDEP_FT": 38.0,
+   "DESCRIPT": "Simple warm dark lakes are characterized by simple fish communities, typically with fewer than 4 different groups of sportfish (e.g., panfish and some bass or northern pike). Water temperatures tend to be warmer than average, and water is less clear than average. They tend to be small in surface area.  This is the most common class of lake in Wisconsin, with 1,650 simple warm dark lakes  scattered across all parts of the state.",
+   "FISHERIES": "Simple warm dark lakes can provide great opportunities for action for black crappie, and often also support bluegill and largemouth bass. They rarely have any walleye or muskellunge."
+  },
+  {
+   "LAKE_NAME": "Dead Slough Lake",
+   "WBIC": 732200.0,
+   "LAKE_CLASS": "Simple - Harsh - No Fishery",
+   "COUNTY": "Pierce",
+   "AREA_ACRES_": 300.0,
+   "MAXDEP_FT": 0.0,
+   "DESCRIPT": "Simple harsh lakes are lakes where extreme conditions, typically winterkills, limit what fish can survive. They are broken into two categories: \"has fishery\" and \"no fishery\". This lake is in the \"simple harsh - no fishery\" class where winterkills are frequently and lake pH is very low, so few fish can survive. They are very small in surface area. There are 1,059 of these lakes scattered around the state. ",
+   "FISHERIES": "\"Simple harsh - no fishery\" lakes usually have not sportfish species present. Central mudminnow and small minnow species are typically the only species that can survive in these lakes. "
+  }
+ ],
+ "counts": {
+  "boat": 3135,
+  "shore": 142,
+  "parking": 0,
+  "lakes": 6171,
+  "counties": 72,
+  "lake_classes": {
+   "Simple - Two Story": 58,
+   "Complex - Riverine": 229,
+   "Simple - Warm - Dark": 1671,
+   "Simple - Harsh - No Fishery": 1073,
+   "Complex - Warm - Clear": 200,
+   "Simple - Cool - Dark": 216,
+   "Simple - Warm - Clear": 266,
+   "Complex - Two Story": 155,
+   "Complex - Warm - Dark": 233,
+   "Simple - Riverine": 188,
+   "Simple - Cool - Clear": 420,
+   "Simple - Harsh - Has Fishery": 645,
+   "Complex - Cool - Clear": 233,
+   "Simple - Trout Pond": 329,
+   "Complex - Cool - Dark": 255
+  },
+  "kinds": [
+   "CARRY-IN",
+   "None",
+   "RAMP",
+   "Ramp",
+   "UNKNOWN"
+  ],
+  "ramps": [
+   "Concrete",
+   "Concrete Panels",
+   "Concrete Plank",
+   "Dirt",
+   "Grate",
+   "Gravel",
+   "None",
+   "Other",
+   "Paved",
+   "Unimproved",
+   "Unknown"
+  ],
+  "ada": [
+   "No",
+   "None",
+   "Unknown",
+   "Yes"
+  ]
+ }
+}

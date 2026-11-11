@@ -119,11 +119,13 @@ async function countSavedCounties(){
 }
 async function saveCountiesOffline(ids, onProgress){
   const c = await caches.open(OFFLINE_CACHE);
-  const extra = [dataUrl("water/index.json"), dataUrl("geo.json")];
+  const extra = [dataUrl("water/index.json"), dataUrl("geo.json"), dataUrl("gauges.json")];
   for(const u of extra){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
   let done = 0, failed = 0;
   for(const id of ids){
     for(const u of countyFiles(id)){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); else failed++; } }catch(e){ failed++; } }
+    // nice to have offline too, but a county without them is still "saved": boat landings and lake facts, road crossings, stocking
+    for(const u of [dataUrl("places/" + id + ".json"), dataUrl("crossings/" + id + ".json"), dataUrl("stocking/" + id + ".json")]){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();

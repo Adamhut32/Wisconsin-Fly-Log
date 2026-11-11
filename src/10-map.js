@@ -78,7 +78,10 @@ const waterCache = {}, troutCache = {};
 let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], detailLabelsExtra = [];
 /* the creek data has a point every ~60 m, so lines look jagged up close; round the corners (Chaikin) so they read like water */
 // how far past the screen edge to pre-draw: generous on phones (quick swipes), modest on big monitors (huge canvases are slow)
-const canvasPad = () => innerWidth * innerHeight > 1.2e6 ? .2 : innerWidth > 700 ? .35 : .5;
+const canvasPad = () => innerWidth * innerHeight > 1.2e6 ? .2 : innerWidth > 700 ? .35 : .4;
+/* Throw away a drawing surface and give its memory back right away. iPhones cap the total memory all map drawing surfaces
+   may use and only reclaim a discarded one much later, so after a few counties the last layer drawn (public land) came up blank. */
+function dropCanvas(r){ if(!r) return; const c = r._container; if(map.hasLayer(r)) map.removeLayer(r); if(c){ c.width = 0; c.height = 0; } }
 function smoothPath(pts, n = 2){
   if(pts.length < 3) return pts;
   // detailed lines (a point every ~30 m or closer) already curve; only round off sparse ones
@@ -137,6 +140,7 @@ function nearestReg(name, ll, cid){
     for(const pa of r[7]) for(const q of pa){ const d = d2(p, q) * (same ? .25 : 1); if(d < bd){ bd = d; best = r; } } }
   return bd < 0.0004 ? best : null; // within ~1–2 km
 }
+const waterPopupExtras = [];   // other files add sections to a water's card (lake facts, stocking, flow, weather)
 function waterPopup(name, kind, ll, trout, cid){
   const div = document.createElement("div"); div.className = "pop";
   const reg = trout ? nearestReg(name, ll, cid) : null;
@@ -152,6 +156,8 @@ function waterPopup(name, kind, ll, trout, cid){
     if(pw){ pendingPlanWater = { name, kind: waterType(name), lat:+ll.lat.toFixed(5), lng:+ll.lng.toFixed(5), county: countyAt(ll.lat, ll.lng) || detailFor || null, trout: trout ? TROUT[trout.c].label + " trout" : null };
       pw.hidden = true; div.insertAdjacentHTML("beforeend", planChooserHtml(pendingPlanWater)); map._popup && map._popup.update(); }
   });
+  const info = { name, kind, ll, trout, cid, isLake: /lake|pond|flowage|reservoir/i.test(kind) };
+  for(const add of waterPopupExtras){ try{ add(div, info); }catch(e){ console.warn("card section", e); } }
   return div;
 }
 /* hovering any piece of a creek lights up the whole creek */
@@ -183,13 +189,13 @@ async function loadDetail(id){
   drawDetail(id, levelOf(id, w), t);
   map.removeLayer(riverLayer);
   $("legend").classList.add("trout-on");
-  drawLabels(); renderLog();
   loadAccess(id);
+  drawLabels(); renderLog();
   updateArea();
 }
 function drawDetail(id, w, t){
   if(detailLayer){ map.removeLayer(detailLayer); detailLayer = null; }
-  if(detailRenderer){ map.removeLayer(detailRenderer); detailRenderer = null; }
+  if(detailRenderer){ dropCanvas(detailRenderer); detailRenderer = null; }
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
   const R = detailRenderer = L.canvas({ pane:"detail", tolerance:TAP_TOL, padding:canvasPad() });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
@@ -252,9 +258,9 @@ async function loadNearby(id){
 function clearDetail(){
   if(detailLayer){ map.removeLayer(detailLayer); detailLayer = null; }
   // drop the canvases too: left on the map they cover it and swallow county clicks
-  if(detailRenderer){ map.removeLayer(detailRenderer); detailRenderer = null; }
+  if(detailRenderer){ dropCanvas(detailRenderer); detailRenderer = null; }
   if(nearbyLayer){ map.removeLayer(nearbyLayer); nearbyLayer = null; }
-  if(nearbyRenderer){ map.removeLayer(nearbyRenderer); nearbyRenderer = null; }
+  if(nearbyRenderer){ dropCanvas(nearbyRenderer); nearbyRenderer = null; }
   detailFor = null; detailPromise = null; detailStreams = []; detailLakes = []; detailLabelsExtra = []; hoverName = null;
   if(!map.hasLayer(riverLayer)) map.addLayer(riverLayer);
   clearAccess();
