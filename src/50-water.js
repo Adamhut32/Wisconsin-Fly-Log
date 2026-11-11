@@ -69,12 +69,14 @@ function accessPopup(kind, name, extra){
   const a = ACCESS[kind] || ACCESS.dnr;
   return `<div class="pop"><h3>${esc(name || a.title)}</h3><div class="meta">${esc(a.title)}${extra?` · ${esc(extra)}`:""}</div><p style="margin:8px 0 4px">${esc(a.note)}</p><small class="muted">From DNR's public lands maps. Check posted signs and property rules before you go.</small></div>`;
 }
+let accessSeq = 0;
 async function loadAccess(id){
   clearAccess();
   if(!showAccess) return;
+  const seq = ++accessSeq;
   let rows;
   try{ rows = await getJSON(accessCache, dataUrl("access/" + id + ".json"), id); }catch(e){ return; }
-  if(detailFor !== id || !showAccess) return;
+  if(detailFor !== id || !showAccess || seq !== accessSeq) return;   // a newer request (another county, the toggle) won
   const R = accessRenderer = L.canvas({ pane:"access", tolerance:2 });
   const g = accessLayer = L.layerGroup();
   const col = css("--pub");
@@ -87,7 +89,7 @@ async function loadAccess(id){
 }
 function clearAccess(){
   if(accessLayer){ map.removeLayer(accessLayer); accessLayer = null; }
-  if(accessRenderer){ map.removeLayer(accessRenderer); accessRenderer = null; }
+  if(accessRenderer){ dropCanvas(accessRenderer); accessRenderer = null; }
 }
 $("accessToggle").onclick = () => {
   showAccess = !showAccess; lsSet("fl.showAccess", showAccess);
