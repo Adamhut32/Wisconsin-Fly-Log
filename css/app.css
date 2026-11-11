@@ -610,3 +610,27 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--muted);font-size
 .classes p{margin:0;font-size:14.5px;line-height:1.45}
 .classes .tclass{margin-top:2px;white-space:nowrap}
 .pop .tclass{cursor:pointer}
+/* boat landings, shore fishing, road crossings, stream gauges */
+.mk-place{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--panel);color:var(--spot);border:1.5px solid var(--spot);box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer}
+.mk-place svg{width:17px;height:17px}
+.mk-place.shore{border-radius:50%}
+.mk-place.cross{width:22px;height:22px;border-radius:50%;color:var(--ink);border-color:var(--ink);background:var(--land)}
+.mk-place.cross svg{width:14px;height:14px}
+#map.nopins .mk-place.boat,#map.nopins .mk-place.carry,#map.nopins .mk-place.shore{display:none}
+.pop ul.facts{margin:6px 0;padding-left:18px;font-size:14px}
+.pop small.src{display:block;margin-top:6px;color:var(--muted);font-size:12px;line-height:1.35}
+.mk-gauge{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;padding:3px 8px;border-radius:999px;background:var(--stream);color:#fff;border:1.5px solid var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.28);font:600 11.5px/1.2 var(--f-data);cursor:pointer}
+.mk-gauge b{font-weight:800;font-size:12.5px}
+.pop .flowbig{font:500 15px/1.2 var(--f-body);margin-top:6px}
+.pop .flowbig b{font:800 26px/1 var(--f-data)}
+.pill.flow-low{background:#b9770e;color:#fff}.pill.flow-ok{background:var(--spot);color:#fff}.pill.flow-high{background:var(--stream);color:#fff}
+.pop .meta.warm{color:var(--fish);font-weight:700}
+.spark{display:block;width:100%;height:64px;margin-top:8px;overflow:visible}
+.spark path{fill:none;stroke:var(--stream);stroke-width:2;stroke-linejoin:round}
+.spark circle{fill:var(--stream)}
+.spark .norm{fill:var(--stream);opacity:.13}
+.sparkx{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.regs.wx div{line-height:1.35}
+.mk-place.park{width:22px;height:22px;border-radius:5px;background:#2f5f9e;border-color:#fff;color:#fff}
+.mk-place.park svg{width:13px;height:13px}
+#map.nopins .mk-place.park{display:none}
