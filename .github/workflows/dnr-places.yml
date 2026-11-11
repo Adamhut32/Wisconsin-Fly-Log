@@ -13,6 +13,9 @@ on:
       probe:
         description: "Also save the DNR stocking page for inspection (true/false)"
         default: "false"
+      skip_dnr:
+        description: "Skip the DNR downloads and only refresh the USGS gauge files (true/false)"
+        default: "false"
       fetch:
         description: "Only fetch these web addresses (separated by spaces) into tools/probe/ and skip everything else"
         default: ""
@@ -29,7 +32,7 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install "shapely>=2,<3" pyshp
       - name: DNR boat landings, shore fishing sites, lake facts
-        if: inputs.fetch == ''
+        if: inputs.fetch == '' && inputs.skip_dnr != 'true'
         continue-on-error: true
         run: python3 tools/dnr_places.py
       - name: USGS stream gauges
@@ -37,7 +40,7 @@ jobs:
         continue-on-error: true
         run: python3 tools/usgs_gauges.py
       - name: DNR fish stocking records
-        if: inputs.fetch == ''
+        if: inputs.fetch == '' && inputs.skip_dnr != 'true'
         continue-on-error: true
         run: python3 tools/dnr_stocking.py
       - name: Road crossings over trout streams
