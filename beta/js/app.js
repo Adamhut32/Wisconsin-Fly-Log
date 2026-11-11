@@ -201,6 +201,20 @@ function restyleLines(onZoom){
 const restyleMore = [];   // other files add their own line layers here
 map.on("zoomend", () => restyleLines(true));
 const TROUT = { 1:{ label:"Class I", tok:"--t1" }, 2:{ label:"Class II", tok:"--t2" }, 3:{ label:"Class III", tok:"--t3" } };
+/* Map filters for trout water: show or hide each class, and optionally only water you can fish today.
+   A stretch's season comes from the nearest DNR regulation; where the DNR lists none, the general inland trout season applies. */
+let troutShow = lsGet("fl.troutShow", { 1:true, 2:true, 3:true }), openOnly = lsGet("fl.openOnly", false);
+const GENERAL_REG = ["", "General inland trout season", "", "First Saturday in May to October 15", "First Saturday in January to first Saturday in May"];
+const openMemo = {};   // county -> Map(trout stretch -> can it be fished today)
+function troutOpenNow(cid, seg){
+  const m = (openMemo[cid] ||= new Map());
+  if(m.has(seg)) return m.get(seg);
+  const path = seg[4] && seg[4][0], q = path && path[Math.floor(path.length / 2)];
+  const reg = (q && nearestReg(seg[0], { lat:q[1], lng:q[0] }, cid)) || GENERAL_REG;
+  const st = seasonStatus(reg) || seasonStatus(GENERAL_REG), ok = !!st && st.kind !== "closed";
+  m.set(seg, ok); return ok;
+}
+const troutVisible = (cid, seg) => !!TROUT[seg[1]] && troutShow[seg[1]] !== false && (!openOnly || troutOpenNow(cid, seg));
 async function getJSON(cache, path, id){
   if(cache[id]) return cache[id];
   const r = await fetch(path); if(!r.ok) throw new Error("missing");
@@ -224,6 +238,7 @@ function waterPopup(name, kind, ll, trout, cid){
     <div class="row"><a class="link" href="${gmaps(ll.lat,ll.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${canWrite?`<button class="link" data-a="addspot">Add as spot</button><button class="link" data-a="planwater">Plan a trip</button>`:""}</div>
     <div class="row dnr">${dnrLinks(kind, trout ? TROUT[trout.c].label : null)}</div>`;
   div.addEventListener("click", ev => {
+    if(ev.target.closest(".tclass")){ showClassHelp(); return; }   // tap the class for what it means
     if(ev.target.closest('[data-a="addspot"]')){ map.closePopup(); openForm("spot", null, { name, lat:ll.lat, lng:ll.lng, water: waterType(name), trout_class: trout ? TROUT[trout.c].label : "" }); }
     const pw = ev.target.closest('[data-a="planwater"]');
     if(pw){ pendingPlanWater = { name, kind: waterType(name), lat:+ll.lat.toFixed(5), lng:+ll.lng.toFixed(5), county: countyAt(ll.lat, ll.lng) || detailFor || null, trout: trout ? TROUT[trout.c].label + " trout" : null };
@@ -280,8 +295,9 @@ function drawDetail(id, w, t){
     p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null })); detailLakes.push({ name, poly:p }); g.addLayer(p);
   }
   /* trout class bands sit under the creek line, like a highlighter on a paper map */
-  if(t) for(const [name, c, mi, orw, paths] of t.t){
-    if(!TROUT[c]) continue;
+  if(t) for(const seg of t.t){
+    const [name, c, mi, orw, paths] = seg;
+    if(!troutVisible(id, seg)) continue;
     const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
@@ -321,7 +337,7 @@ async function loadNearby(id){
     try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + k + ".json"), k), getJSON(troutCache, dataUrl("water/trout/" + k + ".json"), k).catch(()=>null) ]); }catch(e){ return; }
     if(detailFor !== id || nearbyLayer !== layer) return;
     for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" }));
-    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), opacity:.3, lineJoin:"round" }, 5));
+    if(t) for(const seg of t.t){ const [name, c, mi, orw, paths] = seg; if(troutVisible(k, seg)) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), opacity:.3, lineJoin:"round" }, 5)); }
     for(const [name, order, paths] of w.s) if(!((!name || name === "NA" || name === "Unnamed") && order >= 4)) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), lineJoin:"round" }, streamWeight(order)));
   }));
 }
@@ -531,8 +547,9 @@ function buildArea(id, w, t){
     const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null }, id)); g.addLayer(p);
   }
-  if(t) for(const [name, c, mi, orw, paths] of t.t){
-    if(!TROUT[c]) continue;
+  if(t) for(const seg of t.t){
+    const [name, c, mi, orw, paths] = seg;
+    if(!troutVisible(id, seg)) continue;
     const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }, id));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
@@ -629,6 +646,43 @@ document.addEventListener("mapsettled", () => { const z = Math.round(map.getZoom
 document.addEventListener("mapview", () => countyLayer.setStyle(countyStyle));
 /* the creek canvas sits over the counties, so a tap on open land opens that county */
 // (taps on open land are handled by the county highlight in 89-countytap.js)
+
+/* ---------- map key: trout class and open-now filters ---------- */
+function applyTroutFilter(){
+  if(detailFor && waterCache[detailFor]) drawDetail(detailFor, levelOf(detailFor, waterCache[detailFor]), troutCache[detailFor]);
+  for(const id of Object.keys(areaGroups)){
+    if(!areaOn.has(id)){ delete areaGroups[id]; continue; }
+    map.removeLayer(areaGroups[id].g); areaGroups[id] = buildArea(id, levelOf(id, waterCache[id]), troutCache[id]); areaGroups[id].g.addTo(map);
+  }
+  restyleLines(); drawLabels();
+}
+function syncTroutKey(){
+  document.querySelectorAll("#legend [data-tclass]").forEach(b => b.setAttribute("aria-pressed", String(troutShow[b.dataset.tclass] !== false)));
+  const o = $("openToggle"); o.setAttribute("aria-pressed", String(openOnly)); o.textContent = openOnly ? "Open now: on" : "Open now: off";
+}
+$("legend").addEventListener("click", e => {
+  const b = e.target.closest("[data-tclass]");
+  if(b){ const c = b.dataset.tclass; troutShow = { ...troutShow, [c]: troutShow[c] === false }; lsSet("fl.troutShow", troutShow); syncTroutKey(); applyTroutFilter(); return; }
+  if(e.target.closest("#openToggle")){ openOnly = !openOnly; lsSet("fl.openOnly", openOnly); syncTroutKey(); applyTroutFilter();
+    if(openOnly) toast("Showing only trout water you can fish today. Always check the current regulations."); return; }
+  if(e.target.closest("#classHelp")) showClassHelp();
+});
+syncTroutKey();
+function showClassHelp(){
+  const v = document.createElement("div"); v.className = "scrim"; v.setAttribute("role", "dialog"); v.setAttribute("aria-label", "What the trout classes mean");
+  v.innerHTML = `<div class="sheet"><h2 style="margin-top:0">Trout stream classes</h2>
+    <p class="muted" style="margin-top:0">The Wisconsin DNR sorts every trout stream into one of three classes by how well trout reproduce there on their own.</p>
+    <div class="classes">
+      <div><span class="tclass" style="background:var(--t1)">Class I</span><p><b>Wild trout, no stocking.</b> High-quality water where trout reproduce well enough to keep the stream full on their own. Often small headwater creeks, where the fish can be small or slow-growing. About 40% of Wisconsin's trout miles.</p></div>
+      <div><span class="tclass" style="background:var(--t2)">Class II</span><p><b>Some wild trout, helped by stocking.</b> Trout reproduce here, but not enough to fill the stream, so it's stocked. Adult fish survive well from year to year, and some grow bigger than average. About 46%.</p></div>
+      <div><span class="tclass" style="background:var(--t3)">Class III</span><p><b>Stocked every year.</b> Marginal trout water with no natural reproduction. Fish generally don't last from one year to the next. About 14%.</p></div>
+    </div>
+    <p class="muted">A class says how the trout got there, not how good the fishing is or whether you may fish it. Tap any stream for its season and rules.</p>
+    <p><a class="link" href="https://dnr.wisconsin.gov/topic/Fishing/trout/streamclassification" target="_blank" rel="noopener">Wisconsin DNR: trout stream classifications</a></p>
+    <div class="row2"><button class="btn ink" type="button" data-close>Got it</button></div></div>`;
+  v.addEventListener("click", ev => { if(ev.target === v || ev.target.closest("[data-close]")) v.remove(); });
+  document.body.appendChild(v);
+}
 
 
 /* ---------- markers and popups ---------- */
@@ -3286,6 +3340,17 @@ const BADGES = [
   { id:"pike", name:"Pike Patrol", desc:"Catch 5 northern pike.", goal:5, val:s => nSp(s.cs, ["Northern pike"]) },
   { id:"musky", name:"Fish of 10,000 Casts", desc:"Catch a musky.", goal:1, val:s => nSp(s.cs, ["Musky","Muskellunge"]) },
   { id:"panfish", name:"Panfish Pro", desc:"Catch 25 panfish.", goal:25, val:s => nSp(s.cs, PANFISH) },
+  ...[["brookie", "Brookie", ["Brook trout"]], ["brown", "Brown Trout", ["Brown trout"]], ["rainbow", "Rainbow", ["Rainbow trout","Steelhead"]], ["bass", "Bass", BASS], ["walleye", "Walleye", ["Walleye","Sauger"]]]
+    .flatMap(([k, label, list]) => [[25, "Regular"], [50, "Fanatic"], [100, "Legend"]].map(([n, word]) => ({ id:k + n, name:`${label} ${word}`, desc:`Catch ${n} ${k === "brookie" ? "brook trout" : k === "bass" ? "bass" : k === "walleye" ? "walleye" : list[0].toLowerCase()}.`, goal:n, val:s => nSp(s.cs, list) }))),
+  { id:"pike25", name:"Pike Regular", desc:"Catch 25 northern pike.", goal:25, val:s => nSp(s.cs, ["Northern pike"]) },
+  { id:"panfish50", name:"Panfish Fanatic", desc:"Catch 50 panfish.", goal:50, val:s => nSp(s.cs, PANFISH) },
+  { id:"panfish100", name:"Panfish Legend", desc:"Catch 100 panfish.", goal:100, val:s => nSp(s.cs, PANFISH) },
+  { id:"sturgeon", name:"River Dinosaur", desc:"Catch a sturgeon.", goal:1, val:s => s.cs.some(c => /sturgeon/i.test(c.species || "")) ? 1 : 0 },
+  { id:"steelhead", name:"Chrome Chaser", desc:"Catch a steelhead.", goal:1, val:s => s.cs.some(c => /steelhead/i.test(c.species || "")) ? 1 : 0 },
+  { id:"waters5", name:"Water Wanderer", desc:"Catch fish in 5 different creeks, rivers or lakes.", goal:5, val:s => s.waters },
+  { id:"waters10", name:"Creek Collector", desc:"Catch fish in 10 different waters.", goal:10, val:s => s.waters },
+  { id:"waters25", name:"Watershed Rambler", desc:"Catch fish in 25 different waters.", goal:25, val:s => s.waters },
+  { id:"waters50", name:"Every Bend", desc:"Catch fish in 50 different waters.", goal:50, val:s => s.waters },
   { id:"twenty", name:"Twenty-Incher", desc:"Land a trout 20 inches or longer.", goal:1, val:s => s.cs.some(c => sameSp(c, TROUT_ALL) && +c.length_in >= 20) ? 1 : 0 },
   { id:"slam", name:"Driftless Grand Slam", desc:"Brook, brown and rainbow trout on the same day.", goal:1, val:s => s.slam ? 1 : 0 },
   { id:"species5", name:"Species Explorer", desc:"Catch 5 different species.", goal:5, val:s => s.species },
@@ -3300,6 +3365,7 @@ function badgeStats(cs = catches){
   return { cs: withFish, fish: withFish.reduce((a, c) => a + fishOf(c), 0),
     species: new Set(withFish.map(c => (c.species || "").toLowerCase()).filter(Boolean)).size,
     counties: new Set(withFish.map(c => c.county).filter(Boolean)).size, trips: trips.length,
+    waters: new Set(withFish.filter(c => c.water).map(c => c.water.trim().toLowerCase() + "|" + (c.county || ""))).size,   // the same name in two counties is two waters
     slam: Object.values(byDay).some(s => s.has("brook trout") && s.has("brown trout") && s.has("rainbow trout")) };
 }
 function badges(cs){ const s = badgeStats(cs); return BADGES.map(b => { const v = Math.min(b.goal, b.val(s)); return { ...b, v, earned: v >= b.goal }; }); }
@@ -4068,7 +4134,7 @@ const PREF_TARGETS = [["trout","Trout"],["bass","Bass"],["walleye","Walleye"],["
 const PREF_WATERS = [["streams","Creeks & rivers"],["lakes","Lakes"],["both","Both"]];
 const TARGET_SPECIES = { trout:["Brook trout","Brown trout","Rainbow trout","Tiger trout"], bass:["Smallmouth bass","Largemouth bass"], walleye:["Walleye","Sauger"],
   pike:["Northern pike","Musky"], panfish:["Bluegill","Crappie","Yellow perch","Pumpkinseed","Rock bass"], salmon:["Chinook salmon","Coho salmon","Steelhead","Lake trout"], catfish:["Channel catfish","Flathead catfish","Bullhead"] };
-const TARGET_BADGES = { trout:["brookie","brown","rainbow","twenty","slam"], bass:["bass"], walleye:["walleye"], pike:["pike","musky"], panfish:["panfish"], salmon:["rainbow"], catfish:[] };
+const TARGET_BADGES = { trout:["brookie","brown","rainbow","twenty","slam","brookie25","brown25","rainbow25","steelhead","waters5"], bass:["bass","bass25"], walleye:["walleye","walleye25"], pike:["pike","musky","pike25"], panfish:["panfish","panfish50"], salmon:["rainbow","steelhead"], catfish:[] };
 const fprefs = () => profile?.fishing_prefs || {};
 const prefWantsWeight = () => { const t = fprefs().targets || []; return t.some(x => x !== "trout") && !t.includes("trout") || fprefs().method === "spin" || fprefs().method === "ice"; };
 function applyPrefs(){

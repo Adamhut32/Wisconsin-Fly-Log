@@ -21,8 +21,9 @@ function buildArea(id, w, t){
     const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:css(TROUT[c]?.tok || "--t1"), weight:2, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null }, id)); g.addLayer(p);
   }
-  if(t) for(const [name, c, mi, orw, paths] of t.t){
-    if(!TROUT[c]) continue;
+  if(t) for(const seg of t.t){
+    const [name, c, mi, orw, paths] = seg;
+    if(!troutVisible(id, seg)) continue;
     const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }, id));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
@@ -119,3 +120,40 @@ document.addEventListener("mapsettled", () => { const z = Math.round(map.getZoom
 document.addEventListener("mapview", () => countyLayer.setStyle(countyStyle));
 /* the creek canvas sits over the counties, so a tap on open land opens that county */
 // (taps on open land are handled by the county highlight in 89-countytap.js)
+
+/* ---------- map key: trout class and open-now filters ---------- */
+function applyTroutFilter(){
+  if(detailFor && waterCache[detailFor]) drawDetail(detailFor, levelOf(detailFor, waterCache[detailFor]), troutCache[detailFor]);
+  for(const id of Object.keys(areaGroups)){
+    if(!areaOn.has(id)){ delete areaGroups[id]; continue; }
+    map.removeLayer(areaGroups[id].g); areaGroups[id] = buildArea(id, levelOf(id, waterCache[id]), troutCache[id]); areaGroups[id].g.addTo(map);
+  }
+  restyleLines(); drawLabels();
+}
+function syncTroutKey(){
+  document.querySelectorAll("#legend [data-tclass]").forEach(b => b.setAttribute("aria-pressed", String(troutShow[b.dataset.tclass] !== false)));
+  const o = $("openToggle"); o.setAttribute("aria-pressed", String(openOnly)); o.textContent = openOnly ? "Open now: on" : "Open now: off";
+}
+$("legend").addEventListener("click", e => {
+  const b = e.target.closest("[data-tclass]");
+  if(b){ const c = b.dataset.tclass; troutShow = { ...troutShow, [c]: troutShow[c] === false }; lsSet("fl.troutShow", troutShow); syncTroutKey(); applyTroutFilter(); return; }
+  if(e.target.closest("#openToggle")){ openOnly = !openOnly; lsSet("fl.openOnly", openOnly); syncTroutKey(); applyTroutFilter();
+    if(openOnly) toast("Showing only trout water you can fish today. Always check the current regulations."); return; }
+  if(e.target.closest("#classHelp")) showClassHelp();
+});
+syncTroutKey();
+function showClassHelp(){
+  const v = document.createElement("div"); v.className = "scrim"; v.setAttribute("role", "dialog"); v.setAttribute("aria-label", "What the trout classes mean");
+  v.innerHTML = `<div class="sheet"><h2 style="margin-top:0">Trout stream classes</h2>
+    <p class="muted" style="margin-top:0">The Wisconsin DNR sorts every trout stream into one of three classes by how well trout reproduce there on their own.</p>
+    <div class="classes">
+      <div><span class="tclass" style="background:var(--t1)">Class I</span><p><b>Wild trout, no stocking.</b> High-quality water where trout reproduce well enough to keep the stream full on their own. Often small headwater creeks, where the fish can be small or slow-growing. About 40% of Wisconsin's trout miles.</p></div>
+      <div><span class="tclass" style="background:var(--t2)">Class II</span><p><b>Some wild trout, helped by stocking.</b> Trout reproduce here, but not enough to fill the stream, so it's stocked. Adult fish survive well from year to year, and some grow bigger than average. About 46%.</p></div>
+      <div><span class="tclass" style="background:var(--t3)">Class III</span><p><b>Stocked every year.</b> Marginal trout water with no natural reproduction. Fish generally don't last from one year to the next. About 14%.</p></div>
+    </div>
+    <p class="muted">A class says how the trout got there, not how good the fishing is or whether you may fish it. Tap any stream for its season and rules.</p>
+    <p><a class="link" href="https://dnr.wisconsin.gov/topic/Fishing/trout/streamclassification" target="_blank" rel="noopener">Wisconsin DNR: trout stream classifications</a></p>
+    <div class="row2"><button class="btn ink" type="button" data-close>Got it</button></div></div>`;
+  v.addEventListener("click", ev => { if(ev.target === v || ev.target.closest("[data-close]")) v.remove(); });
+  document.body.appendChild(v);
+}

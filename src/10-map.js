@@ -109,6 +109,20 @@ function restyleLines(onZoom){
 const restyleMore = [];   // other files add their own line layers here
 map.on("zoomend", () => restyleLines(true));
 const TROUT = { 1:{ label:"Class I", tok:"--t1" }, 2:{ label:"Class II", tok:"--t2" }, 3:{ label:"Class III", tok:"--t3" } };
+/* Map filters for trout water: show or hide each class, and optionally only water you can fish today.
+   A stretch's season comes from the nearest DNR regulation; where the DNR lists none, the general inland trout season applies. */
+let troutShow = lsGet("fl.troutShow", { 1:true, 2:true, 3:true }), openOnly = lsGet("fl.openOnly", false);
+const GENERAL_REG = ["", "General inland trout season", "", "First Saturday in May to October 15", "First Saturday in January to first Saturday in May"];
+const openMemo = {};   // county -> Map(trout stretch -> can it be fished today)
+function troutOpenNow(cid, seg){
+  const m = (openMemo[cid] ||= new Map());
+  if(m.has(seg)) return m.get(seg);
+  const path = seg[4] && seg[4][0], q = path && path[Math.floor(path.length / 2)];
+  const reg = (q && nearestReg(seg[0], { lat:q[1], lng:q[0] }, cid)) || GENERAL_REG;
+  const st = seasonStatus(reg) || seasonStatus(GENERAL_REG), ok = !!st && st.kind !== "closed";
+  m.set(seg, ok); return ok;
+}
+const troutVisible = (cid, seg) => !!TROUT[seg[1]] && troutShow[seg[1]] !== false && (!openOnly || troutOpenNow(cid, seg));
 async function getJSON(cache, path, id){
   if(cache[id]) return cache[id];
   const r = await fetch(path); if(!r.ok) throw new Error("missing");
@@ -132,6 +146,7 @@ function waterPopup(name, kind, ll, trout, cid){
     <div class="row"><a class="link" href="${gmaps(ll.lat,ll.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${canWrite?`<button class="link" data-a="addspot">Add as spot</button><button class="link" data-a="planwater">Plan a trip</button>`:""}</div>
     <div class="row dnr">${dnrLinks(kind, trout ? TROUT[trout.c].label : null)}</div>`;
   div.addEventListener("click", ev => {
+    if(ev.target.closest(".tclass")){ showClassHelp(); return; }   // tap the class for what it means
     if(ev.target.closest('[data-a="addspot"]')){ map.closePopup(); openForm("spot", null, { name, lat:ll.lat, lng:ll.lng, water: waterType(name), trout_class: trout ? TROUT[trout.c].label : "" }); }
     const pw = ev.target.closest('[data-a="planwater"]');
     if(pw){ pendingPlanWater = { name, kind: waterType(name), lat:+ll.lat.toFixed(5), lng:+ll.lng.toFixed(5), county: countyAt(ll.lat, ll.lng) || detailFor || null, trout: trout ? TROUT[trout.c].label + " trout" : null };
@@ -188,8 +203,9 @@ function drawDetail(id, w, t){
     p.on("click", e => openWaterPopup(e, name, "Spring pond", { c, mi:null })); detailLakes.push({ name, poly:p }); g.addLayer(p);
   }
   /* trout class bands sit under the creek line, like a highlighter on a paper map */
-  if(t) for(const [name, c, mi, orw, paths] of t.t){
-    if(!TROUT[c]) continue;
+  if(t) for(const seg of t.t){
+    const [name, c, mi, orw, paths] = seg;
+    if(!troutVisible(id, seg)) continue;
     const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
@@ -229,7 +245,7 @@ async function loadNearby(id){
     try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + k + ".json"), k), getJSON(troutCache, dataUrl("water/trout/" + k + ".json"), k).catch(()=>null) ]); }catch(e){ return; }
     if(detailFor !== id || nearbyLayer !== layer) return;
     for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" }));
-    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), opacity:.3, lineJoin:"round" }, 5));
+    if(t) for(const seg of t.t){ const [name, c, mi, orw, paths] = seg; if(troutVisible(k, seg)) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), opacity:.3, lineJoin:"round" }, 5)); }
     for(const [name, order, paths] of w.s) if(!((!name || name === "NA" || name === "Unnamed") && order >= 4)) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), lineJoin:"round" }, streamWeight(order)));
   }));
 }

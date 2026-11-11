@@ -31,6 +31,17 @@ const BADGES = [
   { id:"pike", name:"Pike Patrol", desc:"Catch 5 northern pike.", goal:5, val:s => nSp(s.cs, ["Northern pike"]) },
   { id:"musky", name:"Fish of 10,000 Casts", desc:"Catch a musky.", goal:1, val:s => nSp(s.cs, ["Musky","Muskellunge"]) },
   { id:"panfish", name:"Panfish Pro", desc:"Catch 25 panfish.", goal:25, val:s => nSp(s.cs, PANFISH) },
+  ...[["brookie", "Brookie", ["Brook trout"]], ["brown", "Brown Trout", ["Brown trout"]], ["rainbow", "Rainbow", ["Rainbow trout","Steelhead"]], ["bass", "Bass", BASS], ["walleye", "Walleye", ["Walleye","Sauger"]]]
+    .flatMap(([k, label, list]) => [[25, "Regular"], [50, "Fanatic"], [100, "Legend"]].map(([n, word]) => ({ id:k + n, name:`${label} ${word}`, desc:`Catch ${n} ${k === "brookie" ? "brook trout" : k === "bass" ? "bass" : k === "walleye" ? "walleye" : list[0].toLowerCase()}.`, goal:n, val:s => nSp(s.cs, list) }))),
+  { id:"pike25", name:"Pike Regular", desc:"Catch 25 northern pike.", goal:25, val:s => nSp(s.cs, ["Northern pike"]) },
+  { id:"panfish50", name:"Panfish Fanatic", desc:"Catch 50 panfish.", goal:50, val:s => nSp(s.cs, PANFISH) },
+  { id:"panfish100", name:"Panfish Legend", desc:"Catch 100 panfish.", goal:100, val:s => nSp(s.cs, PANFISH) },
+  { id:"sturgeon", name:"River Dinosaur", desc:"Catch a sturgeon.", goal:1, val:s => s.cs.some(c => /sturgeon/i.test(c.species || "")) ? 1 : 0 },
+  { id:"steelhead", name:"Chrome Chaser", desc:"Catch a steelhead.", goal:1, val:s => s.cs.some(c => /steelhead/i.test(c.species || "")) ? 1 : 0 },
+  { id:"waters5", name:"Water Wanderer", desc:"Catch fish in 5 different creeks, rivers or lakes.", goal:5, val:s => s.waters },
+  { id:"waters10", name:"Creek Collector", desc:"Catch fish in 10 different waters.", goal:10, val:s => s.waters },
+  { id:"waters25", name:"Watershed Rambler", desc:"Catch fish in 25 different waters.", goal:25, val:s => s.waters },
+  { id:"waters50", name:"Every Bend", desc:"Catch fish in 50 different waters.", goal:50, val:s => s.waters },
   { id:"twenty", name:"Twenty-Incher", desc:"Land a trout 20 inches or longer.", goal:1, val:s => s.cs.some(c => sameSp(c, TROUT_ALL) && +c.length_in >= 20) ? 1 : 0 },
   { id:"slam", name:"Driftless Grand Slam", desc:"Brook, brown and rainbow trout on the same day.", goal:1, val:s => s.slam ? 1 : 0 },
   { id:"species5", name:"Species Explorer", desc:"Catch 5 different species.", goal:5, val:s => s.species },
@@ -45,6 +56,7 @@ function badgeStats(cs = catches){
   return { cs: withFish, fish: withFish.reduce((a, c) => a + fishOf(c), 0),
     species: new Set(withFish.map(c => (c.species || "").toLowerCase()).filter(Boolean)).size,
     counties: new Set(withFish.map(c => c.county).filter(Boolean)).size, trips: trips.length,
+    waters: new Set(withFish.filter(c => c.water).map(c => c.water.trim().toLowerCase() + "|" + (c.county || ""))).size,   // the same name in two counties is two waters
     slam: Object.values(byDay).some(s => s.has("brook trout") && s.has("brown trout") && s.has("rainbow trout")) };
 }
 function badges(cs){ const s = badgeStats(cs); return BADGES.map(b => { const v = Math.min(b.goal, b.val(s)); return { ...b, v, earned: v >= b.goal }; }); }
