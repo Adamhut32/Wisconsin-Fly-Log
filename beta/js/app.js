@@ -229,6 +229,7 @@ function nearestReg(name, ll, cid){
     for(const pa of r[7]) for(const q of pa){ const d = d2(p, q) * (same ? .25 : 1); if(d < bd){ bd = d; best = r; } } }
   return bd < 0.0004 ? best : null; // within ~1–2 km
 }
+const waterPopupExtras = [];   // other files add sections to a water's card (lake facts, stocking, flow, weather)
 function waterPopup(name, kind, ll, trout, cid){
   const div = document.createElement("div"); div.className = "pop";
   const reg = trout ? nearestReg(name, ll, cid) : null;
@@ -244,6 +245,8 @@ function waterPopup(name, kind, ll, trout, cid){
     if(pw){ pendingPlanWater = { name, kind: waterType(name), lat:+ll.lat.toFixed(5), lng:+ll.lng.toFixed(5), county: countyAt(ll.lat, ll.lng) || detailFor || null, trout: trout ? TROUT[trout.c].label + " trout" : null };
       pw.hidden = true; div.insertAdjacentHTML("beforeend", planChooserHtml(pendingPlanWater)); map._popup && map._popup.update(); }
   });
+  const info = { name, kind, ll, trout, cid, isLake: /lake|pond|flowage|reservoir/i.test(kind) };
+  for(const add of waterPopupExtras){ try{ add(div, info); }catch(e){ console.warn("card section", e); } }
   return div;
 }
 /* hovering any piece of a creek lights up the whole creek */
@@ -3277,11 +3280,13 @@ async function countSavedCounties(){
 }
 async function saveCountiesOffline(ids, onProgress){
   const c = await caches.open(OFFLINE_CACHE);
-  const extra = [dataUrl("water/index.json"), dataUrl("geo.json")];
+  const extra = [dataUrl("water/index.json"), dataUrl("geo.json"), dataUrl("gauges.json")];
   for(const u of extra){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
   let done = 0, failed = 0;
   for(const id of ids){
     for(const u of countyFiles(id)){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); else failed++; } }catch(e){ failed++; } }
+    // nice to have offline too, but a county without them is still "saved": boat landings and lake facts, road crossings, stocking
+    for(const u of [dataUrl("places/" + id + ".json"), dataUrl("crossings/" + id + ".json"), dataUrl("stocking/" + id + ".json")]){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();
@@ -4072,6 +4077,108 @@ function renderAnalytics(el){
 const SUG_CAT = { bug:"Bug", idea:"Idea", question:"Question", other:"Other" };
 function triageHtml(s){ return s.category || s.triage_note ? `<p class="triage">${s.category ? `<span class="pill ${s.category === "bug" ? "want" : "scouted"}">${SUG_CAT[s.category]}</span> ` : ""}${s.triage_note ? esc(s.triage_note) : ""}</p>` : ""; }
 
+/* ---------- more on the map: boat landings, shore fishing, road crossings, lake facts, DNR stocking ----------
+   One small file per county for each kind (data/places, data/crossings, data/stocking), loaded for the counties on screen.
+   Landings and shore-fishing sites show from a regional zoom; road crossings only up close, and only the ones on screen. */
+const placesCache = {}, crossCache = {}, stockCache = {};
+const PLACE_ZOOM = 10.5, CROSS_ZOOM = 12.5;
+let showLandings = lsGet("fl.landings", true), showCrossings = lsGet("fl.crossings", true);
+const landingLayer = L.layerGroup(), crossLayer = L.layerGroup();
+const optJSON = (cache, path, id, empty) => getJSON(cache, path, id).catch(() => (cache[id] = empty));
+const getPlaces = id => optJSON(placesCache, dataUrl("places/" + id + ".json"), id, { b:[], s:[], l:[] });
+const getCrossings = id => optJSON(crossCache, dataUrl("crossings/" + id + ".json"), id, []);
+const getStocking = id => optJSON(stockCache, dataUrl("stocking/" + id + ".json"), id, []);
+const PLACE_SVG = {
+  boat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15h18l-2.2 4.2a2 2 0 0 1-1.8 1H7a2 2 0 0 1-1.8-1L3 15z" fill="currentColor"/><path d="M12 3v10M12 4l6 8h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
+  carry: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 14c3-4 16-4 19 0-3 4-16 4-19 0z" fill="currentColor"/><path d="M7 8l10 12M17 8L7 20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  shore: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20L17 4M17 4c2.5 2 3 5 1 8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="18" cy="15" r="1.7" fill="currentColor"/><path d="M3 21h9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>`,
+  cross: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9h20M2 15h20" stroke="currentColor" stroke-width="2.2"/><path d="M6 15c0-4 12-4 12 0" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`
+};
+const nice = s => String(s || "").toLowerCase().replace(/\b[a-z]/g, m => m.toUpperCase()).replace(/\bDnr\b/g, "DNR").replace(/\bUs\b/g, "US").replace(/\bUsfs\b/g, "USFS");
+const yesish = v => /^(y|yes|true|1)$/i.test(String(v || ""));
+function landingPopup(kind, r){
+  const div = document.createElement("div"); div.className = "pop";
+  if(kind === "s"){
+    const [lat, lng, name, water, url] = r;
+    div.innerHTML = `<h3>${esc(nice(name) || "Shore fishing site")}</h3><div class="meta">Shore fishing${water ? ` · ${esc(nice(water))}` : ""}</div>
+      <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${url && /^https?:\/\//.test(url) ? `<a class="link" href="${esc(url)}" target="_blank" rel="noopener">DNR page</a>` : ""}</div><small class="src">From the Wisconsin DNR's shore fishing sites.</small>`;
+  } else {
+    const [lat, lng, name, type, ramp, ada, water, owner] = r, carry = /carry/i.test(type || "");
+    const bits = [carry ? "Carry-in access (no ramp)" : ramp && !/unknown|none/i.test(ramp) ? `${nice(ramp)} ramp` : /ramp/i.test(type || "") ? "Boat ramp" : "Boat access", yesish(ada) ? "Accessible features" : "", owner ? `Managed by ${nice(owner)}` : ""].filter(Boolean);
+    div.innerHTML = `<h3>${esc(nice(name) || "Boat landing")}</h3><div class="meta">${carry ? "Carry-in landing" : "Boat landing"}${water ? ` · ${esc(nice(water))}` : ""}</div>
+      <ul class="facts">${bits.map(b => `<li>${esc(b)}</li>`).join("")}</ul>
+      <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">From the Wisconsin DNR's boat access list. Fees and parking aren't listed; check the sign at the landing.</small>`;
+  }
+  return div;
+}
+function crossPopup(r){
+  const [lat, lng, road, stream, cls] = r, div = document.createElement("div"); div.className = "pop";
+  div.innerHTML = `<h3>${esc(road)}</h3><div class="meta">Road crossing · ${esc(stream)}${TROUT[cls] ? ` · <span class="tclass" style="background:var(${TROUT[cls].tok})">${TROUT[cls].label} trout</span>` : ""}</div>
+    <p class="note" style="margin:8px 0">Public road crossings are a common way onto a stream. Park safely and legally off the road, stay in the water or within the road's right-of-way, and respect any posted signs. Not every crossing has room to park.</p>
+    <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">Worked out from U.S. Census road lines and DNR trout streams, so a few may be private or impassable.</small>`;
+  div.addEventListener("click", ev => { if(ev.target.closest(".tclass")) showClassHelp(); });
+  return div;
+}
+const placeIcon = (cls, svg, title) => L.divIcon({ className:"", html:`<div class="mk-place ${cls}" title="${esc(title)}">${svg}</div>`, iconSize:[0, 0] });
+let placesSeq = 0;
+async function syncPlaces(){
+  const seq = ++placesSeq, z = map.getZoom();
+  const ids = [...new Set([...areaWant, currentCounty].filter(Boolean))];
+  const wantL = showLandings && !hidePins && (z >= PLACE_ZOOM || !!currentCounty) && ids.length, wantC = showCrossings && z >= CROSS_ZOOM && ids.length;
+  if(!wantL) landingLayer.clearLayers();
+  if(!wantC) crossLayer.clearLayers();
+  if(!wantL && !wantC) return;
+  const b = map.getBounds().pad(.15), inView = r => r[0] != null && b.contains([r[0], r[1]]);
+  if(wantL){
+    const all = await Promise.all(ids.map(getPlaces)); if(seq !== placesSeq) return;
+    landingLayer.clearLayers();
+    for(const p of all){
+      for(const r of p.b || []) if(inView(r)){ const carry = /carry/i.test(r[3] || ""); L.marker([r[0], r[1]], { icon:placeIcon(carry ? "carry" : "boat", PLACE_SVG[carry ? "carry" : "boat"], nice(r[2]) || "Boat landing"), zIndexOffset:-200 }).bindPopup(() => landingPopup("b", r), { maxWidth:300 }).addTo(landingLayer); }
+      for(const r of p.s || []) if(inView(r)) L.marker([r[0], r[1]], { icon:placeIcon("shore", PLACE_SVG.shore, nice(r[2]) || "Shore fishing"), zIndexOffset:-200 }).bindPopup(() => landingPopup("s", r), { maxWidth:300 }).addTo(landingLayer);
+    }
+  }
+  if(wantC){
+    const all = await Promise.all(ids.map(getCrossings)); if(seq !== placesSeq) return;
+    crossLayer.clearLayers(); let n = 0;
+    for(const list of all) for(const r of list){ if(n >= 220) break; if(!inView(r) || troutShow[r[4]] === false) continue; n++;
+      L.marker([r[0], r[1]], { icon:placeIcon("cross", PLACE_SVG.cross, `${r[2]} over ${r[3]}`), zIndexOffset:-400 }).bindPopup(() => crossPopup(r), { maxWidth:300 }).addTo(crossLayer); }
+  }
+}
+landingLayer.addTo(map); crossLayer.addTo(map);
+document.addEventListener("mapsettled", syncPlaces);
+function syncPlaceKey(){
+  const a = $("landingToggle"), c = $("crossToggle");
+  a.setAttribute("aria-pressed", String(showLandings)); a.textContent = showLandings ? "Boat landings on" : "Boat landings off";
+  c.setAttribute("aria-pressed", String(showCrossings)); c.textContent = showCrossings ? "Road crossings on" : "Road crossings off";
+}
+$("landingToggle").onclick = () => { showLandings = !showLandings; lsSet("fl.landings", showLandings); syncPlaceKey(); syncPlaces(); if(showLandings && map.getZoom() < PLACE_ZOOM && !currentCounty) toast("Boat landings show when you zoom in a bit."); };
+$("crossToggle").onclick = () => { showCrossings = !showCrossings; lsSet("fl.crossings", showCrossings); syncPlaceKey(); syncPlaces(); if(showCrossings && map.getZoom() < CROSS_ZOOM) toast("Road crossings show when you zoom in close to a trout stream."); };
+syncPlaceKey();
+
+/* lake facts and stocking on a water's card */
+const sameWater = (a, b) => { const n = s => String(s || "").toLowerCase().replace(/\b(the|lake|creek|river|pond|flowage|branch|fork|springs?)\b|[^a-z0-9]/g, ""); const x = n(a), y = n(b); return !!x && x === y; };
+function lakeFactsHtml(name, ll, cid){
+  const p = placesCache[cid]; if(!p || !p.l) return "";
+  const hits = p.l.filter(r => sameWater(r[2], name)); if(!hits.length) return "";
+  const r = hits.sort((a, b) => (a[0] == null ? 9 : d2([a[1], a[0]], [ll.lng, ll.lat])) - (b[0] == null ? 9 : d2([b[1], b[0]], [ll.lng, ll.lat])))[0];
+  const [, , , wbic, cls, acres, depth, desc, fish] = r;
+  const rows = [acres ? `<div><span>Size</span>${Math.round(acres).toLocaleString()} acres</div>` : "", depth ? `<div><span>Deepest</span>${Math.round(depth)} ft</div>` : "",
+    cls ? `<div><span>Lake type</span>${esc(nice(cls).replace(/-/g, ", "))}</div>` : "", fish ? `<div><span>Fishery</span>${esc(fish)}</div>` : "", desc && !fish ? `<div><span>About</span>${esc(desc)}</div>` : ""].filter(Boolean);
+  return rows.length ? `<div class="regs"><b>Lake facts</b>${rows.join("")}<small>From the DNR's lake classification.${wbic ? ` <a class="link" href="https://apps.dnr.wi.gov/lakes/lakepages/LakeDetail.aspx?wbic=${encodeURIComponent(wbic)}" target="_blank" rel="noopener">DNR lake page</a>` : ""}</small></div>` : "";
+}
+function stockingHtml(name, cid){
+  const rows = (stockCache[cid] || []).filter(r => sameWater(r[1], name) || sameWater(r[3], name)); if(!rows.length) return "";
+  const yrs = [...new Set(rows.map(r => r[0]))].sort((a, b) => b - a).slice(0, 3);
+  const line = r => `${r[7] != null ? Number(r[7]).toLocaleString() + " " : ""}${esc((r[4] || "fish").toLowerCase())}${r[6] ? ` (${esc(r[6].toLowerCase())}${r[8] ? `, ${Number(r[8]).toFixed(1)}″` : ""})` : r[8] ? ` (${Number(r[8]).toFixed(1)}″)` : ""}`;
+  return `<div class="regs"><b>DNR stocking</b>${yrs.map(y => `<div><span>${y}</span>${rows.filter(r => r[0] === y).slice(0, 4).map(line).join("; ")}</div>`).join("")}<small>From the DNR's stocking records, posted once a year after they're checked. Private and tribal stocking isn't included.</small></div>`;
+}
+waterPopupExtras.push((div, info) => {
+  const cid = info.cid || countyAt(info.ll.lat, info.ll.lng); if(!cid) return;
+  const slot = document.createElement("div"); div.querySelector(".coords").before(slot);
+  const fill = () => { slot.innerHTML = (info.isLake ? lakeFactsHtml(info.name, info.ll, cid) : "") + stockingHtml(info.name, cid); if(slot.innerHTML && map._popup) map._popup.update(); };
+  Promise.all([info.isLake ? getPlaces(cid) : null, getStocking(cid)]).then(fill);
+});
+
 
 /* ---------- terrain shading: soft hillshade under the field map, so coulees and ridges show ---------- */
 pane("hill", 396, false);
@@ -4669,6 +4776,139 @@ async function backfillWaters(){
     }
     lsSet("fl.waterTried", done);
   }catch(e){ console.warn("waters", e); } finally { waterBackfilling = false; }
+}
+
+/* ---------- stream flows (USGS gauges) and the forecast at the stream (National Weather Service) ----------
+   data/gauges.json lists Wisconsin's live stream gauges (name and place). Readings come straight from the USGS when the map
+   needs them, are kept for 15 minutes, and the last ones are remembered so a gauge still shows something with no signal. */
+const USGS = "https://api.waterdata.usgs.gov/";
+const FLOW_TTL = 15 * 60000, GAUGE_ZOOM = 8.75;
+let gauges = null, flowNow = lsGet("fl.flows", { at:0, q:{}, t:{} }), flowBusy = null, showGauges = lsGet("fl.gauges", true);
+const gaugeLayer = L.layerGroup().addTo(map), gaugeDetail = {}, wxCache = {};
+const usgs = async (path, params) => { const r = await fetch(USGS + path + "?" + new URLSearchParams(params)); if(!r.ok) throw new Error("usgs " + r.status); return r.json(); };
+async function loadGauges(){ if(!gauges){ try{ const r = await fetch(dataUrl("gauges.json")); gauges = r.ok ? await r.json() : []; }catch(e){ gauges = []; } } return gauges; }
+async function loadFlows(){
+  if(Date.now() - flowNow.at < FLOW_TTL || !navigator.onLine) return flowNow;
+  return (flowBusy ||= (async () => {
+    try{
+      const get = code => usgs("ogcapi/v0/collections/latest-continuous/items", { f:"json", state_name:"Wisconsin", parameter_code:code, limit:"2000", properties:"monitoring_location_id,time,value", skipGeometry:"true" });
+      const [q, t] = await Promise.all([get("00060"), get("00010").catch(() => ({ features:[] }))]);
+      const fresh = Date.now() - 3 * 86400000, pick = fc => { const o = {}; for(const f of fc.features || []){ const p = f.properties, at = Date.parse(p.time), v = parseFloat(p.value);
+        if(at > fresh && Number.isFinite(v) && (!o[p.monitoring_location_id] || at > o[p.monitoring_location_id][1])) o[p.monitoring_location_id] = [v, at]; } return o; };
+      flowNow = { at:Date.now(), q:pick(q), t:pick(t) }; lsSet("fl.flows", flowNow);
+    }catch(e){ console.warn("flows", e); }
+    flowBusy = null; return flowNow;
+  })());
+}
+const cfs = v => v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? v.toFixed(0) : v.toFixed(1);
+const readAgo = at => { const m = Math.round((Date.now() - at) / 60000); return m < 90 ? `${Math.max(1, m)} min ago` : m < 2880 ? `${Math.round(m / 60)} hours ago` : `${Math.round(m / 1440)} days ago`; };
+const toF = c => c * 9 / 5 + 32;
+// where today's flow sits against every year on record for this date
+function flowBand(v, pct){
+  if(!pct) return null;
+  const at = p => pct[p];
+  return v < at(10) ? { k:"low", t:"Very low for this date" } : v < at(25) ? { k:"low", t:"Low for this date" } : v <= at(75) ? { k:"ok", t:"Normal for this date" } : v <= at(90) ? { k:"high", t:"High for this date" } : { k:"high", t:"Very high for this date" };
+}
+async function gaugeDetails(id){
+  const c = gaugeDetail[id]; if(c && Date.now() - c.at < 30 * 60000) return c;
+  const d = new Date(), md = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const [series, stats] = await Promise.all([
+    usgs("ogcapi/v0/collections/continuous/items", { f:"json", monitoring_location_id:id, parameter_code:"00060", time:"P7D", limit:"3000", properties:"time,value", skipGeometry:"true" }).catch(() => null),
+    usgs("statistics/v0/observationNormals", { monitoring_location_id:id, parameter_code:"00060", computation_type:"percentile", start_date:md, end_date:md }).catch(() => null) ]);
+  const pts = ((series && series.features) || []).map(f => [Date.parse(f.properties.time), parseFloat(f.properties.value)]).filter(p => Number.isFinite(p[1])).sort((a, b) => a[0] - b[0]);
+  let pct = null;
+  try{ const v = stats.features[0].properties.data[0].values[0]; pct = {}; v.percentiles.forEach((p, i) => pct[+p] = parseFloat(v.values[i])); if(!Number.isFinite(pct[10]) || !Number.isFinite(pct[90])) pct = null; }catch(e){}
+  return (gaugeDetail[id] = { at:Date.now(), pts, pct });
+}
+function sparkline(pts, pct){
+  if(pts.length < 8) return "";
+  const W = 260, H = 64, t0 = pts[0][0], t1 = pts[pts.length - 1][0], vs = pts.map(p => p[1]);
+  let lo = Math.min(...vs), hi = Math.max(...vs); if(pct){ lo = Math.min(lo, pct[25]); hi = Math.max(hi, pct[75]); } if(hi - lo < 1e-6) hi = lo + 1; const pad = (hi - lo) * .12; lo -= pad; hi += pad;
+  const x = t => (t - t0) / (t1 - t0 || 1) * W, y = v => H - (v - lo) / (hi - lo) * H;
+  const step = Math.max(1, Math.floor(pts.length / 130)), line = pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
+  const band = pct ? `<rect x="0" y="${y(pct[75]).toFixed(1)}" width="${W}" height="${Math.max(1, y(pct[25]) - y(pct[75])).toFixed(1)}" class="norm"/>` : "";
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Flow over the last 7 days">${band}<path d="${line}"/><circle cx="${W - 1.5}" cy="${y(vs[vs.length - 1]).toFixed(1)}" r="3"/></svg><div class="sparkx"><span>7 days ago</span>${pct ? `<span class="normk">shaded: normal range</span>` : ""}<span>now</span></div>`;
+}
+function trendText(pts){
+  if(pts.length < 8) return "";
+  const now = pts[pts.length - 1], dayAgo = pts.filter(p => p[0] <= now[0] - 86400000).pop(), wk = pts[0];
+  const ch = (a, b) => (b - a) / Math.max(a, .01);
+  const d = dayAgo ? ch(dayAgo[1], now[1]) : 0, w = ch(wk[1], now[1]);
+  return d > .15 ? `Rising: up ${Math.round(d * 100)}% since yesterday` : d < -.15 ? `Dropping: down ${Math.round(-d * 100)}% since yesterday` : w > .3 ? `Up ${Math.round(w * 100)}% over the week, steady today` : w < -.3 ? `Down ${Math.round(-w * 100)}% over the week, steady today` : "Steady this week";
+}
+function gaugeBody(g, det){
+  const q = flowNow.q[g[0]], t = flowNow.t[g[0]], band = q && det ? flowBand(q[0], det.pct) : null, f = t ? toF(t[0]) : null;
+  return `${q ? `<div class="flowbig"><b>${cfs(q[0])}</b> cfs${band ? ` <span class="pill flow-${band.k}">${band.t}</span>` : ""}</div><div class="meta">Read ${readAgo(q[1])}${det && det.pts.length ? " · " + esc(trendText(det.pts)) : ""}</div>` : `<p class="muted">No recent reading from this gauge.</p>`}
+    ${f != null ? `<div class="meta${f >= 68 ? " warm" : ""}">Water ${Math.round(f)}°F${f >= 68 ? ". Warm for trout: fish early, or give them a rest" : ""}</div>` : ""}
+    ${det ? sparkline(det.pts, det.pct) : q ? `<p class="status">Loading the last 7 days…</p>` : ""}`;
+}
+function gaugePopup(g){
+  const div = document.createElement("div"); div.className = "pop";
+  const paint = det => { div.innerHTML = `<h3>${esc(g[1])}</h3><div class="meta">USGS stream gauge${g[4] ? ` · drains ${Math.round(g[4]).toLocaleString()} sq mi` : ""}</div>${gaugeBody(g, det)}
+      <div data-wx></div><div class="row"><button class="link" type="button" data-a="wx">Forecast here</button><a class="link" href="https://waterdata.usgs.gov/monitoring-location/${esc(g[0])}/" target="_blank" rel="noopener">USGS page</a></div>
+      <small class="src">Provisional data from the U.S. Geological Survey. cfs = cubic feet of water per second.</small>`; map._popup && map._popup.update(); };
+  paint(gaugeDetail[g[0]] || null);
+  if(navigator.onLine) loadFlows().then(() => gaugeDetails(g[0])).then(paint).catch(() => {});
+  div.addEventListener("click", ev => { const b = ev.target.closest('[data-a="wx"]'); if(b){ b.hidden = true; showForecast(div.querySelector("[data-wx]"), g[2], g[3]); } });
+  return div;
+}
+async function syncGauges(){
+  gaugeLayer.clearLayers();
+  if(!showGauges || map.getZoom() < GAUGE_ZOOM) return;
+  const list = await loadGauges(); await loadFlows();
+  if(!showGauges || map.getZoom() < GAUGE_ZOOM) return;
+  gaugeLayer.clearLayers();
+  const b = map.getBounds().pad(.1);
+  for(const g of list){ if(!b.contains([g[2], g[3]])) continue; const q = flowNow.q[g[0]];
+    L.marker([g[2], g[3]], { icon:L.divIcon({ className:"", html:`<div class="mk-gauge" title="${esc(g[1])}">${q ? `<b>${cfs(q[0])}</b> cfs` : "gauge"}</div>`, iconSize:[0, 0] }), zIndexOffset:-100 }).bindPopup(() => gaugePopup(g), { maxWidth:300, minWidth:240 }).addTo(gaugeLayer); }
+}
+document.addEventListener("mapsettled", syncGauges);
+function syncGaugeKey(){ const b = $("gaugeToggle"); b.setAttribute("aria-pressed", String(showGauges)); b.textContent = showGauges ? "Stream flows on" : "Stream flows off"; }
+$("gaugeToggle").onclick = () => { showGauges = !showGauges; lsSet("fl.gauges", showGauges); syncGaugeKey(); syncGauges(); };
+syncGaugeKey();
+
+/* the nearest gauge on a stream's own card: same river if there is one within about 40 miles, else nothing (a gauge on other water would mislead) */
+function nearestGauge(name, ll){
+  if(!gauges || !gauges.length) return null;
+  const base = String(name || "").toLowerCase().replace(/,.*$/, "").trim(); if(!base) return null;
+  let best = null, bd = 1e9;
+  for(const g of gauges){ if(!g[1].toLowerCase().startsWith(base)) continue; const d = Math.sqrt(d2([g[3], g[2]], [ll.lng, ll.lat])) * 69; if(d < bd){ bd = d; best = g; } }
+  return best && bd <= 40 ? { g:best, mi:bd } : null;
+}
+waterPopupExtras.push((div, info) => {
+  if(info.isLake) return;
+  const slot = document.createElement("div"); div.querySelector(".coords").before(slot);
+  loadGauges().then(async () => {
+    const hit = nearestGauge(info.name, info.ll); if(!hit) return;
+    await loadFlows(); const q = flowNow.q[hit.g[0]]; if(!q) return;
+    const paint = det => { const band = det ? flowBand(q[0], det.pct) : null, t = flowNow.t[hit.g[0]], f = t ? toF(t[0]) : null;
+      slot.innerHTML = `<div class="regs"><b>Flow</b><div><span>Now</span>${cfs(q[0])} cfs${band ? ` · ${band.t.toLowerCase()}` : ""}</div>${det && det.pts.length ? `<div><span>Trend</span>${esc(trendText(det.pts))}</div>` : ""}${f != null ? `<div><span>Water</span>${Math.round(f)}°F${f >= 68 ? " (warm for trout)" : ""}</div>` : ""}
+        <small>${esc(hit.g[1])}, ${hit.mi < 1 ? "right here" : Math.round(hit.mi) + " mi away"} · read ${readAgo(q[1])} · <button class="link" type="button" data-gauge="${esc(hit.g[0])}">7-day chart</button></small></div>`; map._popup && map._popup.update(); };
+    paint(gaugeDetail[hit.g[0]] || null); if(navigator.onLine) gaugeDetails(hit.g[0]).then(paint).catch(() => {});
+  });
+  const wx = document.createElement("div"); wx.className = "row"; wx.innerHTML = `<button class="link" type="button" data-a="wx">Forecast here</button>`; const wslot = document.createElement("div"); div.appendChild(wslot); div.appendChild(wx);
+  div.addEventListener("click", ev => {
+    if(ev.target.closest('[data-a="wx"]')){ wx.hidden = true; showForecast(wslot, info.ll.lat, info.ll.lng); }
+    const gb = ev.target.closest("[data-gauge]"); if(gb){ const g = gauges.find(x => x[0] === gb.dataset.gauge); if(g) L.popup({ maxWidth:300, minWidth:240 }).setLatLng([g[2], g[3]]).setContent(gaugePopup(g)).openOn(map); }
+  });
+});
+
+/* forecast: National Weather Service, for the exact point */
+async function forecastAt(lat, lng){
+  const key = lat.toFixed(2) + "," + lng.toFixed(2), c = wxCache[key]; if(c && Date.now() - c.at < 30 * 60000) return c.periods;
+  const pt = await (await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`, { headers:{ Accept:"application/geo+json" } })).json();
+  const fc = await (await fetch(pt.properties.forecast, { headers:{ Accept:"application/geo+json" } })).json();
+  const periods = (fc.properties.periods || []).slice(0, 4).map(p => ({ name:p.name, temp:p.temperature, unit:p.temperatureUnit, wind:`${p.windSpeed || ""} ${p.windDirection || ""}`.trim(), text:p.shortForecast, rain:p.probabilityOfPrecipitation && p.probabilityOfPrecipitation.value }));
+  wxCache[key] = { at:Date.now(), periods }; return periods;
+}
+async function showForecast(slot, lat, lng){
+  if(!navigator.onLine){ slot.innerHTML = `<p class="muted">The forecast needs a signal.</p>`; return; }
+  slot.innerHTML = `<p class="status">Getting the forecast…</p>`; map._popup && map._popup.update();
+  try{
+    const ps = await forecastAt(lat, lng); if(!ps.length) throw new Error("empty");
+    slot.innerHTML = `<div class="regs wx"><b>Forecast here</b>${ps.map(p => `<div><span>${esc(p.name)}</span>${p.temp != null ? `${p.temp}°${esc(p.unit || "F")} · ` : ""}${esc(p.text || "")}${p.rain ? ` · ${p.rain}% rain` : ""}${p.wind ? ` · wind ${esc(p.wind)}` : ""}</div>`).join("")}<small>National Weather Service</small></div>`;
+  }catch(e){ slot.innerHTML = `<p class="muted">Couldn't get the forecast just now.</p>`; }
+  map._popup && map._popup.update();
 }
 
 

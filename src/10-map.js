@@ -137,6 +137,7 @@ function nearestReg(name, ll, cid){
     for(const pa of r[7]) for(const q of pa){ const d = d2(p, q) * (same ? .25 : 1); if(d < bd){ bd = d; best = r; } } }
   return bd < 0.0004 ? best : null; // within ~1–2 km
 }
+const waterPopupExtras = [];   // other files add sections to a water's card (lake facts, stocking, flow, weather)
 function waterPopup(name, kind, ll, trout, cid){
   const div = document.createElement("div"); div.className = "pop";
   const reg = trout ? nearestReg(name, ll, cid) : null;
@@ -152,6 +153,8 @@ function waterPopup(name, kind, ll, trout, cid){
     if(pw){ pendingPlanWater = { name, kind: waterType(name), lat:+ll.lat.toFixed(5), lng:+ll.lng.toFixed(5), county: countyAt(ll.lat, ll.lng) || detailFor || null, trout: trout ? TROUT[trout.c].label + " trout" : null };
       pw.hidden = true; div.insertAdjacentHTML("beforeend", planChooserHtml(pendingPlanWater)); map._popup && map._popup.update(); }
   });
+  const info = { name, kind, ll, trout, cid, isLake: /lake|pond|flowage|reservoir/i.test(kind) };
+  for(const add of waterPopupExtras){ try{ add(div, info); }catch(e){ console.warn("card section", e); } }
   return div;
 }
 /* hovering any piece of a creek lights up the whole creek */
