@@ -1,0 +1,75 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_id": "USGS-431053090042701",
+        "time": "2019-05-15T16:00:00+00:00",
+        "value": "11.7"
+      },
+      "id": "00239350-a084-4b3f-9585-ff956485f605",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_id": "USGS-04087142",
+        "time": "2024-06-20T19:17:00+00:00",
+        "value": "27.1"
+      },
+      "id": "005a7255-ef88-4dc2-882b-fe3a0be29c5d",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_id": "USGS-05429000",
+        "time": "2026-11-11T16:00:00+00:00",
+        "value": "11.4"
+      },
+      "id": "005eafc4-da8f-4c72-ba76-ce20544aec1e",
+      "geometry": null
+    }
+  ],
+  "numberReturned": 3,
+  "links": [
+    {
+      "rel": "next",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?cursor=MDA1ZWFmYzQtZGE4Zi00YzcyLWJhNzYtY2UyMDU0NGFlYzFl&state_name=Wisconsin&parameter_code=00010&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true&f=json",
+      "type": "application/geo+json",
+      "title": "Items (next)"
+    },
+    {
+      "type": "application/geo+json",
+      "rel": "self",
+      "title": "This document as GeoJSON",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00010&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "rel": "alternate",
+      "type": "application/ld+json",
+      "title": "This document as RDF (JSON-LD)",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=jsonld&state_name=Wisconsin&parameter_code=00010&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "type": "text/html",
+      "rel": "alternate",
+      "title": "This document as HTML",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=html&state_name=Wisconsin&parameter_code=00010&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "type": "text/csv; charset=utf-8",
+      "rel": "alternate",
+      "title": "This document as CSV",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=csv&state_name=Wisconsin&parameter_code=00010&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "type": "application/json",
+      "title": "Latest continuous",
+      "rel": "collection",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous"
+    }
+  ],
+  "timeStamp": "2026-11-11T16:34:23.426512Z"
+}
