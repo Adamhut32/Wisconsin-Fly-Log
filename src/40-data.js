@@ -28,37 +28,82 @@ const idb = (() => {
   return { put:(k,v) => tx("readwrite", s => s.put(v, k)), get:k => tx("readonly", s => s.get(k)), del:k => tx("readwrite", s => s.delete(k)) };
 })();
 
-/* ---------- photo display: short-lived signed links, fetched in batches ---------- */
-const photoCache = {}, pendingPhotoUrls = {};
-let photoWant = new Set(), photoTimer = null;
+/* ---------- photo display: signed links, fetched in batches and remembered on this device ----------
+   Photos are private, so each needs a signed link. A link used to be asked for only when a list or the map drew the photo;
+   anything opened before the link arrived (the edit form, the big photo viewer) showed a blank and never caught up.
+   Now: links are remembered for a day, every screen that shows a photo is filled in when its link arrives, a photo that fails
+   to load asks for a fresh link once, and the service worker keeps photos you've seen so they open instantly and offline. */
+const PH_TTL = 24 * 3600;   // seconds a signed link lasts
+const photoCache = {}, pendingPhotoUrls = {}, photoWaiters = {};
+let photoWant = new Set(), photoTimer = null, photoRetry = 0, photoSaveTimer = null;
+const photoKey = () => "fl.ph." + (me?.id || "anon");
+// out-of-date links are kept too: with no signal they still open any photo this device has saved
+function loadPhotoCache(){ const saved = lsGet(photoKey(), {}); for(const [p, v] of Object.entries(saved)) if(!photoCache[p] && v && v[0]) photoCache[p] = { url:v[0], exp:v[1] || 0 }; }
+function savePhotoCache(){ clearTimeout(photoSaveTimer); photoSaveTimer = setTimeout(() => { const out = {};
+  for(const [p, c] of Object.entries(photoCache).filter(([, c]) => c.url && !c.url.startsWith("blob:")).sort((x, y) => (y[1].at || y[1].exp) - (x[1].at || x[1].exp)).slice(0, 400)) out[p] = [c.url, c.exp];
+  lsSet(photoKey(), out); }, 400); }
 // extra photo paths of a catch (own catches store [{p,h}], friends' come as plain paths)
 const morePaths = c => (c && c.more_photos ? c.more_photos.map(x => typeof x === "string" ? x : x && x.p).filter(Boolean) : []);
+// an <img> that fills itself in when its link arrives, and asks for a new link if it fails to load
+const phImg = (path, attrs) => `<img ${attrs || ""} src="${photoSrc(path)}" data-ph="${esc(path)}">`;
 // one photo, or a swipeable pair
 function photoGallery(c, cls){
-  const urls = [c.photo_path, ...morePaths(c)].filter(Boolean).map(photoSrc).filter(Boolean);
+  const paths = [c.photo_path, ...morePaths(c)].filter(Boolean);
   const alt = esc(c.species || "Catch") + " photo";
-  if(!urls.length) return "";
-  if(urls.length === 1) return `<img ${cls ? `class="${cls}"` : ""} src="${urls[0]}" alt="${alt}" loading="lazy">`;
-  return `<div class="galw ${cls ? cls + "w" : ""}"><div class="gal ${cls || ""}">${urls.map((u, i) => `<img src="${u}" alt="${alt} ${i + 1} of ${urls.length}" loading="lazy">`).join("")}</div><span class="galn">${urls.length} photos · swipe</span></div>`;
+  if(!paths.length || !paths.some(photoSrc)) return "";
+  if(paths.length === 1) return phImg(paths[0], `${cls ? `class="${cls}"` : ""} alt="${alt}" loading="lazy"`);
+  return `<div class="galw ${cls ? cls + "w" : ""}"><div class="gal ${cls || ""}">${paths.map((p, i) => phImg(p, `alt="${alt} ${i + 1} of ${paths.length}" loading="lazy"`)).join("")}</div><span class="galn">${paths.length} photos · swipe</span></div>`;
 }
+function wantPhoto(path){ photoWant.add(path); clearTimeout(photoTimer); photoTimer = setTimeout(fetchPhotoUrls, 60); }
 function photoSrc(path){
   if(!path) return "";
   if(pendingPhotoUrls[path]) return pendingPhotoUrls[path];
-  const c = photoCache[path];
-  if(c && c.exp > Date.now()) return c.url;
-  if(!c || !c.failed){ photoWant.add(path); clearTimeout(photoTimer); photoTimer = setTimeout(fetchPhotoUrls, 60); }
-  return c ? c.url : "";
+  const c = photoCache[path], now = Date.now();
+  if(c && c.exp > now) return c.url;
+  if(!c || !c.failed || now - c.failed > 30000) wantPhoto(path);
+  return c && c.url ? c.url : "";   // an out-of-date link still opens a photo this device has saved
+}
+// a promise for a working link: for screens that open once and aren't redrawn (forms, the photo viewer)
+function photoUrl(path){
+  if(!path) return Promise.resolve("");
+  const u = photoSrc(path), c = photoCache[path];
+  if(pendingPhotoUrls[path] || (c && c.exp > Date.now())) return Promise.resolve(u);
+  return new Promise(res => (photoWaiters[path] ||= []).push(res));
+}
+function hydratePhotos(){
+  for(const el of document.querySelectorAll("img[data-ph]")){ const u = photoSrc(el.dataset.ph); if(u && el.getAttribute("src") !== u) el.src = u; }
 }
 async function fetchPhotoUrls(){
-  const paths = [...photoWant]; photoWant = new Set();
-  if(!paths.length || !navigator.onLine || !me) return;
+  clearTimeout(photoTimer);
+  const paths = [...photoWant].filter(p => !pendingPhotoUrls[p]);
+  if(!paths.length){ photoWant = new Set(); return; }
+  if(!navigator.onLine || !me) return;   // still wanted: asked again when the connection is back
+  photoWant = new Set();
   try{
-    const { data, error } = await sb.storage.from("photos").createSignedUrls(paths, 60*60*6);
-    if(error) throw error;
-    for(const d of data){ if(d.signedUrl) photoCache[d.path] = { url:d.signedUrl, exp:Date.now() + 5.5*3600*1000 }; else photoCache[d.path] = { url:"", exp:0, failed:true }; }
-    renderAll();
-  }catch(e){ console.warn("photo links", e); }
+    const now = Date.now();
+    for(let i = 0; i < paths.length; i += 100){
+      const { data, error } = await sb.storage.from("photos").createSignedUrls(paths.slice(i, i + 100), PH_TTL);
+      if(error) throw error;
+      for(const d of data || []){ if(!d.path) continue;
+        if(d.signedUrl) photoCache[d.path] = { url:d.signedUrl, exp:now + (PH_TTL - 1800) * 1000, at:now };
+        else photoCache[d.path] = { url:photoCache[d.path]?.url || "", exp:0, failed:now, at:photoCache[d.path]?.at }; }
+    }
+    photoRetry = 0;
+    for(const p of paths){ const w = photoWaiters[p]; if(w){ delete photoWaiters[p]; const u = photoCache[p]?.url || ""; w.forEach(f => f(u)); } }
+    savePhotoCache(); hydratePhotos(); renderAll();
+  }catch(e){
+    console.warn("photo links", e);
+    for(const p of paths) photoWant.add(p);
+    photoRetry = Math.min(60000, (photoRetry || 2000) * 2); photoTimer = setTimeout(fetchPhotoUrls, photoRetry);
+  }
 }
+window.addEventListener("online", () => { if(photoWant.size) fetchPhotoUrls(); });
+// a photo that fails to load (an expired link, a dropped connection) asks for a fresh link once
+document.addEventListener("error", e => {
+  const el = e.target; if(!el || el.tagName !== "IMG" || !el.dataset.ph || el.dataset.phRetry) return;
+  el.dataset.phRetry = "1"; const c = photoCache[el.dataset.ph]; if(c) c.exp = 0; wantPhoto(el.dataset.ph);
+}, true);
+function forgetPhotos(){ try{ localStorage.removeItem(photoKey()); }catch(e){} try{ return caches.delete("flylog-photos").catch(() => {}); }catch(e){} }
 
 /* ---------- offline outbox ---------- */
 let outbox = [];
@@ -171,6 +216,7 @@ async function removeRecord(kind, rec){
 
 /* ---------- loading everything for the signed-in angler ---------- */
 async function loadAll(){
+  loadPhotoCache();
   if(!me || !navigator.onLine) return;
   try{
     const [c, s, t, fc, fs, ft, fr, pr, fo, an, su] = await Promise.all([
@@ -202,9 +248,10 @@ async function loadAll(){
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
     if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    for(const c of catches){ photoSrc(c.photo_path); morePaths(c).forEach(photoSrc); }   // ask for every photo link in one go, so nothing waits later
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
-    if(applyGate()){ routeChannel(); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }

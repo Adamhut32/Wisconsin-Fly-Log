@@ -36,7 +36,7 @@ $("log").addEventListener("click", async ev => {
       if(error) throw error;
       try{ const reg = await navigator.serviceWorker?.ready; const sub = await reg?.pushManager?.getSubscription(); if(sub) await sub.unsubscribe(); }catch(e){}
       try{ for(const k of Object.keys(localStorage)) if(k.startsWith("fl.")) localStorage.removeItem(k); indexedDB.deleteDatabase("flylog"); }catch(e){}
-      await sb.auth.signOut().catch(() => {});
+      await forgetPhotos(); await sb.auth.signOut().catch(() => {});
       document.body.innerHTML = `<div style="max-width:420px;margin:20vh auto;padding:24px;font:16px/1.5 system-ui;text-align:center"><h2 style="font-family:Georgia,serif">Your account is deleted</h2><p>Everything you logged in Coulee has been removed. Thanks for fishing with us.</p><p><a href="./">Back to Coulee</a></p></div>`;
     }catch(e){
       a.disabled = false; msg.className = "hint bad";

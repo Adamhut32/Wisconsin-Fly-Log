@@ -2,10 +2,11 @@
 /* ---------- creeks for every county on screen once you zoom in, so water reads across county lines ---------- */
 pane("area", 429);               // above the fade outside an open county, below the open county itself
 const AREA_ZOOM = 9.5;
-const areaRenderer = L.canvas({ pane:"area", tolerance:6, padding:canvasPad() });
+const areaRenderer = L.canvas({ pane:"area", tolerance:TAP_TOL, padding:canvasPad() });
 const areaGroups = {};           // county id -> { g, streams, extra }
 const areaOn = new Set();        // counties drawn right now
 let areaWant = new Set(), countyBounds = null;
+restyleMore.push(fix => { for(const id of areaOn) if(areaGroups[id]) areaGroups[id].g.eachLayer(fix); });
 function areaStreams(){ const out = []; for(const id of areaOn) if(areaGroups[id]) out.push(...areaGroups[id].streams); return out; }
 function areaExtra(){ const out = []; for(const id of areaOn) if(areaGroups[id]) out.push(...areaGroups[id].extra); return out; }
 function buildArea(id, w, t){
@@ -22,7 +23,7 @@ function buildArea(id, w, t){
   }
   if(t) for(const [name, c, mi, orw, paths] of t.t){
     if(!TROUT[c]) continue;
-    const band = L.polyline(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }, id));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
     g.addLayer(band);
@@ -32,9 +33,9 @@ function buildArea(id, w, t){
     const paths = raw.filter(pa => pa.length > 1 && (pa[0][0] !== pa[pa.length-1][0] || pa[0][1] !== pa[pa.length-1][1] || pa.length > 2));
     if(!paths.length) continue;
     const ll = llPaths(paths), wgt = streamWeight(order);
-    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
+    g.addLayer(sizedLine(ll, { renderer:R, interactive:false, color:css("--land"), opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt + 2.4));
     const unnamed = !name || name === "NA" || name === "Unnamed";
-    const line = L.polyline(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const line = sizedLine(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt);
     if(unnamed){ g.addLayer(line); continue; }
     const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
     line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null, id));
@@ -58,6 +59,8 @@ async function updateArea(){
     }
     areaWant = want;
     for(const id of [...areaOn]) if(!want.has(id)){ map.removeLayer(areaGroups[id].g); areaOn.delete(id); }
+    // an empty creek canvas still covers the whole map and would swallow every tap meant for a county: let taps fall through it
+    map.getPane("area").style.pointerEvents = areaOn.size ? "" : "none";
     await Promise.all([...want].map(async id => {
       if(areaOn.has(id)) return;
       if(!areaGroups[id]){
@@ -71,6 +74,8 @@ async function updateArea(){
     // keep a handful of built counties for quick panning back, drop the rest
     const built = Object.keys(areaGroups).filter(id => !areaOn.has(id));
     for(const id of built.slice(0, Math.max(0, built.length - 10))) delete areaGroups[id];
+    map.getPane("area").style.pointerEvents = areaOn.size ? "" : "none";
+    restyleLines();   // counties kept from an earlier zoom get this zoom's line widths
     const any = areaOn.size > 0 || !!detailFor;
     if(any && map.hasLayer(riverLayer)) map.removeLayer(riverLayer);
     if(!any && !map.hasLayer(riverLayer)) map.addLayer(riverLayer);

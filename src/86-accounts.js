@@ -26,7 +26,7 @@ function applyGate(){
   return s === "ok";
 }
 $("gateCheck").onclick = async () => { $("gateCheck").disabled = true; await loadAll(); $("gateCheck").disabled = false; if(accountState() === "pending") toast("Still waiting for approval."); };
-$("gateOut").onclick = $("termsOut").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+$("gateOut").onclick = $("termsOut").onclick = async () => { await forgetPhotos(); await sb.auth.signOut(); location.reload(); };
 $("termsOk").onclick = async () => {
   const msg = $("termsMsg"); msg.className = "hint bad";
   const upd = { terms_version:TERMS_VERSION, terms_at:new Date().toISOString() };

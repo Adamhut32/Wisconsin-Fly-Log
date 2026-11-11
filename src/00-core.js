@@ -33,7 +33,7 @@ let showAccess = lsGet("fl.showAccess", true);
 let canWrite = true;
 let currentCounty = null;
 let mapPerson = null;
-let waterTapAt = 0, countyOpenZoom = null; // last creek/lake tap time; zoom a county was opened at
+let waterTapAt = 0, featureTaps = 0, countyOpenZoom = null; // last creek/lake tap time; zoom a county was opened at
 let hidePins = false; // "My pins off": hide every spot, catch and fish count, e.g. to show someone the map // when set, the map shows that friend's shared catches and spots instead of yours
 let loadState = "loading";     // loading | ready | offline
 let tab = "map";               // map | trips | tourney | friends | stats | me
@@ -65,17 +65,26 @@ const fishOf = c => (c.count ?? 1);
 const lenTxt = v => v == null || v === "" ? "" : `${+v}″`;
 
 /* ---------- derived numbers ---------- */
-function countyStats(id){
-  let s=0,f=0;
-  if(hidePins) return { spots:0, fish:0 };
-  if(mapPerson){ // looking at a friend's map: count what they share
-    for(const x of friendSpots) if(x.user_id===mapPerson && x.county===id) s++;
-    for(const c of friendCatches) if(c.user_id===mapPerson && c.county===id) f+=fishOf(c);
-    return { spots:s, fish:f };
+// One pass over your spots and catches gives every county's numbers. The result is kept only for the current burst of work
+// (restyling all 72 counties asks for each county's numbers, and the busiest county's, 72 times over).
+let countyMemo = null;
+function countyTally(){
+  if(countyMemo) return countyMemo;
+  const by = {}, at = id => (by[id] ||= { spots:0, fish:0 });
+  if(!hidePins){
+    if(mapPerson){ // looking at a friend's map: count what they share
+      for(const x of friendSpots) if(x.user_id === mapPerson && x.county) at(x.county).spots++;
+      for(const c of friendCatches) if(c.user_id === mapPerson && c.county) at(c.county).fish += fishOf(c);
+    } else {
+      for(const x of spots) if(x.county) at(x.county).spots++;
+      for(const c of catches) if(c.county) at(c.county).fish += fishOf(c);
+    }
   }
-  for(const x of spots) if(x.county===id) s++; for(const c of catches) if(c.county===id) f+=fishOf(c);
-  return { spots:s, fish:f };
+  let max = 1; for(const id in by) if(byId[id] && by[id].fish > max) max = by[id].fish;
+  countyMemo = { by, max }; queueMicrotask(() => { countyMemo = null; });
+  return countyMemo;
 }
+function countyStats(id){ const o = countyTally().by[id]; return o ? { spots:o.spots, fish:o.fish } : { spots:0, fish:0 }; }
 function totals(){
   const ids = new Set([...spots.map(s=>s.county), ...catches.map(c=>c.county)].filter(Boolean));
   return { spots:spots.length, fish:catches.reduce((a,c)=>a+fishOf(c),0), counties:ids.size };

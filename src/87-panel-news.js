@@ -1,36 +1,87 @@
 
-/* ---------- collapsible panel: drag the handle down for a full-screen map ---------- */
-const mainEl = document.querySelector(".main");
-let panelCollapsed = lsGet("fl.collapsed", false);
+/* ---------- the log panel ----------
+   Computer: a side panel you can hide. Phone: a sheet with three stops: closed (map only), half, and full screen.
+   Closed <-> half resizes the map so it stays centered. Half <-> full slides the sheet over the map without resizing it
+   (the map keeps drawing at its half size underneath), so the pull is smooth and follows your finger. */
+const mainEl = document.querySelector(".main"), logEl = document.querySelector("aside.log"), mapWrapEl = document.querySelector(".mapwrap");
+const isPhone = () => window.matchMedia("(max-width:760px)").matches;
+let panelCollapsed = isPhone() ? true : lsGet("fl.collapsed", false);   // a phone always opens on the map alone
+let panelFull = false;
+const mapH = () => mapWrapEl.offsetHeight;
+function panelLabel(){
+  $("grabLabel").textContent = panelFull ? "Pull down for the map" : "Pull up for your log";
+  $("grab").setAttribute("aria-expanded", String(!panelCollapsed));
+  $("grab").setAttribute("aria-label", panelFull ? "Shrink the panel to show the map" : panelCollapsed ? "Show the panel" : "Hide the panel");
+}
 function setCollapsed(v, save = true){
+  if(v && panelFull) setFull(false, true);
   panelCollapsed = v;
   mainEl.classList.toggle("collapsed", v);
-  $("grab").setAttribute("aria-expanded", String(!v));
-  $("panelShow").hidden = !v || window.matchMedia("(max-width:760px)").matches;
-  if(save) lsSet("fl.collapsed", v);
+  $("panelShow").hidden = !v || isPhone();
+  if(save && !isPhone()) lsSet("fl.collapsed", v);
+  panelLabel();
   setTimeout(() => { map.invalidateSize(); drawLabels(); }, 280);
 }
 function expandPanel(){ if(panelCollapsed) setCollapsed(false); }
+let liftDone = null;
+function setFull(v, instant){
+  if(v && (!isPhone() || panelCollapsed)) return;
+  panelFull = v; mainEl.classList.toggle("full", v); panelLabel();
+  if(liftDone){ logEl.removeEventListener("transitionend", liftDone); liftDone = null; }
+  if(v){
+    if(!mainEl.classList.contains("lift")){ logEl.style.transition = "none"; logEl.style.transform = `translateY(${mapH()}px)`; mainEl.classList.add("lift"); void logEl.offsetHeight; }
+    logEl.style.transition = instant ? "none" : ""; logEl.style.transform = "translateY(0)";
+    return;
+  }
+  if(!mainEl.classList.contains("lift")) return;
+  const done = liftDone = e => { if(e && e.target !== logEl) return; logEl.removeEventListener("transitionend", done); if(liftDone === done) liftDone = null;
+    mainEl.classList.remove("lift"); logEl.style.transform = ""; logEl.style.transition = ""; };
+  if(instant) return done();
+  logEl.style.transition = ""; logEl.style.transform = `translateY(${mapH()}px)`;
+  logEl.addEventListener("transitionend", done); setTimeout(() => { if(liftDone === done) done(); }, 400);
+}
+// anything that needs the map (jump to a pin, open a county, pick a place) brings a full-screen panel back down first
+for(const fn of ["flyTo", "fitBounds", "flyToBounds"]){ const orig = map[fn].bind(map); map[fn] = (...a) => { if(panelFull) setFull(false); return orig(...a); }; }
 (() => {
-  let y0 = null, x0 = 0, moved = false, startEl = null;
+  let y0 = null, x0 = 0, t0 = 0, moved = false, startEl = null, lifting = false, base = 0;
   // keep following the finger once it leaves the handle; on the tab bar only after a clear vertical pull, so taps still pick tabs
-  const down = e => { y0 = e.clientY; x0 = e.clientX; moved = false; startEl = e.currentTarget; if(startEl === $("grab")) try{ startEl.setPointerCapture(e.pointerId); }catch(_){} };
+  const down = e => { y0 = e.clientY; x0 = e.clientX; t0 = performance.now(); moved = false; lifting = false; startEl = e.currentTarget; if(startEl === $("grab")) try{ startEl.setPointerCapture(e.pointerId); }catch(_){} };
   const move = e => { if(y0 == null) return; const dy = e.clientY - y0, dx = e.clientX - x0;
-    if(!moved && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)){ moved = true; try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){} } };
+    if(!moved && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)){ moved = true; try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+      if(isPhone() && !panelCollapsed && (panelFull || dy < 0)){   // between half and full the sheet rides the finger
+        lifting = true; base = panelFull ? 0 : mapH(); logEl.style.transition = "none";
+        if(!mainEl.classList.contains("lift")){ logEl.style.transform = `translateY(${base}px)`; mainEl.classList.add("lift"); } } }
+    if(lifting) logEl.style.transform = `translateY(${Math.max(0, Math.min(mapH(), base + dy))}px)`;
+  };
   const up = e => {
     if(y0 == null) return;
-    const dy = e.clientY - y0, dx = e.clientX - x0; const fromGrab = startEl === $("grab"); y0 = null;
-    if(moved && Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)){ setCollapsed(dy > 0); return; }
-    if(!moved && fromGrab) setCollapsed(!panelCollapsed);
+    const dy = e.clientY - y0, dx = e.clientX - x0, fromGrab = startEl === $("grab"), fast = Math.abs(dy) / Math.max(1, performance.now() - t0) > .45; y0 = null;
+    if(lifting){ lifting = false;
+      if(panelFull) setFull(!(dy > 70 || (fast && dy > 24)));
+      else setFull(dy < -70 || (fast && dy < -24));
+      return; }
+    if(moved && Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)){
+      const wasClosed = panelCollapsed; setCollapsed(dy > 0);
+      if(wasClosed && dy < -innerHeight * .45) setTimeout(() => setFull(true), 60);   // one long pull from closed goes all the way up
+      return; }
+    if(!moved && fromGrab){ if(panelFull) setFull(false); else setCollapsed(!panelCollapsed); }
   };
+  const cancel = () => { if(lifting){ lifting = false; setFull(panelFull); } y0 = null; };
   for(const el of [$("grab"), document.querySelector(".tabs")]){
     el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", () => { y0 = null; });
+    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", cancel);
   }
+})();
+// with the panel closed the tabs' red dots are hidden, so the handle carries one whenever any tab has news
+(() => {
+  const dots = ["reqDot", "tDot", "meDot"].map($).filter(Boolean);
+  const sync = () => $("grab").classList.toggle("has-news", dots.some(d => !d.hidden));
+  const mo = new MutationObserver(sync); for(const d of dots) mo.observe(d, { attributes:true, attributeFilter:["hidden"] });
+  sync();
 })();
 $("panelHide").onclick = () => setCollapsed(true);
 $("panelShow").onclick = () => setCollapsed(false);
-window.matchMedia("(max-width:760px)").addEventListener?.("change", () => setCollapsed(panelCollapsed, false));
+window.matchMedia("(max-width:760px)").addEventListener?.("change", () => { if(panelFull) setFull(false, true); setCollapsed(panelCollapsed, false); });
 setCollapsed(panelCollapsed, false);
 
 /* ---------- what's new after an update ---------- */

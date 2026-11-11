@@ -60,8 +60,8 @@ function flagQueueHtml(){
     ${groups.length ? `<div class="stack">${groups.map(fs => { const f = fs[0], open = fs.some(x => x.status === "open");
       return `<div class="card flag${open ? "" : " done"}">
         <p class="muted" style="font-size:12.5px;margin:0">${esc(f.display_name)} · ${esc(f.species || "Fish")}${f.length_in ? ` · ${lenTxt(f.length_in)}` : ""} · ${esc(fmtDate(f.caught_on))} · ${esc(countyName(f.county))}${f.tournaments?.length ? ` · <b>In ${esc(f.tournaments.join(", "))}</b>` : ""}</p>
-        <div class="flagpics">${f.photo_path ? `<figure><img src="${photoSrc(f.photo_path)}" alt="Flagged photo" loading="lazy"><figcaption>This catch</figcaption></figure>` : ""}
-          ${f.other_photo ? `<figure><img src="${photoSrc(f.other_photo)}" alt="Matching photo" loading="lazy"><figcaption>Match: ${esc(f.other_name || "")}</figcaption></figure>` : ""}</div>
+        <div class="flagpics">${f.photo_path ? `<figure>${phImg(f.photo_path, 'alt="Flagged photo" loading="lazy"')}<figcaption>This catch</figcaption></figure>` : ""}
+          ${f.other_photo ? `<figure>${phImg(f.other_photo, 'alt="Matching photo" loading="lazy"')}<figcaption>Match: ${esc(f.other_name || "")}</figcaption></figure>` : ""}</div>
         <ul class="flagwhy">${fs.map(x => `<li><b>${esc(FLAG_LABEL[x.kind] || x.kind)}</b> ${esc(x.detail || "")}${x.status !== "open" ? ` <span class="pill ${x.status === "upheld" ? "priv" : "fished"}">${x.status === "upheld" ? "Hidden" : "Cleared"}</span>` : ""}</li>`).join("")}</ul>
         ${open ? `<div class="row2"><button class="btn sm" type="button" data-flagok="${esc(f.id)}">Looks fine</button><button class="btn sm" type="button" data-flaghide="${esc(f.id)}">Hide this catch…</button></div><div data-flagslot="${esc(f.id)}"></div>` : ""}</div>`; }).join("")}</div>`
       : `<p class="muted">Nothing to review. Every photo checks out.</p>`}`;

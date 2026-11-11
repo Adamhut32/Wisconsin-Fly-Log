@@ -12,8 +12,34 @@ function renderBadges(){
   }
 }
 const markerIndex = {};
+/* Catch pins that would sit on top of each other are gathered into one numbered pin until you zoom in far enough to tell them
+   apart. Tapping a numbered pin zooms in on its catches. */
+const CLUSTER_BELOW = 13.5, CLUSTER_PX = 34;
+let ownFish = [], friendFish = [], clusterPins = [];
+function groupPins(list, z){
+  const out = [];
+  for(const it of list){ const p = map.project(it.m.getLatLng(), z); let g = null;
+    for(const o of out) if(Math.abs(o.x - p.x) < CLUSTER_PX && Math.abs(o.y - p.y) < CLUSTER_PX){ g = o; break; }
+    if(g){ g.items.push(it); const n = g.items.length; g.x += (p.x - g.x) / n; g.y += (p.y - g.y) / n; } else out.push({ x:p.x, y:p.y, items:[it] }); }
+  return out.map(o => o.items);
+}
+function layoutPins(){
+  for(const c of clusterPins) c._home.removeLayer(c); clusterPins = [];
+  const z = map.getZoom();
+  for(const [list, home, cls] of [[ownFish, markerLayer, ""], [friendFish, friendLayer, " friend"]]){
+    for(const g of (z >= CLUSTER_BELOW ? list.map(x => [x]) : groupPins(list, z))){
+      if(g.length === 1){ if(!home.hasLayer(g[0].m)) home.addLayer(g[0].m); continue; }
+      for(const x of g) if(home.hasLayer(x.m)) home.removeLayer(x.m);
+      const b = L.latLngBounds(g.map(x => x.m.getLatLng()));
+      const cm = L.marker(b.getCenter(), { icon:L.divIcon({ className:"", html:`<div class="mk-cluster${cls}">${icon("i-fish")}<b>${g.length}</b></div>`, iconSize:[0,0] }), zIndexOffset:600, riseOnHover:true, title:`${g.length} catches here. Tap to zoom in.` });
+      cm.on("click", () => map.flyToBounds(b.pad(.6), { maxZoom:15, duration:.5 }));
+      cm._home = home; home.addLayer(cm); clusterPins.push(cm);
+    }
+  }
+}
+map.on("zoomend", layoutPins);
 function renderMarkers(){
-  markerLayer.clearLayers(); friendLayer.clearLayers();
+  markerLayer.clearLayers(); friendLayer.clearLayers(); ownFish = []; friendFish = []; clusterPins = [];
   if(hidePins){ $("legend").classList.remove("friends-on"); return; }
   for(const s of (mapPerson ? [] : spots)){
     const m = L.marker([s.lat,s.lng], { icon:L.divIcon({ className:"", html:`<div class="mk-spot ${esc(s.status)}"></div>`, iconSize:[0,0] }), riseOnHover:true, title:s.name||"Spot" });
@@ -27,7 +53,7 @@ function renderMarkers(){
     const html = `<div class="mk-fish" ${bg}>${url?"":icon("i-fish")}${fishOf(c)>1?`<span class="n">${fishOf(c)}</span>`:""}</div>`;
     const m = L.marker([c.lat,c.lng], { icon:L.divIcon({ className:"", html, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:500, title:c.species||"Catch" });
     m.bindPopup(() => catchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
-    markerLayer.addLayer(m); markerIndex["c:"+c.id] = m;
+    ownFish.push({ m }); markerIndex["c:"+c.id] = m;
   }
   outingMarkers();
   for(const c of friendCatches){
@@ -37,7 +63,7 @@ function renderMarkers(){
     const html = `<div class="mk-fish friend${url ? " ph" : ""}" ${url ? `style="background-image:url('${url}')"` : ""}>${url ? "" : icon("i-fish")}${fishOf(c)>1?`<span class="n">${fishOf(c)}</span>`:""}${mapPerson ? "" : `<span class="mk-name">${esc(first)}</span>`}</div>`;
     const m = L.marker([c.lat,c.lng], { icon:L.divIcon({ className:"", html, iconSize:[0,0] }), riseOnHover:true, zIndexOffset:300, title:`${c.display_name}: ${c.species||"Catch"}` });
     m.bindPopup(() => friendCatchPopup(c), { maxWidth:320, autoPanPadding:[20,20] });
-    friendLayer.addLayer(m); markerIndex["f:"+c.id] = m;
+    friendFish.push({ m }); markerIndex["f:"+c.id] = m;
   }
   for(const s of friendSpots){
     if(s.lat == null || (mapPerson ? s.user_id !== mapPerson : !showFriends)) continue;
@@ -45,6 +71,7 @@ function renderMarkers(){
     m.bindPopup(() => friendSpotPopup(s), { maxWidth:300, autoPanPadding:[20,20] });
     friendLayer.addLayer(m); markerIndex["fs:"+s.id] = m;
   }
+  layoutPins();
   $("legend").classList.toggle("friends-on", !!mapPerson || (showFriends && (friendCatches.some(c => c.lat != null) || friendSpots.some(s => s.lat != null))));
 }
 function updateZoomLayers(){
@@ -210,7 +237,7 @@ function focusMarker(key){
   const m = markerIndex[key]; if(!m) return;
   const ll = m.getLatLng();
   if(key.startsWith("f:") && !showFriends){ showFriends = true; lsSet("fl.showFriends", true); }
-  map.flyTo(ll, Math.max(map.getZoom(), 12), { duration:.6 });
+  map.flyTo(ll, Math.max(map.getZoom(), 14), { duration:.6 });   // close enough that the pin stands on its own, not inside a numbered group
   map.once("moveend", () => { updateZoomLayers(); m.openPopup(); });
 }
 let renderQueued = false;

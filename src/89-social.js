@@ -44,30 +44,70 @@ const PUSH_CATS = [["catches","Friends' catches"],["friends","Friend requests"],
 let pushStateV = null;
 const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+/* One notification sign-up per device. The live app and the test copy each have their own service worker, and each could hold
+   its own sign-up: two sign-ups on one phone meant every notification arrived twice. So the sign-up always lives with the live
+   app's worker (whichever version is open), and any sign-up found on another worker is removed. */
+const deviceId = () => { let d = lsGet("fl.device", null); if(!d){ d = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2)); lsSet("fl.device", d); } return d; };
+const swActive = reg => reg.active ? Promise.resolve(reg) : new Promise((res, rej) => { const w = reg.installing || reg.waiting; if(!w) return rej(new Error("no worker"));
+  w.addEventListener("statechange", () => { if(w.state === "activated") res(reg); else if(w.state === "redundant") rej(new Error("redundant")); }); });
+async function pushReg(){
+  if(CHANNEL !== "beta") return navigator.serviceWorker.ready;
+  const root = new URL("../", location.href).href;
+  const reg = await navigator.serviceWorker.getRegistration(root);
+  return reg && reg.scope === root ? swActive(reg) : swActive(await navigator.serviceWorker.register("../sw.js", { scope:"../" }));
+}
+async function allPushSubs(){   // every sign-up this device holds, across the live app and the test copy
+  const out = [];
+  for(const reg of await navigator.serviceWorker.getRegistrations()){ try{ const sub = await reg.pushManager.getSubscription(); if(sub) out.push({ reg, sub }); }catch(e){} }
+  return out;
+}
+async function savePushSub(sub){
+  const j = sub.toJSON(), dev = deviceId();
+  await sb.from("push_subscriptions").delete().eq("endpoint", j.endpoint);
+  await sb.from("push_subscriptions").delete().eq("user_id", me.id).eq("device_id", dev);
+  const { error } = await sb.from("push_subscriptions").insert({ user_id:me.id, endpoint:j.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth, ua:navigator.userAgent.slice(0, 120), device_id:dev });
+  if(error) throw error;
+}
+async function dropPushSub(sub){ try{ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); }catch(e){} try{ await sub.unsubscribe(); }catch(e){} }
+let pushTidied = false;
+async function tidyPush(){
+  if(pushTidied || !pushSupported() || !me || !navigator.onLine || Notification.permission !== "granted") return;
+  pushTidied = true;
+  try{
+    const main = await pushReg(), subs = await allPushSubs();
+    let keep = subs.find(x => x.reg.scope === main.scope)?.sub || null;
+    const extra = subs.filter(x => x.reg.scope !== main.scope);
+    if(!keep && extra.length){   // signed up only on the other copy: move it here if the phone allows it without a tap, else leave that one alone
+      try{ keep = await main.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64u(CFG.vapidPublic) }); }catch(e){ keep = null; }
+    }
+    if(!keep) return;
+    for(const x of extra) await dropPushSub(x.sub);
+    const { data } = await sb.from("push_subscriptions").select("id, device_id").eq("endpoint", keep.endpoint).maybeSingle();
+    if(!data || data.device_id !== deviceId()) await savePushSub(keep);
+  }catch(e){ console.warn("push tidy", e); pushTidied = false; }
+  refreshPushState();
+}
 async function refreshPushState(){
   let s;
   if(!pushSupported()) s = isIOS && !isStandalone ? "ios-install" : "unsupported";
   else if(Notification.permission === "denied") s = "denied";
-  else { try{ const reg = await navigator.serviceWorker.ready; s = (await reg.pushManager.getSubscription()) ? "on" : "off"; }catch(e){ s = "off"; } }
+  else { try{ s = (await allPushSubs()).length ? "on" : "off"; }catch(e){ s = "off"; } }
   if(s !== pushStateV){ pushStateV = s; if(tab === "me" && meView === "main") renderLog(); }
 }
 async function enablePush(){
   try{
     const perm = await Notification.requestPermission();
     if(perm !== "granted"){ toast(perm === "denied" ? "Notifications are blocked. Turn them on in Settings → Notifications → Coulee." : "Notifications weren't turned on."); return refreshPushState(); }
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await pushReg();
     const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64u(CFG.vapidPublic) });
-    const j = sub.toJSON();
-    await sb.from("push_subscriptions").delete().eq("endpoint", j.endpoint);
-    const { error } = await sb.from("push_subscriptions").insert({ user_id:me.id, endpoint:j.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth, ua:navigator.userAgent.slice(0, 120) });
-    if(error) throw error;
+    for(const x of await allPushSubs()) if(x.sub.endpoint !== sub.endpoint) await dropPushSub(x.sub);
+    await savePushSub(sub);
     toast("Notifications are on. Sending a test…"); sb.rpc("push_test");
   }catch(e){ console.error(e); toast("Couldn't turn on notifications. Try again."); }
   refreshPushState();
 }
 async function disablePush(){
-  try{ const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
-    if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); } }catch(e){}
+  try{ for(const x of await allPushSubs()) await dropPushSub(x.sub); }catch(e){}
   toast("Notifications are off on this device."); refreshPushState();
 }
 function notifyCardHtml(){

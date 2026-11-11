@@ -129,7 +129,7 @@ function inboxHtml(){
   if(!gifts.length && !other.length) return "";
   return `${gifts.map(g => { const c = g.catch || {};
       return `<div class="card gift"><div class="acct-h">${avHtml(g.from_user, giftFrom(g))}<span class="t"><b class="wrap">${esc(giftFrom(g))} logged a fish for you</b><small>${esc([c.species || "Fish", c.length_in ? lenTxt(c.length_in) : "", c.caught_on ? fmtDate(c.caught_on) : "", c.county ? countyName(c.county) : "", METHODS[c.method] || ""].filter(Boolean).join(" · "))}</small></span></div>
-        ${g.photo_path ? `<img class="gph" src="${photoSrc(g.photo_path) || ""}" data-giftphoto="${esc(g.photo_path)}" alt="Photo of the fish">` : ""}
+        ${g.photo_path ? phImg(g.photo_path, `class="gph" data-giftphoto="${esc(g.photo_path)}" alt="Photo of the fish"`) : ""}
         <div class="row2"><button class="btn sm ink" type="button" data-giftyes="${esc(g.id)}">Add to my log</button><button class="btn sm" type="button" data-giftno="${esc(g.id)}">Not mine</button></div></div>`; }).join("")}
     ${other.slice(0, 5).map(n => `<div class="card notice slim"><p><b>${esc(n.title)}</b></p>${n.body ? `<p class="muted">${esc(n.body)}</p>` : ""}<button class="link" type="button" data-noticex="${esc(n.id)}">Dismiss</button></div>`).join("")}`;
 }

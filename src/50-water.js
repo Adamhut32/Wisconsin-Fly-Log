@@ -80,7 +80,7 @@ async function loadAccess(id){
   const col = css("--pub");
   for(const [kind, name, extra, rings] of rows){
     const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:col, weight: kind === "trout" || kind === "dnre" ? 1.4 : .8, dashArray: kind === "dnre" || kind === "trout" ? "4 3" : null, fillColor:col, fillOpacity: kind === "usfs" || kind === "cf" ? .12 : .26 });
-    p.on("click", e => { if(picking){ handlePick(e.latlng); return; } L.popup({ maxWidth:280 }).setLatLng(e.latlng).setContent(accessPopup(kind, name, extra)).openOn(map); });
+    p.on("click", e => { if(picking){ handlePick(e.latlng); return; } waterTapAt = Date.now(); featureTaps++; L.popup({ maxWidth:280 }).setLatLng(e.latlng).setContent(accessPopup(kind, name, extra)).openOn(map); });
     g.addLayer(p);
   }
   g.addTo(map);

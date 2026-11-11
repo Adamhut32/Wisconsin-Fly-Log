@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Build Coulee.
 
-  python3 build.py              join src/*.js into js/app.js (the live app everyone uses)
   python3 build.py --beta N [--note "text"]
                                 build test version N into beta/ (founder and admins get it first)
   python3 build.py --promote    copy the approved test version in beta/ over the live app
 
 The live app sits at the site root; the test copy sits in beta/ and shares the root's
 data/, vendor/ and icons/ folders. Promoting reverses exactly the path changes --beta makes.
+
+Everything the app is made of is edited in src/: the scripts in src/*.js, and the page, styles,
+service worker and terms in src/static/. The copies at the site root (index.html, css/app.css,
+sw.js, terms.html, js/app.js) are what everyone is running; they change only when a test
+version is released, so never edit them by hand.
 If data-next/water/hd/ exists (from the monthly DNR refresh), the test copy reads detailed creek
 lines from there, and promoting moves them over data/water/hd/ and bumps hdVersion.
 """
@@ -15,6 +19,7 @@ import json, pathlib, re, shutil, sys
 
 root = pathlib.Path(__file__).parent
 beta = root / "beta"
+static = root / "src" / "static"
 
 def joined():
     parts = sorted((root / "src").glob("*.js"))
@@ -59,16 +64,16 @@ def build_beta(n, note=None):
     js, _ = joined()
     (beta / "js").mkdir(parents=True, exist_ok=True); (beta / "css").mkdir(exist_ok=True)
     (beta / "js" / "app.js").write_text(js)
-    shutil.copy(root / "css" / "app.css", beta / "css" / "app.css")
-    shutil.copy(root / "terms.html", beta / "terms.html")
+    shutil.copy(static / "app.css", beta / "css" / "app.css")
+    shutil.copy(static / "terms.html", beta / "terms.html")
     cfg = (root / "js" / "config.js").read_text()
     cfg = re.sub(r"build: \d+", f"build: {n}", cfg)
     cfg += BETA_MARK + 'window.FLYLOG_CONFIG.channel = "beta";\nwindow.FLYLOG_CONFIG.dataBase = "../data/";\n'
     if NEXT_HD.exists():  # try the refreshed DNR creek lines before everyone gets them
         cfg += 'window.FLYLOG_CONFIG.hdBase = "../data-next/water/hd/";\nwindow.FLYLOG_CONFIG.hdVersion = "next";\n'
     (beta / "js" / "config.js").write_text(cfg)
-    (beta / "index.html").write_text(to_beta((root / "index.html").read_text()))
-    sw = (root / "sw.js").read_text()
+    (beta / "index.html").write_text(to_beta((static / "index.html").read_text()))
+    sw = (static / "sw.js").read_text()
     sw = re.sub(r'const VERSION = "flylog-v\d+";', f'const VERSION = "flylog-beta-v{n}";', sw)
     (beta / "sw.js").write_text(to_beta(sw))
     man = json.loads((root / "manifest.webmanifest").read_text())
@@ -108,4 +113,5 @@ if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:1] == ["--beta"]: build_beta(int(a[1]), a[3] if a[2:3] == ["--note"] else None)
     elif a[:1] == ["--promote"]: promote()
-    else: build_live()
+    elif a[:1] == ["--live-unreleased"]: build_live()   # writes the live app directly, skipping the test version: emergencies only
+    else: sys.exit(__doc__)

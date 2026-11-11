@@ -1,6 +1,6 @@
 // Offline support: the app itself is fetched fresh when online (falling back to the
 // saved copy offline); map data is kept once loaded, so opened counties work offline.
-const VERSION = "flylog-beta-v25";
+const VERSION = "flylog-beta-v26";
 const SHELL = ["./", "index.html", "css/app.css", "js/config.js", "js/app.js", "../vendor/leaflet.js", "../vendor/leaflet.css", "../vendor/supabase.js",
   "manifest.webmanifest", "../icons/icon-192.png", "../icons/apple-touch-icon.png"];
 self.addEventListener("install", e => {
@@ -21,6 +21,12 @@ self.addEventListener("fetch", e => {
     }));
     return;
   }
+  // catch and trip photos: keep each one after its first load, so it opens instantly and with no signal.
+  // A photo's address never changes; only the short-lived key on the end does, so the saved copy is found by address alone.
+  if(url.hostname.endsWith(".supabase.co") && url.pathname.includes("/storage/v1/object/sign/photos/")){
+    e.respondWith(photo(req, url));
+    return;
+  }
   // the app itself: network first, saved copy when offline
   if(url.origin === location.origin){
     e.respondWith(fetch(req).then(res => {
@@ -29,6 +35,19 @@ self.addEventListener("fetch", e => {
     }).catch(async () => (await caches.match(req, { ignoreSearch:true })) || (req.mode === "navigate" ? caches.match("index.html") : Response.error())));
   }
 });
+
+const PHOTO_CACHE = "flylog-photos", PHOTO_KEEP = 150;
+async function photo(req, url){
+  const key = url.origin + url.pathname;
+  let c = null;
+  try{ c = await caches.open(PHOTO_CACHE); const hit = await c.match(key); if(hit) return hit; }catch(_){}
+  let res;
+  try{ res = await fetch(req.url, { mode:"cors", credentials:"omit" }); }catch(_){ return fetch(req); }
+  if(res.ok && c){
+    c.put(key, res.clone()).then(async () => { const keys = await c.keys(); for(const k of keys.slice(0, Math.max(0, keys.length - PHOTO_KEEP))) await c.delete(k); }).catch(() => {});
+  }
+  return res;
+}
 
 // push notifications: show them, and open the right screen when tapped
 self.addEventListener("push", e => {

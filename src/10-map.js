@@ -8,6 +8,8 @@ const pane = (n, z, pe) => { map.createPane(n); const p = map.getPane(n); p.styl
 pane("base", 380, false); pane("water", 420, false); pane("stateline", 425, false); pane("mask", 428, false); pane("detail", 430);
 pane("nearby", 426, false);
 let detailRenderer = null, nearbyRenderer = null, nearbyLayer = null;
+// how close a tap has to be to a creek to count: a fingertip is wider than a mouse pointer
+const TAP_TOL = matchMedia("(pointer:coarse)").matches ? 13 : 6;
 
 /* graticule — every half degree, like a printed field map */
 const gratLayer = L.layerGroup([]).addTo(map);
@@ -32,7 +34,7 @@ let countyLayer;
 const curView = () => { try{ return mapView; }catch(e){ return "field"; } };
 function countyStyle(f){
   const s = countyStats(f.id);
-  const max = Math.max(1, ...counties.map(c => countyStats(c.id).fish));
+  const max = countyTally().max;
   // full strength statewide, fading out as you zoom in (and softer over satellite/topo) so it never sits on top of the water
   const z = map.getZoom(), fade = z < 7.5 ? 1 : Math.max(.12, 1 - (z - 7.5) * .45);
   const heat = (s.fish ? 0.2 + 0.45 * (s.fish / max) : (s.spots ? 0.14 : 0)) * fade * (curView() !== "field" ? .55 : 1);
@@ -93,6 +95,19 @@ function smoothPath(pts, n = 2){
 // rounding only shows up close in; skip it when zoomed out so drawing stays quick
 const llPaths = paths => { const sm = map.getZoom() >= 12; return paths.map(pa => { const ll = pa.map(q => [q[1], q[0]]); return sm ? smoothPath(ll) : ll; }); };
 function streamWeight(o){ return o >= 6 ? 3 : o >= 5 ? 2.5 : o >= 4 ? 2 : o >= 3 ? 1.6 : o >= 2 ? 1.25 : 0.95; }
+/* Line widths follow the zoom, like a printed map drawn at different scales: fine lines when a whole county is on screen
+   (so creeks don't clot into blobs), full weight up close. Each line remembers its full-size width (_bw). */
+const lineScale = z => z < 9.25 ? .5 : z < 10.25 ? .62 : z < 11.25 ? .8 : z < 12.5 ? 1 : z < 14 ? 1.12 : 1.28;
+const sizedLine = (ll, o, bw) => { const k = lineScale(map.getZoom()), l = L.polyline(ll, { ...o, weight:bw * k }); l._bw = bw; l._bk = k; return l; };
+function restyleLines(onZoom){
+  // on a zoom the layers are about to be redrawn anyway, so only the widths are changed here (no second redraw)
+  const k = lineScale(map.getZoom()), fix = l => { if(l._bw && l._bk !== k){ l._bk = k; if(onZoom === true) l.options.weight = l._bw * k; else l.setStyle({ weight:l._bw * k }); } };
+  if(detailLayer) detailLayer.eachLayer(fix);
+  if(nearbyLayer) nearbyLayer.eachLayer(fix);
+  for(const more of restyleMore) more(fix);
+}
+const restyleMore = [];   // other files add their own line layers here
+map.on("zoomend", () => restyleLines(true));
 const TROUT = { 1:{ label:"Class I", tok:"--t1" }, 2:{ label:"Class II", tok:"--t2" }, 3:{ label:"Class III", tok:"--t3" } };
 async function getJSON(cache, path, id){
   if(cache[id]) return cache[id];
@@ -128,14 +143,14 @@ function waterPopup(name, kind, ll, trout, cid){
 let hoverName = null;
 function setHover(name){
   if(hoverName === name) return; hoverName = name;
-  for(const s of [...detailStreams, ...areaStreams()]){ const on = name && s.name === name; s.line.setStyle(on ? { color:css("--hl"), weight:s.w + 2.2 } : { color:css("--stream"), weight:s.w }); }
+  for(const s of [...detailStreams, ...areaStreams()]){ const on = name && s.name === name; const k = lineScale(map.getZoom()); s.line._bk = k; s.line.setStyle(on ? { color:css("--hl"), weight:(s.w + 2.2) * k } : { color:css("--stream"), weight:s.w * k }); }
   drawLabels();
 }
 function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
   const el = waterPopup(name, kind, e.latlng, trout, cid), here = countyAt(e.latlng.lat, e.latlng.lng);
   if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="link" type="button" data-opencounty="${esc(here)}">Open ${esc(countyName(here))}</button>`; el.appendChild(r); }
-  waterTapAt = Date.now();
+  waterTapAt = Date.now(); featureTaps++;
   L.popup({ maxWidth:300 }).setLatLng(e.latlng).setContent(el).openOn(map);
   if(here && here !== currentCounty) outlineCounty(here);
 }
@@ -161,7 +176,7 @@ function drawDetail(id, w, t){
   if(detailLayer){ map.removeLayer(detailLayer); detailLayer = null; }
   if(detailRenderer){ map.removeLayer(detailRenderer); detailRenderer = null; }
   const g = L.layerGroup(); detailStreams = []; detailLakes = []; detailLabelsExtra = [];
-  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:6, padding:canvasPad() });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
+  const R = detailRenderer = L.canvas({ pane:"detail", tolerance:TAP_TOL, padding:canvasPad() });  // draw well past the screen edge so panning doesn't show blank strips // a fresh canvas per county
   for(const [name, typ, rings] of w.l){
     const p = L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, color:css("--stream"), weight:.7, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" });
     if(name && name !== "Unnamed"){ p.on("click", e => openWaterPopup(e, name, waterType(name))); detailLakes.push({ name, poly:p }); }
@@ -175,7 +190,7 @@ function drawDetail(id, w, t){
   /* trout class bands sit under the creek line, like a highlighter on a paper map */
   if(t) for(const [name, c, mi, orw, paths] of t.t){
     if(!TROUT[c]) continue;
-    const band = L.polyline(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), weight:6, opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const band = sizedLine(llPaths(paths), { renderer:R, color:css(TROUT[c].tok), opacity:.38, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, 6);
     band.on("click", e => openWaterPopup(e, name, waterType(name), { c, mi }));
     band.on("mouseover", () => setHover(name)); band.on("mouseout", () => setHover(null));
     g.addLayer(band);
@@ -186,9 +201,9 @@ function drawDetail(id, w, t){
     if(!paths.length) continue;
     const ll = llPaths(paths);
     const wgt = streamWeight(order);
-    g.addLayer(L.polyline(ll, { renderer:R, interactive:false, color:css("--land"), weight:wgt + 2.4, opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }));
+    g.addLayer(sizedLine(ll, { renderer:R, interactive:false, color:css("--land"), opacity:.85, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt + 2.4));
     const unnamed = !name || name === "NA" || name === "Unnamed";
-    const line = L.polyline(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), weight:wgt, opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 });
+    const line = sizedLine(ll, { renderer:R, interactive:!unnamed, color:css("--stream"), opacity:1, lineCap:"round", lineJoin:"round", smoothFactor:.5 }, wgt);
     if(unnamed){ g.addLayer(line); continue; }   // unnamed creeks: drawn, but no label or card
     const tseg = t && t.t.find(x => x[0] && x[0].toLowerCase() === name.toLowerCase());
     line.on("click", e => openWaterPopup(e, name, waterType(name), tseg ? { c:tseg[1], mi:null } : null));
@@ -200,6 +215,7 @@ function drawDetail(id, w, t){
     for(const [name, c, mi, orw, paths] of t.t){ if(!name || have.has(name.toLowerCase())) continue;
       detailLabelsExtra.push({ name, order:2, ll: paths.map(pa=>pa.map(q=>[q[1],q[0]])) }); } }
   detailLayer = g.addTo(map);
+  restyleLines();
 }
 /* creeks in the surrounding counties, drawn under the fade so they read as context */
 async function loadNearby(id){
@@ -213,8 +229,8 @@ async function loadNearby(id){
     try{ [w, t] = await Promise.all([ getJSON(waterCache, dataUrl("water/" + k + ".json"), k), getJSON(troutCache, dataUrl("water/trout/" + k + ".json"), k).catch(()=>null) ]); }catch(e){ return; }
     if(detailFor !== id || nearbyLayer !== layer) return;
     for(const [name, typ, rings] of w.l) layer.addLayer(L.polygon(rings.map(r=>r.map(q=>[q[1],q[0]])), { renderer:R, interactive:false, color:css("--stream"), weight:.5, fillColor:css("--lake"), fillOpacity:1, fillRule:"nonzero" }));
-    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), weight:5, opacity:.3, lineJoin:"round" }));
-    for(const [name, order, paths] of w.s) if(!((!name || name === "NA" || name === "Unnamed") && order >= 4)) layer.addLayer(L.polyline(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), weight:streamWeight(order), lineJoin:"round" }));
+    if(t) for(const [name, c, mi, orw, paths] of t.t) if(TROUT[c]) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css(TROUT[c].tok), opacity:.3, lineJoin:"round" }, 5));
+    for(const [name, order, paths] of w.s) if(!((!name || name === "NA" || name === "Unnamed") && order >= 4)) layer.addLayer(sizedLine(llPaths(paths), { renderer:R, interactive:false, color:css("--stream"), lineJoin:"round" }, streamWeight(order)));
   }));
 }
 function clearDetail(){
@@ -243,19 +259,39 @@ map.on("zoomstart", () => { labelCanvas.style.visibility = "hidden"; });
 map.on("zoomend", () => { labelCanvas.style.visibility = ""; drawLabels(); });
 let labelQueued = false;
 function drawLabels(){ if(labelQueued) return; labelQueued = true; requestAnimationFrame(() => { labelQueued = false; renderLabels(); }); }
-// while the map is moving, refresh names at most ~8 times a second (every frame was the main cause of zoom lag)
-let labelMoveAt = 0, labelMoveTimer = null;
-map.on("move zoom", () => {
-  const now = performance.now();
-  if(now - labelMoveAt > 120){ labelMoveAt = now; drawLabels(); }
-  clearTimeout(labelMoveTimer); labelMoveTimer = setTimeout(drawLabels, 130);
+// The names are drawn a little past every edge of the screen and ride along with the map while it's dragged, so nothing is
+// redrawn mid-drag (redrawing them several times a second was the main cause of choppy panning). They're redrawn when the
+// map comes to rest, or mid-drag only once it has travelled far enough to run out of pre-drawn names.
+const LABEL_PAD = .22;
+let labelDrawnAt = null;
+map.on("move", () => {
+  if(!labelDrawnAt) return;
+  const o = map.getPixelBounds().min, el = map.getContainer();
+  if(Math.abs(o.x - labelDrawnAt.x) > el.clientWidth * LABEL_PAD * .7 || Math.abs(o.y - labelDrawnAt.y) > el.clientHeight * LABEL_PAD * .7) drawLabels();
 });
 map.on("resize viewreset moveend", drawLabels);
+// every creek point's place on the flat map, worked out once per line; turning that into a screen position is then one multiply
+const mercCache = new WeakMap();
+function merc(line){
+  let m = mercCache.get(line);
+  if(!m){ const n = line.length, a = new Float64Array(n * 2); let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+    for(let i = 0; i < n; i++){ const sn = Math.sin(line[i][0] * Math.PI / 180), x = (line[i][1] + 180) / 360, y = .5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI);
+      a[2*i] = x; a[2*i+1] = y; if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; }
+    m = { a, x0, x1, y0, y1 }; mercCache.set(line, m); }
+  return m;
+}
 function renderLabels(){
-  const el = map.getContainer(), W = el.clientWidth, H = el.clientHeight, dpr = window.devicePixelRatio || 1;
+  const el = map.getContainer(), vw = el.clientWidth, vh = el.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+  if(!vw || !vh) return;
+  // the drawing area reaches past the screen by padX/padY on every side; W and H below are that whole area
+  const padX = Math.round(vw * LABEL_PAD), padY = Math.round(vh * LABEL_PAD), W = vw + 2 * padX, H = vh + 2 * padY;
   if(labelCanvas.width !== W*dpr || labelCanvas.height !== H*dpr){ labelCanvas.width = W*dpr; labelCanvas.height = H*dpr; labelCanvas.style.width = W+"px"; labelCanvas.style.height = H+"px"; }
-  L.DomUtil.setPosition(labelCanvas, map.containerPointToLayerPoint([0,0]));
+  L.DomUtil.setPosition(labelCanvas, map.containerPointToLayerPoint([-padX, -padY]));
   const ctx = labelCanvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+  const org = map.getPixelBounds().min, scale = 256 * Math.pow(2, map.getZoom()), ox = org.x - padX, oy = org.y - padY;   // drawing-area pixel = flat-map position * scale - (ox, oy)
+  labelDrawnAt = { x:org.x, y:org.y };
+  const onScreen = p => p.x > padX + 2 && p.x < padX + vw - 2 && p.y > padY + 2 && p.y < padY + vh - 2;
+  const toArea = ll => { const p = map.latLngToContainerPoint(ll); return { x:p.x + padX, y:p.y + padY }; };
   const z = map.getZoom(), placed = [];
   const hits = (b) => placed.some(p => b.x < p.x+p.w && b.x+b.w > p.x && b.y < p.y+p.h && b.y+b.h > p.y);
   const halo = css("--land"), ink = css("--label");
@@ -280,12 +316,14 @@ function renderLabels(){
     // longest on-screen stretch of this water
     let best = null, bestLen = 0;
     for(const line of it.lines){
-      let run = [], len = 0;
+      const m = merc(line), a = m.a;
+      if(m.x1 * scale - ox < 4 || m.x0 * scale - ox > W - 4 || m.y1 * scale - oy < 4 || m.y0 * scale - oy > H - 4) continue;   // this piece is nowhere near the screen
+      let run = [], len = 0, lx = 0, ly = 0;
       const flush = () => { if(len > bestLen){ bestLen = len; best = run; } run = []; len = 0; };
-      for(const ll of line){ const p = map.latLngToContainerPoint(ll);
-        if(p.x < 4 || p.y < 4 || p.x > W-4 || p.y > H-4){ flush(); continue; }
-        if(run.length) len += Math.hypot(p.x-run[run.length-1].x, p.y-run[run.length-1].y);
-        run.push(p); }
+      for(let i = 0, n = a.length; i < n; i += 2){ const x = a[i] * scale - ox, y = a[i+1] * scale - oy;
+        if(x < 4 || y < 4 || x > W-4 || y > H-4){ flush(); continue; }
+        if(run.length){ const d = Math.hypot(x - lx, y - ly); if(d < 1.5) continue; len += d; }   // points closer than a pixel and a half add nothing
+        run.push({ x, y }); lx = x; ly = y; }
       flush();
     }
     if(!best || bestLen < tw + 16) continue;
@@ -305,7 +343,7 @@ function renderLabels(){
     for(let d0 = 0; d0 + tw <= L; d0 += 5){
       const a = at(d0), b = at(d0 + tw), chord = Math.hypot(b.x-a.x, b.y-a.y), straight = chord / tw;
       let turn = 0, prev = tan(d0); for(let d = d0 + 6; d <= d0 + tw; d += 6){ const t2 = tan(d); turn = Math.max(turn, Math.abs(Math.atan2(Math.sin(t2-prev), Math.cos(t2-prev)))); prev = t2; }
-      const score = straight - turn*0.15 - Math.abs((d0 + tw/2) - L/2) / L * 0.15;
+      const score = straight - turn*0.15 - Math.abs((d0 + tw/2) - L/2) / L * 0.15 + (onScreen(a) && onScreen(b) ? .6 : 0);   // a name you can see beats one waiting past the edge
       if(!pick || score > pick.score) pick = { d0, a, b, straight, turn, score };
     }
     if(!pick) continue;
@@ -345,7 +383,7 @@ function renderLabels(){
   if(detailFor){
     ctx.font = `italic 500 12px "Crimson Pro", Georgia, serif`; ctx.textAlign = "center";
     for(const l of detailLakes){
-      const b = l.poly.getBounds(); const a = map.latLngToContainerPoint(b.getNorthWest()), c = map.latLngToContainerPoint(b.getSouthEast());
+      const b = l.poly.getBounds(); const a = toArea(b.getNorthWest()), c = toArea(b.getSouthEast());
       const w = c.x - a.x, h = c.y - a.y; const tw = ctx.measureText(l.name).width;
       if(w < Math.min(tw*0.8, 90) || h < 12 || c.x < 0 || a.x > W || c.y < 0 || a.y > H) continue;
       const x = (a.x + c.x)/2, y = (a.y + c.y)/2;

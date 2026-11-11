@@ -38,9 +38,10 @@ function parseTiff(v, start){
 
 /* ---------- catch / spot form ---------- */
 let photoDate = null, photoExif = null, ph2File = null, ph2Url = null, ph2Removed = false;
-function setPh2(url, title){
+let formOpenSeq = 0;
+function setPh2(url, title, has){
   $("ph2Pv").style.backgroundImage = url ? `url('${url}')` : ""; $("ph2Pv").textContent = url ? "" : "+";
-  $("ph2Title").textContent = title; $("ph2Del").hidden = !url;
+  $("ph2Title").textContent = title; $("ph2Del").hidden = !(url || has);
 }
 $("fPhoto2").addEventListener("change", () => {
   const f = $("fPhoto2").files[0]; if(!f) return;
@@ -173,11 +174,14 @@ function openForm(kind, rec, prefill){
   $("fMore").open = !!($("fTrip").value || $("fSpotLink").value); renderSpeciesChips();
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
-  const url = photoSrc(r.photo_path);
+  const url = photoSrc(r.photo_path), openedFor = ++formOpenSeq;
   ph2File = null; ph2Removed = false; $("fPhoto2").value = "";
-  const p2 = morePaths(rec)[0]; setPh2(p2 ? photoSrc(p2) : null, p2 ? "Second photo saved · tap to replace" : "Add a second photo");
+  const p2 = morePaths(rec)[0]; setPh2(p2 ? photoSrc(p2) : null, p2 ? "Second photo saved · tap to replace" : "Add a second photo", !!p2);
   if(r.photo_path) setPhotoPreview(url, "Photo saved", "Choose another to replace it");
   else setPhotoPreview(null, "Add a photo", "Location and date fill in from the photo when it has them");
+  // the saved photos' links may still be on their way: show them as soon as they arrive (unless a new photo was picked meanwhile)
+  if(r.photo_path && !url) photoUrl(r.photo_path).then(u => { if(u && openedFor === formOpenSeq && !photoFile && !$("scrim").hidden) $("photoPv").style.backgroundImage = `url('${u}')`, $("photoPv").innerHTML = ""; });
+  if(p2 && !photoSrc(p2)) photoUrl(p2).then(u => { if(u && openedFor === formOpenSeq && !ph2File && !ph2Removed && !$("scrim").hidden) setPh2(u, "Second photo saved · tap to replace", true); });
   coordHint();
   $("scrim").hidden = false;
 }
@@ -191,6 +195,7 @@ document.addEventListener("keydown", e => { if(e.key === "Escape"){ if(picking) 
 /* pick on map */
 $("pickBtn").onclick = () => {
   picking = true; $("scrim").hidden = true; $("pickbar").hidden = false; $("fab").hidden = true;
+  if(panelFull) setFull(false);   // the map has to be showing to tap a place on it
   map.getContainer().style.cursor = "crosshair";
 };
 function endPick(){ picking = false; $("pickbar").hidden = true; $("fab").hidden = false; map.getContainer().style.cursor = ""; $("scrim").hidden = false; }
@@ -202,9 +207,38 @@ function handlePick(ll){
   setTimeout(() => { if(pickMarker){ map.removeLayer(pickMarker); pickMarker = null; } }, 2500);
   endPick(); coordHint();
 }
+/* The map is a stack of drawing layers: the open county's creeks sit over the surrounding counties' creeks, which sit over public land.
+   Only the top one hears a tap, so a tap it has no use for is handed down the stack, and finally to the county itself. */
+let passingTap = false;
+function passTapDown(e){
+  const ev = e.originalEvent; if(!ev) return false;
+  const before = featureTaps;
+  passingTap = true;
+  try{
+    for(const R of [detailRenderer, areaRenderer, accessRenderer]){
+      if(!R || !R._container || !map.hasLayer(R) || R._container === ev.target) continue;   // the layer that got the tap has had its say
+      R._onClick(ev);
+      if(featureTaps !== before) return true;
+    }
+  } finally { passingTap = false; }
+  return false;
+}
 map.on("click", e => {
+  if(passingTap) return;
   if(picking){ handlePick(e.latlng); return; }
+  if(Date.now() - waterTapAt < 400) return;   // a creek, lake or public land took this tap
+  if(passTapDown(e)) return;
   tapCounty(e.latlng);
+});
+/* computer: hovering a creek in a neighboring county lights it up, even under the open county's layer */
+let hoverPassAt = 0;
+map.getContainer().addEventListener("mousemove", ev => {
+  if(ev.buttons || ev.timeStamp - hoverPassAt < 40) return;   // not while dragging, and only ~25 times a second
+  hoverPassAt = ev.timeStamp;
+  if(!detailRenderer || !areaRenderer._container || !map.hasLayer(areaRenderer) || ev.target !== detailRenderer._container) return;
+  if(detailRenderer._hoveredLayer){ if(areaRenderer._hoveredLayer) areaRenderer._handleMouseOut(ev); }
+  else areaRenderer._onMouseMove(ev);
+  ev.target.style.cursor = !detailRenderer._hoveredLayer && areaRenderer._hoveredLayer ? "pointer" : "";
 });
 
 /* shrink photos before upload; re-encoding also drops the photo's hidden GPS data */

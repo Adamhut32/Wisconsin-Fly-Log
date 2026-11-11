@@ -208,7 +208,7 @@ $("log").addEventListener("change", async e => {
 $("log").addEventListener("click", e => {
   const b = e.target.closest("[data-pview]"); if(!b) return;
   const v = document.createElement("div"); v.className = "pview"; v.setAttribute("role", "dialog");
-  v.innerHTML = `<img src="${photoSrc(b.dataset.pview)}" alt=""><div class="pcap">${esc(b.dataset.cap || "")}${b.dataset.mine ? ` <button class="link danger" type="button" data-pdel="${esc(b.dataset.mine)}">Delete my photo</button>` : ""}</div>`;
+  v.innerHTML = `${phImg(b.dataset.pview, 'alt=""')}<div class="pcap">${esc(b.dataset.cap || "")}${b.dataset.mine ? ` <button class="link danger" type="button" data-pdel="${esc(b.dataset.mine)}">Delete my photo</button>` : ""}</div>`;
   v.addEventListener("click", async ev => {
     const d = ev.target.closest("[data-pdel]");
     if(d){ if(!confirmTap(d, "Tap again to delete")) return; const tid = tripOpen; const { error } = await sb.from("trip_photos").delete().eq("id", d.dataset.pdel);

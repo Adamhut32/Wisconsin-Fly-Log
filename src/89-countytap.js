@@ -9,10 +9,9 @@ function outlineCounty(id){
   outlineLayer = L.geoJSON(byId[id], { pane:"outline", interactive:false, style:{ color:css("--hl"), weight:3, opacity:.95, fill:true, fillColor:css("--hl"), fillOpacity:.06 } }).addTo(map);
 }
 function tapCounty(latlng){
-  if(Date.now() - waterTapAt < 400) return;            // the tap landed on a creek or lake: its card already has "Open county"
   const id = countyAt(latlng.lat, latlng.lng);
   if(!id || id === currentCounty) return;
-  if(!currentCounty && map.getZoom() < AREA_ZOOM) return; // statewide: the county polygon's own tap opens it
+  if(!currentCounty && map.getZoom() < AREA_ZOOM){ openCounty(id); return; }   // statewide: a tap opens the county (the county shape's own tap usually got here first)
   outlineCounty(id);
   const s = countyStats(id);
   L.popup({ maxWidth:240, className:"cpop" }).setLatLng(latlng).setContent(`<div class="pop"><h3>${esc(countyName(id))}</h3>
@@ -39,7 +38,7 @@ L.Popup.mergeOptions({ autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBot
 (() => {
   const lg = $("legend"); if(!lg) return;
   const b = document.createElement("button"); b.type = "button"; b.className = "lgkey"; lg.prepend(b);
-  const small = () => window.innerWidth < 700;
+  const small = () => window.innerWidth < 700 || window.innerHeight < 520;   // phones, upright or on their side
   let open = lsGet("fl.legendOpen", !small());
   const sync = () => { lg.classList.toggle("folded", !open); b.textContent = open ? "Hide key" : "Map key"; b.setAttribute("aria-expanded", String(open)); };
   b.onclick = () => { open = !open; lsSet("fl.legendOpen", open); sync(); };

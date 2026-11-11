@@ -388,7 +388,7 @@ $("log").addEventListener("click", async ev => {
   if(a.dataset.a === "signout"){
     if(outbox.length){ toast("Some entries haven't synced yet. Get back online first so nothing is lost."); return; }
     try{ const reg = await navigator.serviceWorker?.ready; const sub = await reg?.pushManager?.getSubscription(); if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); } }catch(e){}
-    await sb.auth.signOut(); location.reload();
+    await forgetPhotos(); await sb.auth.signOut(); location.reload();
   }
   if(a.dataset.a === "export"){
     const blob = new Blob([JSON.stringify({ exported_at:new Date().toISOString(), profile, trips, spots, catches }, null, 2)], { type:"application/json" });

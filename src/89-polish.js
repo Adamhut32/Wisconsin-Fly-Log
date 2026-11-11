@@ -44,3 +44,12 @@ function updateFlow(){
 document.addEventListener("mapsettled", updateFlow);
 document.addEventListener("mapview", updateFlow);
 document.addEventListener("areachange", updateFlow);
+
+/* ---------- keeping the map smooth ---------- */
+// The soft shadow under the state outline only shows when you can see the whole state. Zoomed in it is off screen,
+// but the browser still re-blurs the whole (now enormous) shape on every zoom: so it's switched off up close.
+function syncStateShadow(){ const on = map.getZoom() < 8.5; stateFill.eachLayer(l => { if(l._path) l._path.classList.toggle("state-shadow", on); }); }
+map.on("zoomend", syncStateShadow); syncStateShadow();
+// the drifting-water animation rests while the map is being dragged or zoomed, so the two aren't fighting for the same frames
+map.on("movestart zoomstart", () => map.getContainer().classList.add("moving"));
+map.on("moveend zoomend", () => map.getContainer().classList.remove("moving"));

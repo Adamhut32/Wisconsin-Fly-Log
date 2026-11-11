@@ -10,7 +10,9 @@ Open it on your phone, sign in, and use **Share → Add to Home Screen** to inst
 
 ## How it's built
 - Static site served by GitHub Pages; no build server.
-- `src/*.js` is joined into `js/app.js` by `python3 build.py`. Edit `src/`, then rebuild.
+- Everything is edited in `src/`: the scripts in `src/*.js`, and the page, styles, service worker and terms in `src/static/`.
+  `python3 build.py --beta N` builds test version N into `beta/`. The files at the site root (`index.html`, `css/app.css`,
+  `sw.js`, `js/app.js`) are the live app; they change only when a test version is released, so never edit them by hand.
 - Accounts, catches, trips and photos live in Supabase (row-level security keeps each
   angler's data private unless they share it with friends).
 - `data/` holds Wisconsin DNR hydrography, trout and public-land data, split by county. `data/water/hd/` has the detailed DNR 24K creek lines (within ~3 m) that load when zoomed in to level 12+.
