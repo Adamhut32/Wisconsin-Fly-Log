@@ -31,7 +31,7 @@ const PREF_TARGETS = [["trout","Trout"],["bass","Bass"],["walleye","Walleye"],["
 const PREF_WATERS = [["streams","Creeks & rivers"],["lakes","Lakes"],["both","Both"]];
 const TARGET_SPECIES = { trout:["Brook trout","Brown trout","Rainbow trout","Tiger trout"], bass:["Smallmouth bass","Largemouth bass"], walleye:["Walleye","Sauger"],
   pike:["Northern pike","Musky"], panfish:["Bluegill","Crappie","Yellow perch","Pumpkinseed","Rock bass"], salmon:["Chinook salmon","Coho salmon","Steelhead","Lake trout"], catfish:["Channel catfish","Flathead catfish","Bullhead"] };
-const TARGET_BADGES = { trout:["brookie","brown","rainbow","twenty","slam"], bass:["bass"], walleye:["walleye"], pike:["pike","musky"], panfish:["panfish"], salmon:["rainbow"], catfish:[] };
+const TARGET_BADGES = { trout:["brookie","brown","rainbow","twenty","slam","brookie25","brown25","rainbow25","steelhead","waters5"], bass:["bass","bass25"], walleye:["walleye","walleye25"], pike:["pike","musky","pike25"], panfish:["panfish","panfish50"], salmon:["rainbow","steelhead"], catfish:[] };
 const fprefs = () => profile?.fishing_prefs || {};
 const prefWantsWeight = () => { const t = fprefs().targets || []; return t.some(x => x !== "trout") && !t.includes("trout") || fprefs().method === "spin" || fprefs().method === "ice"; };
 function applyPrefs(){
