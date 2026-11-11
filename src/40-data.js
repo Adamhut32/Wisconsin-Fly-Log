@@ -11,7 +11,7 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","photo_time","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
   spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"],
   outings: ["id","trip_id","fished_on","hours","water","lat","lng","county","notes","on_map"]

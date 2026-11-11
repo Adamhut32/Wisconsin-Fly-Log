@@ -195,7 +195,7 @@ function tourneyToolsHtml(t){
   if(isOwner) h += `<button class="btn sm" type="button" data-a="tedit">Edit details</button>`;
   else if(joined) h += `<button class="btn sm" type="button" data-a="tsuggest">Suggest a change</button>`;
   return (h ? `<div class="row2" style="margin-top:10px">${h}</div>` : "") + `<div data-tedit></div>`
-    + (over ? `<p class="note">${isOwner ? "This tournament is over. You can still fix the details or remove entries; members are told about every change." : "This tournament is over, so entries are locked. Only its creator can change it, and you'll be told if they do."}</p>` : "");
+    + (over ? `<p class="note">${isOwner ? "This tournament is over. You can still fix the name and description or remove entries; members are told about every change." : "This tournament is over, so entries are locked. Only its creator can change it, and you'll be told if they do."}</p>` : "");
 }
 $("log").addEventListener("click", async e => {
   const a = e.target.closest("[data-a]"); const t = tournaments.find(x => x.id === tourneyOpen);
@@ -213,6 +213,8 @@ $("log").addEventListener("click", async e => {
       <div class="field"><label for="teName">Name</label><input id="teName" maxlength="80" value="${esc(t.name)}"></div>
       <div class="field"><label for="teDesc">Description</label><textarea id="teDesc" maxlength="1000">${esc(t.description || "")}</textarea></div>
       <div class="grid2"><div class="field"><label for="teStart">Starts</label><input id="teStart" type="date" value="${esc(t.starts_on)}"></div><div class="field"><label for="teEnd">Ends</label><input id="teEnd" type="date" value="${esc(t.ends_on)}"></div></div>
+      ${"submit_hours" in t ? `<div class="grid2"><div class="field"><label for="teStartTime">Start time</label><input id="teStartTime" type="time" value="${esc((t.start_time || "").slice(0, 5))}"></div><div class="field"><label for="teEndTime">End time</label><input id="teEndTime" type="time" value="${esc((t.end_time || "").slice(0, 5))}"></div></div>
+      <div class="field"><label for="teSubmit">Fish can be sent in for</label><select id="teSubmit">${[[0,"Until the fishing ends"],[1,"1 hour after it ends"],[2,"2 hours after"],[6,"6 hours after"],[12,"12 hours after"],[24,"24 hours after"],[48,"2 days after"],[72,"3 days after"]].map(([v, l]) => `<option value="${v}" ${+t.submit_hours === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>` : ""}
       <p class="muted" style="font-size:13px">Members get a notice describing what you changed.</p>
       <span class="hint" id="teErr" role="alert"></span>
       <div class="actions"><button class="btn" type="button" data-a="teditno">Cancel</button><button class="btn ink" type="submit">Save changes</button></div></form>`;
@@ -221,8 +223,12 @@ $("log").addEventListener("click", async e => {
       const name = $("teName").value.trim(), s = $("teStart").value, en = $("teEnd").value;
       if(name.length < 2){ err.textContent = "Give it a name."; return; }
       if(!s || !en || en < s){ err.textContent = "Check the dates."; return; }
-      const { error } = await sb.from("tournaments").update({ name, description:$("teDesc").value.trim() || null, starts_on:s, ends_on:en }).eq("id", t.id);
-      if(error){ err.textContent = "Couldn't save. Try again."; return; }
+      const upd = { name, description:$("teDesc").value.trim() || null, starts_on:s, ends_on:en };
+      if($("teSubmit")){ const st = $("teStartTime").value || null, et = $("teEndTime").value || null;
+        if(s === en && st && et && et <= st){ err.textContent = "The end time has to be after the start time."; return; }
+        Object.assign(upd, { start_time:st, end_time:et, submit_hours:+$("teSubmit").value }); }
+      const { error } = await sb.from("tournaments").update(upd).eq("id", t.id);
+      if(error){ err.textContent = /locked/.test(error.message || "") ? "This tournament is finished, so its dates and rules are locked. You can still change the name and description." : "Couldn't save. Try again."; return; }
       toast("Saved. Members were told what changed."); await loadTournaments(); openTourney(t.id);
     });
   }

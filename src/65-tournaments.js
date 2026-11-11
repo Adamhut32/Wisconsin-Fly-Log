@@ -16,12 +16,27 @@ const SCORING = {
 let tourneyOpen = null, tourneyBoard = {}, tourneyPeople = {};
 async function loadTournaments(){
   if(!me || !navigator.onLine) return;
-  const { data, error } = await sb.rpc("my_tournaments");
+  let { data, error } = await sb.rpc("my_tournaments_v2");
+  if(error) ({ data, error } = await sb.rpc("my_tournaments"));   // older database: dates only
   if(!error){ tournaments = data || []; saveCache(); if(tab === "tourney") renderLog(); }
 }
-function tState(t){ const d = todayStr(); return d < t.starts_on ? "upcoming" : d > t.ends_on ? "finished" : "live"; }
+/* upcoming -> live (fishing) -> wrapup (fishing over, fish can still be sent in) -> finished (locked) */
+function tState(t){
+  if(t.starts_at && t.closes_at){ const now = Date.now(); return now < Date.parse(t.starts_at) ? "upcoming" : now <= Date.parse(t.fish_ends_at) ? "live" : now <= Date.parse(t.closes_at) ? "wrapup" : "finished"; }
+  const d = todayStr(); return d < t.starts_on ? "upcoming" : d > t.ends_on ? "finished" : "live";
+}
+const T_STATE = { upcoming:"Upcoming", live:"Happening now", wrapup:"Fishing's over · send in your fish", finished:"Finished" };
+const fmtClock = tm => { if(!tm) return ""; const [h, m] = tm.split(":").map(Number); return `${h % 12 || 12}${m ? ":" + String(m).padStart(2, "0") : ""} ${h < 12 ? "am" : "pm"}`; };
+const fmtWhen = iso => new Date(iso).toLocaleString(undefined, { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit", timeZone:"America/Chicago" });
+function tDates(t){
+  if(!t.start_time && !t.end_time) return fmtRange(t.starts_on, t.ends_on);
+  if(t.starts_on === t.ends_on) return `${fmtDate(t.starts_on)}, ${t.start_time ? fmtClock(t.start_time) : "start of day"} to ${t.end_time ? fmtClock(t.end_time) : "end of day"}`;
+  return `${fmtDate(t.starts_on)}${t.start_time ? " " + fmtClock(t.start_time) : ""} to ${fmtDate(t.ends_on)}${t.end_time ? " " + fmtClock(t.end_time) : ""}`;
+}
+// the form's hours -> what the server stores
+const tfHours = (st, en) => ({ p_start_time: st || null, p_end_time: en || null });
 function tRules(t){
-  const bits = [`${fmtRange(t.starts_on, t.ends_on)}`, t.area_label || (t.counties ? `${t.counties.length} counties` : "Anywhere in Wisconsin"),
+  const bits = [`${tDates(t)}`, t.area_label || (t.counties ? `${t.counties.length} counties` : "Anywhere in Wisconsin"),
     t.species ? (t.species.length > 3 ? `${t.species.length} species` : t.species.join(", ")) : "Any species", t.methods && t.methods.length === 1 && t.methods[0] === "fly" ? "Fly only" : t.methods ? "No fly" : "", SCORING[t.scoring]?.label];
   return bits.filter(Boolean).join(" · ");
 }
@@ -49,7 +64,7 @@ function renderTourneyTab(el){
   const invites = tournaments.filter(t => t.my_status === "invited");
   const mine = tournaments.filter(t => t.my_status === "joined");
   const openOnes = tournaments.filter(t => t.open && !t.my_status && tState(t) !== "finished");
-  const card = t => { const s = tState(t); return `<button class="trip${s==="live"?" now":""}" type="button" data-tourney="${esc(t.id)}"><small>${s==="live"?"Happening now":s==="upcoming"?"Starts "+esc(fmtDate(t.starts_on)):"Finished"} · by ${esc(t.owner_name)}${t.open?" · Open to everyone":""}</small><b>${esc(t.name)}</b>
+  const card = t => { const s = tState(t); return `<button class="trip${s==="live"?" now":""}" type="button" data-tourney="${esc(t.id)}"><small>${s==="live"?"Happening now":s==="upcoming"?"Starts "+esc(fmtDate(t.starts_on))+(t.start_time?" "+esc(fmtClock(t.start_time)):""):s==="wrapup"?"Send in fish by "+esc(fmtWhen(t.closes_at)):"Finished"} · by ${esc(t.owner_name)}${t.open?" · Open to everyone":""}</small><b>${esc(t.name)}</b>
     <span class="tnums"><span>${esc(tRules(t))}</span></span><span class="tnums"><span>${t.members} angler${t.members===1?"":"s"}</span><span>${t.entries} entr${t.entries===1?"y":"ies"}</span>${t.require_photo?"<span>Photo required</span>":""}</span></button>`; };
   markTourneyNoticesRead();
   el.innerHTML = `<div class="eyebrow">Tournaments</div><h2>Tournaments</h2>${tourneyNoticesHtml()}
@@ -67,15 +82,16 @@ function renderTourney(el, t){
   const myCatches = catches.filter(c => c.caught_on >= t.starts_on && c.caught_on <= t.ends_on);
   const entered = new Set((rows || []).map(r => r.catch_id));
   el.innerHTML = `<button class="link backlink" data-a="tourneys" type="button">${icon("i-back")}All tournaments</button>
-    <div class="eyebrow">${s === "live" ? "Happening now" : s === "upcoming" ? "Upcoming" : "Finished"} · by ${esc(t.owner_name)}</div><h2>${esc(t.name)}</h2>
+    <div class="eyebrow">${esc(T_STATE[s])} · by ${esc(t.owner_name)}</div><h2>${esc(t.name)}</h2>
     ${t.description ? `<p style="margin:4px 0 8px">${esc(t.description)}</p>` : ""}
     <div class="card" style="margin:8px 0 4px">
-      <p><b>Dates:</b> ${esc(fmtRange(t.starts_on, t.ends_on))}</p>
+      <p><b>${t.start_time || t.end_time ? "When" : "Dates"}:</b> ${esc(tDates(t))}${t.start_time || t.end_time ? " (Wisconsin time)" : ""}</p>
+      ${t.closes_at && s !== "finished" ? `<p><b>Send in fish by:</b> ${esc(fmtWhen(t.closes_at))}${+t.submit_hours ? "" : " (when the fishing ends)"}. After that, entries are locked.</p>` : ""}
       <p><b>Area:</b> ${esc(t.area_label || (t.counties ? t.counties.map(id => byId[id]?.properties.name).filter(Boolean).join(", ") : "Anywhere in Wisconsin"))}</p>
       <p><b>Species:</b> ${esc(t.species ? t.species.join(", ") : "Any")}</p>
       <p><b>Method:</b> ${esc(t.methods ? (t.methods.length === 1 && t.methods[0] === "fly" ? "Fly only" : t.methods.map(m => METHODS[m]).join(", ")) : "Any")}</p>
       <p><b>Scoring:</b> ${esc(SCORING[t.scoring]?.label)}. ${esc(SCORING[t.scoring]?.how)}</p>
-      ${t.require_photo ? `<p><b>Photo:</b> Each fish needs a photo taken during the tournament dates. The app checks the date stamp saved in the photo.</p>` : ""}
+      ${t.require_photo ? `<p><b>Photo:</b> Each fish needs a photo taken during the tournament${t.start_time || t.end_time ? "'s hours" : " dates"}. The app checks the date${t.start_time || t.end_time ? " and time" : ""} stamp saved in the photo.</p>` : t.start_time || t.end_time ? `<p class="muted">No photos are required, so the start and end times are on the honor system. A fish logged before the start can't be entered.</p>` : ""}
     </div>
     ${t.my_status === "invited" ? `<div class="row2" style="margin:10px 0"><button class="btn ink" type="button" data-tjoin="${esc(t.id)}">Join tournament</button><button class="btn" type="button" data-tdecline="${esc(t.id)}">No thanks</button></div>` : ""}
     ${!t.my_status && t.open ? `<div class="row2" style="margin:10px 0"><button class="btn ink" type="button" data-tjoin="${esc(t.id)}">Join tournament</button></div>` : ""}
@@ -129,6 +145,7 @@ function openTourneyForm(){
   const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
   const sun = new Date(sat); sun.setDate(sat.getDate()+1);
   $("tfStart").value = iso(sat); $("tfEnd").value = iso(sun);
+  $("tfStartTime").value = ""; $("tfEndTime").value = ""; $("tfSubmit").value = "24"; $("tfTimes").open = false;
   $("tfArea").value = "any"; tfCounties = new Set(); renderCountyPick();
   $("tfSpecies").value = "any"; $("tfScoring").value = "biggest"; $("tfPhoto").checked = true;
   $("tfOpenRow").hidden = !(profile?.role === "creator" || profile?.verified); $("tfOpen").checked = false; $("tfMethod").value = "any";
@@ -158,6 +175,8 @@ $("tourneyForm").addEventListener("submit", async e => {
   if(!a || !b){ err.textContent = "Add a start and end date."; return; }
   if(b < a){ err.textContent = "The end date can't be before the start date."; return; }
   if(daysBetween(a, b).length > 121){ err.textContent = "Tournaments can run up to about four months."; return; }
+  const st = $("tfStartTime").value, en = $("tfEndTime").value;
+  if(a === b && st && en && en <= st){ err.textContent = "The end time has to be after the start time."; $("tfTimes").open = true; return; }
   let ids = null, label = null;
   if(area === "pick"){ if(!tfCounties.size){ err.textContent = "Pick at least one county, or choose Anywhere."; return; } ids = [...tfCounties]; label = ids.length <= 3 ? ids.map(id => byId[id].properties.name).join(", ") + (ids.length === 1 ? " County" : " counties") : `${ids.length} counties`; }
   else if(area !== "any"){ ids = REGION_COUNTIES[area].map(n => idByName[n]).filter(Boolean); label = area; }
@@ -166,10 +185,11 @@ $("tourneyForm").addEventListener("submit", async e => {
   const mt = $("tfMethod").value, methods = mt === "fly" ? ["fly"] : mt === "nofly" ? ["spin","baitcast","ice","trolling","other"] : null;
   const invite = [...$("tfInvite").querySelectorAll("input:checked")].map(i => i.value);
   const btn = $("tfSave"); btn.disabled = true;
-  const { data, error } = await sb.rpc("create_tournament", { p_name:name, p_description:$("tfDesc").value.trim() || null, p_starts:a, p_ends:b, p_counties:ids, p_area_label:label,
-    p_species:species, p_scoring:$("tfScoring").value, p_require_photo:$("tfPhoto").checked, p_open:$("tfOpen").checked, p_invite:invite, p_methods:methods });
+  const args = { p_name:name, p_description:$("tfDesc").value.trim() || null, p_starts:a, p_ends:b, p_counties:ids, p_area_label:label,
+    p_species:species, p_scoring:$("tfScoring").value, p_require_photo:$("tfPhoto").checked, p_open:$("tfOpen").checked, p_invite:invite, p_methods:methods };
+  const { data, error } = await sb.rpc("create_tournament_v2", { ...args, ...tfHours(st, en), p_submit_hours:+$("tfSubmit").value });
   btn.disabled = false;
-  if(error){ err.textContent = /open tournaments|approval/.test(error.message) ? error.message : "Couldn't create the tournament. Check your connection and try again."; return; }
+  if(error){ err.textContent = /open tournaments|approval|end time/.test(error.message) ? error.message : "Couldn't create the tournament. Check your connection and try again."; return; }
   $("tourneyScrim").hidden = true;
   toast(invite.length ? `Tournament created. Invited ${invite.length} friend${invite.length===1?"":"s"}.` : "Tournament created");
   await loadTournaments();

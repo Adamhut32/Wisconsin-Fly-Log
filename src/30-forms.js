@@ -37,7 +37,7 @@ function parseTiff(v, start){
 }
 
 /* ---------- catch / spot form ---------- */
-let photoDate = null, photoExif = null, ph2File = null, ph2Url = null, ph2Removed = false;
+let photoDate = null, photoTime = null, photoExif = null, ph2File = null, ph2Url = null, ph2Removed = false;
 let formOpenSeq = 0;
 function setPh2(url, title, has){
   $("ph2Pv").style.backgroundImage = url ? `url('${url}')` : ""; $("ph2Pv").textContent = url ? "" : "+";
@@ -128,14 +128,14 @@ function setPhotoPreview(url, title, sub){
 }
 $("fPhoto").addEventListener("change", async () => {
   const file = $("fPhoto").files[0]; if(!file) return;
-  photoFile = file; photoDate = null;
+  photoFile = file; photoDate = null; photoTime = null;
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
   photoPreviewUrl = URL.createObjectURL(file);
   let ex = null; try{ ex = readExif(await file.arrayBuffer()); }catch(e){}
   photoExif = ex;
   const found = [];
   if(ex && ex.lat != null){ $("fCoords").value = `${ex.lat.toFixed(5)}, ${ex.lng.toFixed(5)}`; coordHint(); found.push("location"); }
-  if(ex && ex.date){ const m = ex.date.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m){ photoDate = `${m[1]}-${m[2]}-${m[3]}`; $("fDate").value = photoDate; $("fDate").dispatchEvent(new Event("change")); found.push("date"); } }
+  if(ex && ex.date){ const m = ex.date.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m){ photoDate = `${m[1]}-${m[2]}-${m[3]}`; const tm = ex.date.match(/[ T](\d{2}):(\d{2})(?::(\d{2}))?/); photoTime = tm ? `${tm[1]}:${tm[2]}:${tm[3] || "00"}` : null; $("fDate").value = photoDate; $("fDate").dispatchEvent(new Event("change")); found.push("date"); } }
   setPhotoPreview(photoPreviewUrl, file.name || "Photo",
     (found.length ? `Filled ${found.join(" and ")} from the photo.` : "No location in this photo. Tap Here or Map below.") + (photoDate ? "" : " It has no date stamp, so it can't count in photo tournaments."));
   $("photoSub").style.color = found.includes("location") ? "var(--spot)" : "var(--danger)";
@@ -159,7 +159,7 @@ $("gpsBtn").onclick = () => {
 
 function openForm(kind, rec, prefill){
   if(!canWrite){ toast("Sign in to save entries."); return; }
-  editing = rec || null; photoFile = null; photoDate = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = ""; $("camFixBtn").hidden = true;
+  editing = rec || null; photoFile = null; photoDate = null; photoTime = null; tripTouched = !!rec; $("fPhoto").value = ""; $("formErr").textContent = ""; $("photoSub").style.color = ""; $("camFixBtn").hidden = true;
   setKind(kind);
   const r = rec || prefill || {};
   $("fCoords").value = (r.lat != null) ? `${(+r.lat).toFixed(5)}, ${(+r.lng).toFixed(5)}` : "";
@@ -276,6 +276,7 @@ $("entryForm").addEventListener("submit", async ev => {
         fly:capWords($("fFly").value), method:$("fMethod").value, weight_lb:(w => w == null || Number.isNaN(w) ? null : w)(parseWeight($("fWt").value)), water:$("fWaterName").value.trim() || null, caught_on:$("fDate").value, spot_id:$("fSpotLink").value || null, trip_id:$("fTrip").value || null,
         photo_path: editing ? (editing.photo_path || null) : null,
         photo_taken_on: photoFile ? photoDate : (editing ? (editing.photo_taken_on || null) : null),
+        photo_time: photoFile ? photoTime : (editing ? (editing.photo_time || null) : null),
         photo_hash: editing ? (editing.photo_hash || null) : null, photo_meta: editing ? (editing.photo_meta || null) : null };
       if(blob){ try{ rec.photo_hash = await dhash(blob); }catch(e){ rec.photo_hash = null; } rec.photo_meta = photoMeta(photoExif, c); }
       if($("fCount").value === "") rec.count = 1;
