@@ -1,0 +1,43 @@
+# Boat landings, shore fishing sites and lake facts from the Wisconsin DNR.
+# Run by hand (Actions tab, "Run workflow") or on the 4th of each month. It only writes data files to the branch it runs on;
+# nothing reaches the app until a test version that uses them is built and released.
+name: DNR boat landings and lake facts
+on:
+  schedule:
+    - cron: "23 9 4 * *"
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: "Also save the DNR stocking page for inspection (true/false)"
+        default: "false"
+permissions:
+  contents: write
+concurrency: dnr-places
+jobs:
+  places:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install "shapely>=2,<3"
+      - run: python3 tools/dnr_places.py
+      - name: Look at the stocking page
+        if: inputs.probe == 'true'
+        run: |
+          mkdir -p tools/probe
+          curl -sL -A "Coulee-map-refresh (GitHub Actions)" "https://apps.dnr.wi.gov/fisheriesmanagement/Public/Summary" -o tools/probe/stocking.html || true
+          grep -o 'src="[^"]*\.js[^"]*"' tools/probe/stocking.html | sed 's/src="//;s/"$//' | head -30 > tools/probe/scripts.txt || true
+          n=0; while read -r s; do n=$((n+1)); case "$s" in http*) u="$s";; /*) u="https://apps.dnr.wi.gov$s";; *) u="https://apps.dnr.wi.gov/fisheriesmanagement/Public/$s";; esac
+            curl -sL -A "Coulee-map-refresh (GitHub Actions)" "$u" | grep -o '[A-Za-z/_.]*\(Summary\|Stocking\|stocking\)[A-Za-z/_.?=&]*' | sort -u | head -80 > "tools/probe/js$n.txt" || true; done < tools/probe/scripts.txt
+          head -c 60000 tools/probe/stocking.html > tools/probe/stocking_head.html; rm tools/probe/stocking.html
+      - name: Save
+        run: |
+          git config user.name "Coulee DNR refresh"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "DNR boat landings, shore fishing sites and lake facts refreshed"
+          git pull --rebase
+          git push
