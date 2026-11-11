@@ -16,13 +16,21 @@ concurrency: dnr-places
 jobs:
   places:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install "shapely>=2,<3"
-      - run: python3 tools/dnr_places.py
+      - run: pip install "shapely>=2,<3" pyshp
+      - name: DNR boat landings, shore fishing sites, lake facts
+        continue-on-error: true
+        run: python3 tools/dnr_places.py
+      - name: USGS stream gauges
+        continue-on-error: true
+        run: python3 tools/usgs_gauges.py
+      - name: Road crossings over trout streams
+        continue-on-error: true
+        run: python3 tools/road_crossings.py
       - name: Look at the stocking page
         if: inputs.probe == 'true'
         run: |
@@ -38,6 +46,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --quiet && exit 0
-          git commit -m "DNR boat landings, shore fishing sites and lake facts refreshed"
+          git commit -m "Map places refreshed: boat landings, lake facts, stream gauges, road crossings"
           git pull --rebase
           git push

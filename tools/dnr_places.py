@@ -19,23 +19,34 @@ BOAT = BASE + "PR_Recreation/PR_Boat_Access_Shore_Fishing_WTM_Ext/MapServer/"
 LAKES = BASE + "FM_WFF/FM_WFF_LAKE_CLASSIFICATIONS_WTM_EXT/MapServer/0"
 UA = {"User-Agent": "Coulee-map-refresh (GitHub Actions)"}
 
-def call(url, params):
-    q = urllib.parse.urlencode({"f": "json", **params})
-    for attempt in range(6):
+def call(url, params, post=True):
+    data = urllib.parse.urlencode({"f": "json", **params})
+    for attempt in range(4):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url + "/query?" + q, headers=UA), timeout=120) as r:
+            req = urllib.request.Request(url + "/query", data=data.encode(), headers=UA) if post else urllib.request.Request(url + "/query?" + data, headers=UA)
+            with urllib.request.urlopen(req, timeout=120) as r:
                 out = json.load(r)
             if "error" in out: raise RuntimeError(out["error"])
             return out
-        except Exception:
-            if attempt == 5: raise
-            time.sleep(5 * (attempt + 1))
+        except Exception as e:
+            if attempt == 3: raise
+            time.sleep(4 * (attempt + 1))
 
-def everything(url, extra):
-    ids = sorted(call(url, {"where": "1=1", "returnIdsOnly": "true"})["objectIds"] or [])
+def everything(url, extra, label):
+    """Every feature of a layer. Tries the tidy way (ask for ids, fetch in chunks); if the server won't do that, pages through."""
     feats = []
-    for i in range(0, len(ids), 300):
-        feats += call(url, {"objectIds": ",".join(map(str, ids[i:i + 300])), "outFields": "*", "outSR": "4326", **extra})["features"]
+    try:
+        ids = sorted(call(url, {"where": "1=1", "returnIdsOnly": "true"})["objectIds"] or [])
+        print(label, len(ids), "ids", flush=True)
+        for i in range(0, len(ids), 100):
+            feats += call(url, {"objectIds": ",".join(map(str, ids[i:i + 100])), "outFields": "*", "outSR": "4326", **extra})["features"]
+    except Exception as e:
+        print(label, "by ids failed:", e, "-> paging", flush=True); feats = []; off = 0
+        while True:
+            r = call(url, {"where": "1=1", "outFields": "*", "outSR": "4326", "resultOffset": off, "resultRecordCount": 500, "orderByFields": "OBJECTID", **extra})
+            feats += r["features"]; off += len(r["features"])
+            if not r["features"] or not r.get("exceededTransferLimit"): break
+    print(label, len(feats), "features", flush=True)
     return feats
 
 geo = json.load(open(ROOT / "data" / "geo.json"))
@@ -55,7 +66,7 @@ by = {}
 slot = lambda c: by.setdefault(c, {"b": [], "s": [], "l": []})
 sample = {}
 
-boats = everything(BOAT + "2", {"returnGeometry": "true"}); sample["boat"] = [f["attributes"] for f in boats[:5]]
+boats = everything(BOAT + "2", {"returnGeometry": "true"}, "boat landings"); sample["boat"] = [f["attributes"] for f in boats[:5]]
 for f in boats:
     a, g = f["attributes"], f.get("geometry") or {}
     lat, lng = (g.get("y") or a.get("LL_LAT_DD_AMT")), (g.get("x") or a.get("LL_LONG_DD_AMT"))
@@ -64,7 +75,7 @@ for f in boats:
     if c: slot(c)["b"].append([r5(lat), r5(lng), clean(a.get("LMS_BOAT_LANDING_NAME")), clean(a.get("LANDING_TYPE_CODE")), clean(a.get("RAMP_TYPE_CODE")),
                                clean(a.get("ADA_ACCESSIBLE_FEATURE_CODE")), clean(a.get("WATERBODY_NAME_TEXT")), clean(a.get("OWNERSHIP_MANAGER_NAME_TEXT") or a.get("OWNERSHIP_NAME_TEXT"))])
 
-shore = everything(BOAT + "1", {"returnGeometry": "true"}); sample["shore"] = [f["attributes"] for f in shore[:5]]
+shore = everything(BOAT + "1", {"returnGeometry": "true"}, "shore fishing"); sample["shore"] = [f["attributes"] for f in shore[:5]]
 for f in shore:
     a, g = f["attributes"], f.get("geometry") or {}
     lat, lng = (g.get("y") or a.get("LL_LAT_DD_AMT")), (g.get("x") or a.get("LL_LONG_DD_AMT"))
@@ -72,7 +83,9 @@ for f in shore:
     c = county_at(lat, lng)
     if c: slot(c)["s"].append([r5(lat), r5(lng), clean(a.get("FACILITY_NAME_TEXT")), clean(a.get("WATERBODY_NAME_TEXT")), clean(a.get("MORE_INFO_URL"))])
 
-lakes = everything(LAKES, {"returnGeometry": "true", "maxAllowableOffset": "0.002", "geometryPrecision": "4"}); sample["lake"] = [f["attributes"] for f in lakes[:5]]
+try: lakes = everything(LAKES, {"returnGeometry": "true", "maxAllowableOffset": "0.002", "geometryPrecision": "4"}, "lakes")
+except Exception as e: print("lakes with shapes failed:", e, flush=True); lakes = everything(LAKES, {"returnGeometry": "true"}, "lakes (full shapes)")
+sample["lake"] = [f["attributes"] for f in lakes[:5]]
 classes = {}
 for f in lakes:
     a, rings = f["attributes"], (f.get("geometry") or {}).get("rings") or []
