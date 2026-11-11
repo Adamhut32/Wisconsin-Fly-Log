@@ -268,6 +268,17 @@
         <div class="field"><label for="tfStart">Starts</label><input id="tfStart" type="date"></div>
         <div class="field"><label for="tfEnd">Ends</label><input id="tfEnd" type="date"></div>
       </div>
+      <details class="more" id="tfTimes">
+        <summary>Set hours and a deadline for sending in fish</summary>
+        <div class="grid2">
+          <div class="field"><label for="tfStartTime">Start time</label><input id="tfStartTime" type="time"></div>
+          <div class="field"><label for="tfEndTime">End time</label><input id="tfEndTime" type="time"></div>
+        </div>
+        <span class="hint">Wisconsin time. Leave blank to run from the start of the first day to the end of the last.</span>
+        <div class="field" style="margin-top:10px"><label for="tfSubmit">Fish can be sent in for</label>
+          <select id="tfSubmit"><option value="0">Until the fishing ends</option><option value="1">1 hour after it ends</option><option value="2">2 hours after</option><option value="6">6 hours after</option><option value="12">12 hours after</option><option value="24" selected>24 hours after</option><option value="48">2 days after</option><option value="72">3 days after</option></select></div>
+        <span class="hint">After that the tournament is finished and its entries are locked.</span>
+      </details>
       <div class="field"><label for="tfArea">Area</label>
         <select id="tfArea"><option value="any">Anywhere in Wisconsin</option><option>Driftless Area</option><option>Northwoods</option><option>Central Sands</option><option value="pick">Pick counties</option></select></div>
       <div class="card" id="tfCountyBox" hidden>
