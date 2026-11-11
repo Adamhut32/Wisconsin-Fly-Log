@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Fisheries Management</title>
+	<meta name="Keywords" content="Fisheries" />
+	<meta name="Description" content="Fisheries" />
+	<link rel="icon" href="/fisheriesmanagement/favicon.ico" type="image/x-icon">
+	<link rel="shortcut icon" href="/fisheriesmanagement/favicon.ico" type="image/x-icon">
+
+	<meta property="og:url" content="" />
+	<meta property="og:title" content="" />
+	<meta property="og:description" content="" />
+	<meta property="og:image" content="" />
+	<meta property="og:type" content="website" />
+	<!-- BEGIN global_head.inc Version 2.0 Dec. 2020 ( /includes/global_head.inc ) --><!-- **************************************** --> <!-- C --><meta http-equiv="X-UA-Compatible" content="IE=Edge" /><!-- A --><link  href="/css/sitePrint-f20.css"                type="text/css" rel="stylesheet" media="print" /><!-- C --><link  href="/css/globalSiteAll_v2.14.3-f20.css"    type="text/css" rel="stylesheet" media="screen" /><!-- A --><link  href="/css/DNRtopic.css"                     type="text/css" rel="stylesheet" media="screen" /><!-- B --><link  href="/css/DNRtopic_mobile-f20.css"          type="text/css" rel="stylesheet" media="screen" /><link  href="/css/DNRtopic_HeadFootMods.css"          type="text/css" rel="stylesheet" media="screen" /><!-- REMOVED /scripts/globalSiteAll_v1.8.5-f20.js --><!-- **************************************** --> <!-- END global_head.inc Version 2.0 ( /includes/global_head.inc ) -->
+	<script src="/fisheriesmanagement/Scripts/FMDB.js?v=202109101705"></script>
+	<script src="/fisheriesmanagement/bundles/jquery?v=9ktsOtIo0upvJP7-7FiXuOoOJe58RLFJ__wIRPL2vGo1"></script>
+
+	<script src="/fisheriesmanagement/bundles/jqueryui?v=yqCVigxSu97_s_vulMWzX97PVmpAp1RUApV3df4vSeo1"></script>
+
+	<script src="/fisheriesmanagement/bundles/jqueryval?v=UxjNb1Shrqn9S1DqCOV4T4wVKXuTZKgdFSq4EV9tyvM1"></script>
+
+	<script src="/fisheriesmanagement/bundles/jquerydatetimepicker?v=z2mHKgA5RlaznP4TtC-KlxaKlEnBBIuYKSN1y0ucRks1"></script>
+
+	<link href="/fisheriesmanagement/Content/css?v=tXktFgtVpC17PY_Xf1dFNc7INXTebtm9f_DdnN0txsk1" rel="stylesheet"/>
+
+	<script src="/fisheriesmanagement/bundles/modernizr?v=inCVuEFe6J4Q07A0AcRsbJic_UE5MwpRMNGcOtk94TE1"></script>
+
+	<script src="/fisheriesmanagement/bundles/jquerydatatables?v=RirQ04ErcdkZN1EOX454pMPOHuuKjNyZ9x_Ync0acgw1"></script>
+
+	<script src="/fisheriesmanagement/bundles/bootstrap?v=LyD8I-J1fLlrJpkPqvf15AON-HDEKaM0xXvbnvL1q8A1"></script>
+
+	<script src="/fisheriesmanagement/Scripts/dataTables.fixedHeader.min.js"></script>
+	<link href="/fisheriesmanagement/Content/font-awesome?v=hobQn4_WY4BXfGas25MVCbEcai-KlFQmwzT4hVFxpL81" rel="stylesheet"/>
+
+
+	<link href="/fisheriesmanagement/Content/sitemap.css" rel="stylesheet" />
+	<link href="/fisheriesmanagement/Content/handy-scroll.css" rel="stylesheet" />
+	<link href="/fisheriesmanagement/Content/fixedHeader.dataTables.min.css" rel="stylesheet" />
+	<link rel="stylesheet" media="all" href="/fisheriesmanagement/css/DNR_Drupal_HeaderFooter.css">
+
+	<style>
+        body.loading .overlay {
+            display: block;
+            background-image: url('/fisheriesmanagement/images/ajax-loader.gif');
+        }
+        #footer {
+            bottom: 0;
+            position: fixed;
+            width: 100%;
+        }
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+        }
+        .body-content {
+            position: relative;
+            top: 0;
+            bottom: 0;
+        }
+        body.loading .overlay {
+            display: block;
+        }
+	</style>
+	<script type="text/javascript">
+		var timer;
+		var delay = 1500; //Only show the wait cursor after 1.5 seconds
+
+		$(document).on({
+			ajaxStart: function () {
+				window.clearTimeout(timer);
+				timer = window.setTimeout(function () {
+					$("body").addClass("loading");
+				}, delay);
+			},
+			ajaxStop: function () {
+				window.clearTimeout(timer);
+				$("body").removeClass("loading");
+			}
+		});
+	</script>
+</head>
+	<body>
+		<div class="overlay"></div>
+		<style>.fisheries-header {   color: white !important;   font-weight: bold;    font-family:  sans-serif;   font-size: 1.2rem;    margin-left:110px;   padding-top: 1.2em;    position: absolute;    top: 0;    left:0;}.site-user{	color: yellow !important;   font-weight: bold;    font-family:  sans-serif;   font-size: .8rem;    padding-top:50px;   text-align:right;    top: 0;    right:0;   position: absolute;}</style><header id="header1">	<div class="row"  style="height:65px;background: #0076A5;">		<a href="https://dnr.wisconsin.gov/" title="Home"  target="_blank"><img  style="padding-top:10px;padding-left:60px;height:60px;" src="https://dnr.wisconsin.gov/sites/default/files/dnr-circle-logo-no-text-heavy-border.png" alt="Home"/></a>		<a href="/fisheriesmanagement/" title="Home" ><div class="fisheries-header"> Fisheries Management Information System</div></a>	</div></header>
+		<div class="container-fluid" style="overflow-x: auto;overflow-y: auto;">
+			<div class="body-content">
+				<p/>
+				
+<form method="post" name="report_form" id="report_form" novalidate>
+	<input type="hidden" id="HdnStockedWBLoaded" />
+	<input type="hidden" id="HdnLocalWBLoaded" />
+	<table style="width:100%">
+		<tr>
+			<td valign="top">
+				<h2>Wisconsin Department of Natural Resources Fish Stocking Summary </h2>
+				<hr />
+				<div class="sub-instructions">
+					Please Note: The stocking records for the current stocking year will be posted annually after verification by our fisheries biologists. Please contact your <a href="https://dnr.wisconsin.gov/topic/Fishing/people/fisheriesbiologists.html" target="_blank">local fisheries biologist </a>
+					if you have questions about our current stocking practices.
+				</div>
+				<hr />
+			</td>
+		</tr>
+	</table>
+	<table>
+		<tr>
+			<th>Stocking Year</th>
+			<th>Species</th>
+			<th>County Name</th>
+			<th>Waterbody Name</th>
+			<th>WBIC</th>
+			<th>Local Waterbody Name</th>
+		</tr>
+		<tr>
+			<td><select data-val="true" data-val-number="The field Stocking Year must be a number." id="STOCKING_YEAR" name="STOCKING_YEAR"></select></td>
+			<td><select id="SPECIES_NAME" name="SPECIES_NAME"></select></td>
+			<td><select data-val="true" data-val-number="The field County Name must be a number." id="COUNTY_CODE" name="COUNTY_CODE"></select></td>
+			<td><select id="STOCKED_WB_NAME" name="STOCKED_WB_NAME"><option value="">- ALL -</option>
+</select></td>
+			<td><select id="STOCKED_WB_WBIC" name="STOCKED_WB_WBIC"><option value="">- ALL -</option>
+</select></td>
+			<td><select id="LOCAL_WB_NAME" name="LOCAL_WB_NAME"><option value="">- ALL -</option>
+</select></td>
+		</tr>
+	</table>
+	<div id="divStockingSummary">
+		<table style="width:100%" id="tblStockingSummary">
+			<thead>
+				<tr>
+					<th>Stocking Year</th>
+					<th>Source</th>
+					<th>Stocked Waterbody Name</th>
+					<th>Stocked WBIC</th>
+					<th>Local Waterbody Name</th>
+					<th>Species</th>
+					<th>Strain(Stock)</th>
+					<th>Age Class</th>
+					<th>Number Fish Stocked</th>
+					<th>Avg Fish Length(IN)</th>
+				</tr>
+			</thead>
+		</table>
+	</div>
+	<input type="button" id="btnSearch" value="Search" />
+	<div id="divDisclaimer" class="sub-instructions" style="border:solid black 1px;padding:2px;">
+		<b>Disclaimer of warranties and accuracy of data</b><br />
+		Although the data found using the Bureau of Fisheries Management web site have been produced and processed from sources believed to be reliable, no warranty, expressed or implied, is made regarding accuracy, adequacy, completeness, legality, reliability or usefulness of any information.
+		This disclaimer applies to both isolated and aggregate uses of the information. The information is provided on an "as is" basis. All warranties of any kind, express or implied, including but not limited to the implied warranties of merchantability, fitness for a particular purpose, freedom from
+		contamination by computer viruses and non-infringement of proprietary rights are disclaimed. Changes may be periodically made to the information herein; these changes may or may not be incorporated in any new version of the publication. If you have obtained information from the Bureau of Fisheries
+		Management from a source other than the Bureau of Fisheries Management web site, be aware that electronic data can be altered subsequent to original distribution. Data can also quickly become out-of-date. It is recommended that careful attention be paid to the contents of any data associated with
+		a file, and that the originator of the data or information be contacted with any questions regarding appropriate use. If you find any errors or omissions, please report them to the webmaster.
+	</div>
+	<hr />
+</form>
+
+<script type="text/javascript">
+    $(document).ready(function () {
+		$("#divStockingSummary").hide();
+		$("#divDisclaimer").hide();
+        LoadStockingYears();
+        LoadStockingSpecies();
+        LoadCounties();
+    });
+
+    $('#btnSearch').click(function (e) {
+        LoadData();
+	});
+
+    $('#COUNTY_CODE').change(function () {
+        LoadStockedWaterbodies();
+    });
+
+    $('#STOCKED_WB_NAME').change(function () {
+        $("#HdnStockedWBLoaded").val("Y");
+        LoadlocalWaterbodies();
+    });
+
+	$('#STOCKED_WB_WBIC').change(function () {
+		$("#HdnStockedWBLoaded").val("Y");
+		LoadlocalWaterbodies();
+	});
+
+	$('#LOCAL_WB_NAME').change(function () {
+        $("#HdnStockedWBLoaded").val("Y");
+        $("#HdnLocalWBLoaded").val("Y");
+		LoadData();
+    });
+
+	function LoadData() {
+		$("#divStockingSummary").show();
+		$("#HdnStockedWBLoaded").val("N");
+		$("#HdnLocalWBLoaded").val("N");
+		$('#tblStockingSummary').DataTable({
+			fixedHeader: true,
+			paging: true,
+			ordering: false,
+			filter: false,
+			destroy: true,
+			orderMulti: false,
+			serverSide: true,
+			Processing: true,
+			drawCallback: function () {
+				$('#divDisclaimer').show();
+			},
+			ajax: {
+				url: "/fisheriesmanagement/Public/Summary/LoadResults",
+				data: function (d) {
+					d.STOCKING_YEAR = $("#STOCKING_YEAR").val()
+						, d.SPECIES_NAME = $("#SPECIES_NAME").val()
+						, d.COUNTY_CODE = $("#COUNTY_CODE").val()
+						, d.STOCKED_WB_NAME = $("#STOCKED_WB_NAME").val()
+						, d.STOCKED_WB_WBIC = $("#STOCKED_WB_WBIC").val()
+						, d.LOCAL_WB_NAME = $("#LOCAL_WB_NAME").val()
+				},
+				type: "POST",
+				dataType: "JSON"
+			}
+			, columns: [
+				{ data: "STOCKING_YEAR", name: "STOCKING_YEAR", autoWidth: true, className: "dt-column" },
+				{ data: "SOURCE_TYPE", name: "SOURCE_TYPE", autoWidth: true, className: "dt-column" },
+				{ data: "STOCKED_WB_NAME", name: "STOCKED_WB_NAME", autoWidth: true, className: "dt-column" },
+				{ data: "STOCKED_WBIC", name: "STOCKED_WBIC", autoWidth: true, className: "dt-column" },
+				{ data: "LOCAL_WB_NAME", name: "LOCAL_WB_NAME", autoWidth: true, className: "dt-column" },
+				{ data: "SPECIES_NAME", name: "SPECIES_NAME", autoWidth: true, className: "dt-column" },
+				{ data: "STOCK_NAME", name: "STOCK_NAME", autoWidth: true, className: "dt-column" },
+				{ data: "AGE_CLASS", name: "AGE_CLASS", autoWidth: true, className: "dt-column" },
+				{ data: "SUM_FISH_STOCKED_NUMBER", name: "SUM_FISH_STOCKED_NUMBER", autoWidth: true, className: "dt-column" },
+				{ data: "AVERAGE_FISH_LENGTH_INCHES", name: "AVERAGE_FISH_LENGTH_INCHES", autoWidth: true, className: "dt-column" }
+			]
+			, dom: 'lfrtip B<"clear">'
+			, buttons: [
+				{
+					extend: 'excelHtml5'
+					, text: 'Excel'
+					, titleAttr: 'Excel'
+					, title: null
+					, className: 'dt-buttons-excel'
+					, action: newexportaction_excel
+					, filename: function () { return 'StockingData'; }
+				}
+				, {
+					extend: 'csv'
+					, text: 'CSV'
+					, titleAttr: 'CSV'
+					, className: 'dt-buttons-csv'
+					, action: newexportaction_csv
+					, filename: function () { return 'StockingData'; }
+				}
+			]
+		});
+	};
+
+	function LoadStockingYears() {
+		$.ajax({
+			cache: false,
+			type: "GET",
+			url: '/fisheriesmanagement/Public/Summary/GetStockingYears',
+			success: function (json, textStatus) {
+				$("#STOCKING_YEAR").empty();
+				json = json || {};
+				$("#STOCKING_YEAR").append('<option value="">- ALL -</option>');
+				for (var i = 0; i < json.length; i++) {
+					$("#STOCKING_YEAR").append('<option value="' + json[i].Value + '">' + json[i].Text + '</option>');
+				}
+			},
+			error: function () {
+				FMDBError("Error loading Stocking Year data");
+			}
+		});
+	};
+	function LoadStockingSpecies() {
+		$.ajax({
+			cache: false,
+			type: "GET",
+			url: '/fisheriesmanagement/Public/Summary/GetStockingSpecies',
+			success: function (json, textStatus) {
+				$("#SPECIES_NAME").empty();
+				json = json || {};
+				$("#SPECIES_NAME").append('<option value="">- ALL -</option>');
+				for (var i = 0; i < json.length; i++) {
+					$("#SPECIES_NAME").append('<option value="' + json[i].Value + '">' + json[i].Text + '</option>');
+				}
+			},
+			error: function () {
+				FMDBError("Error loading Stocking Species data");
+			}
+		});
+	};
+	function LoadCounties() {
+		$.ajax({
+			cache: false,
+			type: "GET",
+			url: '/fisheriesmanagement/Public/Summary/GetCounties',
+			success: function (json, textStatus) {
+				$("#COUNTY_CODE").empty();
+				json = json || {};
+				$("#COUNTY_CODE").append('<option value="' + '' + '">' + '- ALL -' + '</option>');
+				for (var i = 0; i < json.length; i++) {
+					$("#COUNTY_CODE").append('<option value="' + json[i].Value + '">' + json[i].Text + '</option>');
+				}
+				LoadStockedWaterbodies();
+			},
+			error: function () {
+				FMDBError("Error loading County data");
+			}
+		});
+	};
+
+	function LoadStockedWaterbodies() {
+		if ($('#COUNTY_CODE').val() == '') {
+			$("#STOCKED_WB_NAME").empty();
+			$("#STOCKED_WB_NAME").append('<option value="' + '' + '">' + '- ALL -' + '</option>');
+			LoadStockedWBICs();
+			LoadlocalWaterbodies();
+			return;
+		}
+		var stockedWB = $('#STOCKED_WB_NAME').val();
+		$.ajax({
+			cache: false,
+			type: "GET",
+			url: '/fisheriesmanagement/Public/Summary/GetStockedWaterbodies',
+			data: {
+				"countyCode": $('#COUNTY_CODE').val()
+			},
+			success: function (json, textStatus) {
+				$("#STOCKED_WB_NAME").empty();
+				json = json || {};
+				$("#STOCKED_WB_NAME").append('<option value="' + '' + '">' + '- ALL -' + '</option>');
+				for (var i = 0; i < json.length; i++) {
+					if (stockedWB == json[i].Value) {
+						$("#STOCKED_WB_NAME").append('<option selected="selected" value="' + json[i].Value + '">' + json[i].Text + '</option>');
+					}
+					else {
+						$("#STOCKED_WB_NAME").append('<option value="' + json[i].Value + '">' + json[i].Text + '</option>');
+					}
+				}
+				LoadStockedWBICs();
+				LoadlocalWaterbodies();
+			},
+			error: function () {
+				FMDBError("Error loading Waterbody data");
+			}
+		});
+	};
+	function LoadStockedWBICs() {
+		if ($('#COUNTY_CODE').val() == '') {
+			$("#STOCKED_WB_WBIC").empty();
+			$("#STOCKED_WB_WBIC").append('<option value="' + '' + '">' + '- ALL -' + '</option>');
+			return;
+		}
+		var stockedWB = $('#STOCKED_WB_WBIC').val();
+		$.ajax({
+			cache: false,
+			type: "GET",
+			url: '/fisheriesmanagement/Public/Summary/GetStockedWBICs',
+			data: {
+				"countyCode": $('#COUNTY_CODE').val()
+			},
+			success: function (json, textStatus) {
+				$("#STOCKED_WB_WBIC").empty();
+				json = json || {};
+				$("#STOCKED_WB_WBIC").append('<option value="' + '' + '">' + '- ALL -' + '</option>');
+				for (var i = 0; i < json.length; i++) {
+					if (stockedWB == json[i].Value) {
+						$("#STOCKED_WB_WBIC").append('<option selected="selected" value="' + json[i].Value + '">' + json[i].Text + '</option>');
+					}
+					else {
+						$("#STOCKED_WB_WBIC").append('<option value="' + json[i].Value + '">' + json[i].Text + '</option>');
+					}
+				}
+			},
+			error: function () {
+				FMDBError("Error loading Waterbody data");
+			}
+		});
+	};
+
+	function LoadlocalWaterbodies() {
+		if ($('#COUNTY_CODE').val() == '' || $('#STOCKED_WB_NAME').val()) {
+			$("#LOCAL_WB_NAME").empty();
+			$("#LOCAL_WB_NAME").append('<option value="' + '' + '">' + '- ALL -' + '</option>');
+			return;
+		}
+		var localWB = $("#LOCAL_WB_NAME").val();
+		$.ajax({
+			cache: false,
+			type: "GET",
+			url: '/fisheriesmanagement/Public/Summary/GetLocalWBICs',
+			data: {
+				"countyCode": $('#COUNTY_CODE').val()
+				, "stockedwaterbodyName": $("#STOCKED_WB_NAME").val()
+			},
+			success: function (json, textStatus) {
+				$("#LOCAL_WB_NAME").empty();
+				json = json || {};
+				$("#LOCAL_WB_NAME").append('<option value="' + '' + '">' + '- ALL -' + '</option>');
+				for (var i = 0; i < json.length; i++) {
+					if (localWB == json[i].Value) {
+						$("#LOCAL_WB_NAME").append('<option selected="selected" value="' + json[i].Value + '">' + json[i].Text + '</option>');
+					}
+					else {
+						$("#LOCAL_WB_NAME").append('<option value="' + json[i].Value + '">' + json[i].Text + '</option>');
+					}
+				}
+			},
+			error: function () {
+				FMDBError("Error loading Local Waterbody data");
+			}
+		});
+	};
+</script>
+
+			</div>
+		</div>
+		
+		<script src="/fisheriesmanagement/Scripts/handy-scroll.js"></script>
+		<script>
+			$.ajaxSetup({
+				error: function (XMLHttpRequest, textStatus, errorThrown) {
+					alert('Ajax Error - Operation could not completed.');
+				}
+			});
+
+			setTimeout(function () {
+				handyScroll.mount("#spacious-container");
+			}, 3000);
+		</script>
+	</body>
+</html>
