@@ -8,6 +8,10 @@ function setAuthMode(m){
   $("pwRow").hidden = m === "reset";
   $("aEmail").closest(".field").hidden = m === "newpw";
   $("aPw").autocomplete = m === "in" ? "current-password" : "new-password";
+  // signing in takes an email or a username; everything else needs the email itself
+  const em = $("aEmail"); em.type = m === "in" ? "text" : "email"; em.autocomplete = m === "in" ? "username" : "email";
+  em.placeholder = m === "in" ? "you@example.com or your username" : "you@example.com";
+  document.querySelector('label[for="aEmail"]').textContent = m === "in" ? "Email or username" : "Email";
   $("pwRow").querySelector("label").textContent = m === "newpw" ? "New password" : "Password";
   $("authGo").textContent = { in:"Sign in", up:"Create account", reset:"Send reset link", newpw:"Save new password" }[m];
   $("forgotBtn").hidden = m !== "in";
@@ -32,7 +36,10 @@ $("authForm").addEventListener("submit", async e => {
   const email = $("aEmail").value.replace(/[\s​-‍⁠﻿]+/g, "").replace(/,/g, ".").replace(/\.+$/, "").toLowerCase();
   if(email && email !== $("aEmail").value) $("aEmail").value = email;
   msg.className = "hint bad";
-  if(authMode !== "newpw" && !/^[^@]+@[^@]+\.[^@.]{2,}$/.test(email)){
+  // no @ sign (or only a leading one) when signing in: it's a username
+  const uname = authMode === "in" && !/.@/.test(email) ? email.replace(/^@+/, "") : null;
+  if(uname !== null && !/^[a-z0-9][a-z0-9_.]{2,19}$/.test(uname)){ msg.textContent = uname ? "That doesn't look like an email or a username." : "Enter your email or username."; $("aEmail").focus(); return; }
+  if(uname === null && authMode !== "newpw" && !/^[^@]+@[^@]+\.[^@.]{2,}$/.test(email)){
     msg.textContent = !email ? "Enter your email address."
       : !email.includes("@") ? "That email is missing the @ sign."
       : (email.match(/@/g) || []).length > 1 ? "That email has more than one @ sign."
@@ -46,7 +53,17 @@ $("authForm").addEventListener("submit", async e => {
   lsSet("fl.stay", $("aStay").checked);
   const redirect = location.origin + location.pathname;
   try{
-    if(authMode === "in"){
+    if(authMode === "in" && uname !== null){
+      // the server finds the account for this username and signs in; the app never learns anyone's email from a username
+      const { data, error } = await sb.functions.invoke("signin", { body:{ username:uname, password:pw } });
+      const why = error ? "down" : data?.error;
+      if(why === "wait") throw new Error("Too many tries. Wait 15 minutes, or sign in with your email.");
+      if(why === "confirm") throw new Error("Confirm your email first. Check your inbox for the link.");
+      if(why === "down") throw new Error("Couldn't check that username right now. Try again, or sign in with your email.");
+      if(why || !data?.access_token) throw new Error("That username and password don't match.");
+      const set = await sb.auth.setSession({ access_token:data.access_token, refresh_token:data.refresh_token });
+      if(set.error) throw new Error("Couldn't finish signing in. Try again, or sign in with your email.");
+    } else if(authMode === "in"){
       const { error } = await sb.auth.signInWithPassword({ email, password:pw });
       if(error) throw new Error(/confirm/i.test(error.message) ? "Confirm your email first. Check your inbox for the link." : "That email and password don't match.");
     } else if(authMode === "up"){

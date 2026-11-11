@@ -44,7 +44,8 @@ $("termsOk").onclick = async () => {
 let staffList = null, pendingCount = 0, acctQ = "";
 async function loadStaffList(){
   if(!isStaff()) return;
-  const { data, error } = await sb.rpc("staff_people", { q: acctQ });
+  let { data, error } = await sb.rpc("staff_people_v2", { q: acctQ });
+  if(error) ({ data, error } = await sb.rpc("staff_people", { q: acctQ }));   // older database: the list without usernames
   if(error) return;
   staffList = data || [];
   if(!acctQ) pendingCount = staffList.filter(p => p.status === "pending").length;
@@ -55,7 +56,7 @@ const ACCT_PILL = { pending:`<span class="pill want">Waiting</span>`, declined:`
 function staffAccountsHtml(){
   if(!staffList){ loadStaffList(); return `<h4><span>Accounts</span></h4><p class="status">Loading accounts…</p>`; }
   return `<h4><span>Accounts</span><span>${pendingCount} waiting</span></h4>
-    <form id="acctForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="acctQ" value="${esc(acctQ)}" placeholder="Search by name${isFounder() ? " or email" : ""}" aria-label="Search accounts"><button class="btn" type="submit">Search</button></form>
+    <form id="acctForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="acctQ" value="${esc(acctQ)}" placeholder="Search by name or username${isFounder() ? ", or email" : ""}" aria-label="Search accounts"><button class="btn" type="submit">Search</button></form>
     ${staffList.length ? `<div class="stack" style="margin-top:10px">${staffList.map(p => {
       const roleCtl = isFounder() && p.role !== "creator" && p.status === "approved"
         ? `<div class="row2"><select data-acctrole="${esc(p.id)}" aria-label="Role" style="width:auto"><option value="angler" ${p.role==="angler"?"selected":""}>Member</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select>
@@ -66,7 +67,7 @@ function staffAccountsHtml(){
         : p.status === "declined" ? `<button class="btn sm" type="button" data-acctset="${esc(p.id)}" data-to="approved">Approve</button>`
         : (p.role !== "admin" || isFounder()) ? `<button class="link danger" type="button" data-acctset="${esc(p.id)}" data-to="declined">Remove access</button>` : "";
       return `<div class="card acct"><div class="acct-h">${avHtml(p.id, p.display_name, "", p.avatar_path)}<span class="t"><b class="wrap">${esc(p.display_name)} ${p.role==="creator"?`<span class="pill open">Founder</span>`:p.role==="admin"?`<span class="pill scouted">Admin</span>`:""}${p.verified?` <span class="pill fished">Verified</span>`:""} ${ACCT_PILL[p.status]||""}</b>
-        <small>${p.email ? esc(p.email) + " · " : ""}joined ${esc(fmtDate(p.created_at.slice(0,10)))}</small></span></div>
+        <small>${p.username ? "@" + esc(p.username) + " · " : ""}${p.email ? esc(p.email) + " · " : ""}joined ${esc(fmtDate(p.created_at.slice(0,10)))}</small></span></div>
         ${statusCtl ? `<div class="row2">${statusCtl}</div>` : ""}${roleCtl}</div>`; }).join("")}</div>` : `<p class="muted">No accounts match.</p>`}
     <p class="note">${isFounder() ? "Admins can approve accounts and read suggestions. They never see emails, private spots or exact locations. Verified adds a badge." : "You can approve new accounts and answer suggestions."}</p>`;
 }

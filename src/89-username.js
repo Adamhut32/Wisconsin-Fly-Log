@@ -1,7 +1,7 @@
 
 /* ---------- unique @usernames: everyone picks one; friends can find you by it ---------- */
 function suggestUsername(){
-  const base = (profile?.display_name || me?.email?.split("@")[0] || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "").slice(0, 16);
+  const base = (profile?.display_name || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "").slice(0, 16);
   return base.length >= 3 ? base : "";
 }
 let unameTimer = null, unameRequired = false;

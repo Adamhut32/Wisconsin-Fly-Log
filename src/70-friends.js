@@ -17,7 +17,7 @@ function inPeriod(d, p){
 }
 function everyone(){
   // my catches (all of them, since this is my own view) plus what friends share with me
-  const mine = catches.map(c => ({ ...c, user_id: me.id, display_name: profile?.display_name || "You" }));
+  const mine = catches.map(c => ({ ...c, before_join: beforeJoin(c), user_id: me.id, display_name: profile?.display_name || "You" }));   // decided before the name is added: beforeJoin tells mine from friends' by the missing name
   return [...mine, ...friendCatches.filter(c => c.rel !== "following")];
 }
 function leaderboards(p){
