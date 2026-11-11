@@ -7,6 +7,9 @@ on:
     - cron: "23 9 4 * *"
   workflow_dispatch:
     inputs:
+      crossings:
+        description: "Recompute road crossings (true/false)"
+        default: "true"
       probe:
         description: "Also save the DNR stocking page for inspection (true/false)"
         default: "false"
@@ -28,7 +31,11 @@ jobs:
       - name: USGS stream gauges
         continue-on-error: true
         run: python3 tools/usgs_gauges.py
+      - name: DNR fish stocking records
+        continue-on-error: true
+        run: python3 tools/dnr_stocking.py
       - name: Road crossings over trout streams
+        if: inputs.crossings != 'false' 
         continue-on-error: true
         run: python3 tools/road_crossings.py
       - name: Look at the stocking page
