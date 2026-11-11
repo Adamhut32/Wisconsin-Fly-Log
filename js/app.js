@@ -2151,7 +2151,7 @@ function inPeriod(d, p){
 }
 function everyone(){
   // my catches (all of them, since this is my own view) plus what friends share with me
-  const mine = catches.map(c => ({ ...c, user_id: me.id, display_name: profile?.display_name || "You" }));
+  const mine = catches.map(c => ({ ...c, before_join: beforeJoin(c), user_id: me.id, display_name: profile?.display_name || "You" }));   // decided before the name is added: beforeJoin tells mine from friends' by the missing name
   return [...mine, ...friendCatches.filter(c => c.rel !== "following")];
 }
 function leaderboards(p){
@@ -2937,7 +2937,8 @@ $("termsOk").onclick = async () => {
 let staffList = null, pendingCount = 0, acctQ = "";
 async function loadStaffList(){
   if(!isStaff()) return;
-  const { data, error } = await sb.rpc("staff_people", { q: acctQ });
+  let { data, error } = await sb.rpc("staff_people_v2", { q: acctQ });
+  if(error) ({ data, error } = await sb.rpc("staff_people", { q: acctQ }));   // older database: the list without usernames
   if(error) return;
   staffList = data || [];
   if(!acctQ) pendingCount = staffList.filter(p => p.status === "pending").length;
@@ -2948,7 +2949,7 @@ const ACCT_PILL = { pending:`<span class="pill want">Waiting</span>`, declined:`
 function staffAccountsHtml(){
   if(!staffList){ loadStaffList(); return `<h4><span>Accounts</span></h4><p class="status">Loading accounts…</p>`; }
   return `<h4><span>Accounts</span><span>${pendingCount} waiting</span></h4>
-    <form id="acctForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="acctQ" value="${esc(acctQ)}" placeholder="Search by name${isFounder() ? " or email" : ""}" aria-label="Search accounts"><button class="btn" type="submit">Search</button></form>
+    <form id="acctForm" class="row2" novalidate style="flex-wrap:nowrap"><input id="acctQ" value="${esc(acctQ)}" placeholder="Search by name or username${isFounder() ? ", or email" : ""}" aria-label="Search accounts"><button class="btn" type="submit">Search</button></form>
     ${staffList.length ? `<div class="stack" style="margin-top:10px">${staffList.map(p => {
       const roleCtl = isFounder() && p.role !== "creator" && p.status === "approved"
         ? `<div class="row2"><select data-acctrole="${esc(p.id)}" aria-label="Role" style="width:auto"><option value="angler" ${p.role==="angler"?"selected":""}>Member</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select>
@@ -2959,7 +2960,7 @@ function staffAccountsHtml(){
         : p.status === "declined" ? `<button class="btn sm" type="button" data-acctset="${esc(p.id)}" data-to="approved">Approve</button>`
         : (p.role !== "admin" || isFounder()) ? `<button class="link danger" type="button" data-acctset="${esc(p.id)}" data-to="declined">Remove access</button>` : "";
       return `<div class="card acct"><div class="acct-h">${avHtml(p.id, p.display_name, "", p.avatar_path)}<span class="t"><b class="wrap">${esc(p.display_name)} ${p.role==="creator"?`<span class="pill open">Founder</span>`:p.role==="admin"?`<span class="pill scouted">Admin</span>`:""}${p.verified?` <span class="pill fished">Verified</span>`:""} ${ACCT_PILL[p.status]||""}</b>
-        <small>${p.email ? esc(p.email) + " · " : ""}joined ${esc(fmtDate(p.created_at.slice(0,10)))}</small></span></div>
+        <small>${p.username ? "@" + esc(p.username) + " · " : ""}${p.email ? esc(p.email) + " · " : ""}joined ${esc(fmtDate(p.created_at.slice(0,10)))}</small></span></div>
         ${statusCtl ? `<div class="row2">${statusCtl}</div>` : ""}${roleCtl}</div>`; }).join("")}</div>` : `<p class="muted">No accounts match.</p>`}
     <p class="note">${isFounder() ? "Admins can approve accounts and read suggestions. They never see emails, private spots or exact locations. Verified adds a badge." : "You can approve new accounts and answer suggestions."}</p>`;
 }
@@ -4457,7 +4458,7 @@ function blockedHtml(){
 
 /* ---------- unique @usernames: everyone picks one; friends can find you by it ---------- */
 function suggestUsername(){
-  const base = (profile?.display_name || me?.email?.split("@")[0] || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "").slice(0, 16);
+  const base = (profile?.display_name || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "").slice(0, 16);
   return base.length >= 3 ? base : "";
 }
 let unameTimer = null, unameRequired = false;
@@ -4587,6 +4588,10 @@ function setAuthMode(m){
   $("pwRow").hidden = m === "reset";
   $("aEmail").closest(".field").hidden = m === "newpw";
   $("aPw").autocomplete = m === "in" ? "current-password" : "new-password";
+  // signing in takes an email or a username; everything else needs the email itself
+  const em = $("aEmail"); em.type = m === "in" ? "text" : "email"; em.autocomplete = m === "in" ? "username" : "email";
+  em.placeholder = m === "in" ? "you@example.com or your username" : "you@example.com";
+  document.querySelector('label[for="aEmail"]').textContent = m === "in" ? "Email or username" : "Email";
   $("pwRow").querySelector("label").textContent = m === "newpw" ? "New password" : "Password";
   $("authGo").textContent = { in:"Sign in", up:"Create account", reset:"Send reset link", newpw:"Save new password" }[m];
   $("forgotBtn").hidden = m !== "in";
@@ -4611,7 +4616,10 @@ $("authForm").addEventListener("submit", async e => {
   const email = $("aEmail").value.replace(/[\s​-‍⁠﻿]+/g, "").replace(/,/g, ".").replace(/\.+$/, "").toLowerCase();
   if(email && email !== $("aEmail").value) $("aEmail").value = email;
   msg.className = "hint bad";
-  if(authMode !== "newpw" && !/^[^@]+@[^@]+\.[^@.]{2,}$/.test(email)){
+  // no @ sign (or only a leading one) when signing in: it's a username
+  const uname = authMode === "in" && !/.@/.test(email) ? email.replace(/^@+/, "") : null;
+  if(uname !== null && !/^[a-z0-9][a-z0-9_.]{2,19}$/.test(uname)){ msg.textContent = uname ? "That doesn't look like an email or a username." : "Enter your email or username."; $("aEmail").focus(); return; }
+  if(uname === null && authMode !== "newpw" && !/^[^@]+@[^@]+\.[^@.]{2,}$/.test(email)){
     msg.textContent = !email ? "Enter your email address."
       : !email.includes("@") ? "That email is missing the @ sign."
       : (email.match(/@/g) || []).length > 1 ? "That email has more than one @ sign."
@@ -4625,7 +4633,17 @@ $("authForm").addEventListener("submit", async e => {
   lsSet("fl.stay", $("aStay").checked);
   const redirect = location.origin + location.pathname;
   try{
-    if(authMode === "in"){
+    if(authMode === "in" && uname !== null){
+      // the server finds the account for this username and signs in; the app never learns anyone's email from a username
+      const { data, error } = await sb.functions.invoke("signin", { body:{ username:uname, password:pw } });
+      const why = error ? "down" : data?.error;
+      if(why === "wait") throw new Error("Too many tries. Wait 15 minutes, or sign in with your email.");
+      if(why === "confirm") throw new Error("Confirm your email first. Check your inbox for the link.");
+      if(why === "down") throw new Error("Couldn't check that username right now. Try again, or sign in with your email.");
+      if(why || !data?.access_token) throw new Error("That username and password don't match.");
+      const set = await sb.auth.setSession({ access_token:data.access_token, refresh_token:data.refresh_token });
+      if(set.error) throw new Error("Couldn't finish signing in. Try again, or sign in with your email.");
+    } else if(authMode === "in"){
       const { error } = await sb.auth.signInWithPassword({ email, password:pw });
       if(error) throw new Error(/confirm/i.test(error.message) ? "Confirm your email first. Check your inbox for the link." : "That email and password don't match.");
     } else if(authMode === "up"){

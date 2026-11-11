@@ -1,6 +1,6 @@
 // Offline support: the app itself is fetched fresh when online (falling back to the
 // saved copy offline); map data is kept once loaded, so opened counties work offline.
-const VERSION = "flylog-v26";
+const VERSION = "flylog-v27";
 const SHELL = ["./", "index.html", "css/app.css", "js/config.js", "js/app.js", "vendor/leaflet.js", "vendor/leaflet.css", "vendor/supabase.js",
   "manifest.webmanifest", "icons/icon-192.png", "icons/apple-touch-icon.png"];
 self.addEventListener("install", e => {
