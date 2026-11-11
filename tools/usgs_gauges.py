@@ -60,7 +60,9 @@ def norms(gid):
             p = {int(float(k)): float(x) for k, x in zip(v["percentiles"], v["values"])}
             if int(v.get("sample_count") or 0) < 10: continue                      # under ten years on record: no fair "normal"
             mm, dd = map(int, v["time_of_year"].split("-")); doy = (datetime.date(2024, mm, dd) - datetime.date(2024, 1, 1)).days
-            by_day[doy] = [p[10], p[25], p[75], p[90]]
+            q = [p[10], p[25], p[75], p[90]]
+            if any(x != x or x < 0 for x in q): continue                           # the service sends "NaN" for days it has no figure for
+            by_day[doy] = q
         except Exception: continue
     if len(by_day) < 300: return None
     weeks = []
@@ -72,7 +74,9 @@ out, tried = {}, 0
 try: old = json.load(open(ROOT / "data" / "flownorms.json"))
 except Exception: old = {}
 for row in rows:
-    n_ = norms(row[0]); tried += 1
+    try: n_ = norms(row[0])
+    except Exception as e: print('norms failed for', row[0], e); n_ = None
+    tried += 1
     if n_: out[row[0]] = n_
     elif row[0] in old: out[row[0]] = old[row[0]]                                   # keep last time's rather than lose a gauge to one bad request
     time.sleep(0.4)

@@ -82,15 +82,16 @@ function gaugePopup(g){
   div.addEventListener("click", ev => { const b = ev.target.closest('[data-a="wx"]'); if(b){ b.hidden = true; showForecast(div.querySelector("[data-wx]"), g[2], g[3]); } });
   return div;
 }
+const gaugePins = new Map();
 async function syncGauges(){
-  gaugeLayer.clearLayers();
-  if(!showGauges || map.getZoom() < GAUGE_ZOOM) return;
+  const on = () => showGauges && map.getZoom() >= GAUGE_ZOOM;
+  if(!on()){ keepPins(gaugeLayer, gaugePins, new Map()); return; }
   const list = await loadGauges(); await loadFlows();
-  if(!showGauges || map.getZoom() < GAUGE_ZOOM) return;
-  gaugeLayer.clearLayers();
-  const b = map.getBounds().pad(.1);
-  for(const g of list){ if(!b.contains([g[2], g[3]])) continue; const q = flowNow.q[g[0]];
-    L.marker([g[2], g[3]], { icon:L.divIcon({ className:"", html:`<div class="mk-gauge" title="${esc(g[1])}">${q ? `<b>${cfs(q[0])}</b> cfs` : "gauge"}</div>`, iconSize:[0, 0] }), zIndexOffset:-100 }).bindPopup(() => gaugePopup(g), { maxWidth:300, minWidth:240 }).addTo(gaugeLayer); }
+  if(!on()){ keepPins(gaugeLayer, gaugePins, new Map()); return; }
+  const b = map.getBounds().pad(.1), want = new Map();
+  for(const g of list){ if(!b.contains([g[2], g[3]])) continue; const q = flowNow.q[g[0]], label = q ? `<b>${cfs(q[0])}</b> cfs` : "gauge";
+    want.set(g[0] + label, () => L.marker([g[2], g[3]], { icon:L.divIcon({ className:"", html:`<div class="mk-gauge" title="${esc(g[1])}">${label}</div>`, iconSize:[0, 0] }), zIndexOffset:-100 }).bindPopup(() => gaugePopup(g), { maxWidth:300, minWidth:240 })); }
+  keepPins(gaugeLayer, gaugePins, want);
 }
 document.addEventListener("mapsettled", syncGauges);
 function syncGaugeKey(){ const b = $("gaugeToggle"); b.setAttribute("aria-pressed", String(showGauges)); b.textContent = showGauges ? "Stream flows on" : "Stream flows off"; }

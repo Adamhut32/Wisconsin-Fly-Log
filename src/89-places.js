@@ -52,28 +52,37 @@ function crossPopup(r){
 }
 const placeIcon = (cls, svg, title) => L.divIcon({ className:"", html:`<div class="mk-place ${cls}" title="${esc(title)}">${svg}</div>`, iconSize:[0, 0] });
 let placesSeq = 0;
+/* Pins are kept from one map move to the next: only pins that left the screen are removed and only new ones are added.
+   (Redrawing them all on every move closed an open card the moment the map nudged itself to fit it, and made the pins blink.) */
+function keepPins(layer, store, wanted){
+  for(const [k, m] of store) if(!wanted.has(k)){ layer.removeLayer(m); store.delete(k); }
+  for(const [k, make] of wanted) if(!store.has(k)){ const m = make(); store.set(k, m); layer.addLayer(m); }
+}
+const landingPins = new Map(), crossPins = new Map();
 async function syncPlaces(){
   const seq = ++placesSeq, z = map.getZoom();
   const ids = [...new Set([...areaWant, currentCounty].filter(Boolean))];
   const wantL = showLandings && !hidePins && (z >= PLACE_ZOOM || !!currentCounty) && ids.length, wantC = showCrossings && z >= CROSS_ZOOM && ids.length;
-  if(!wantL) landingLayer.clearLayers();
-  if(!wantC) crossLayer.clearLayers();
+  if(!wantL) keepPins(landingLayer, landingPins, new Map());
+  if(!wantC) keepPins(crossLayer, crossPins, new Map());
   if(!wantL && !wantC) return;
   const b = map.getBounds().pad(.15), inView = r => r[0] != null && b.contains([r[0], r[1]]);
   if(wantL){
     const all = await Promise.all(ids.map(getPlaces)); if(seq !== placesSeq) return;
-    landingLayer.clearLayers();
+    const want = new Map(), pin = (kind, r, cls, svg, title, zi, pop) => want.set(kind + r[0] + "," + r[1] + r[2], () => L.marker([r[0], r[1]], { icon:placeIcon(cls, svg, title), zIndexOffset:zi }).bindPopup(pop, { maxWidth:300 }));
     for(const p of all){
-      for(const r of p.b || []) if(inView(r)){ const carry = /carry/i.test(r[3] || ""); L.marker([r[0], r[1]], { icon:placeIcon(carry ? "carry" : "boat", PLACE_SVG[carry ? "carry" : "boat"], nice(r[2]) || "Boat landing"), zIndexOffset:-200 }).bindPopup(() => landingPopup("b", r), { maxWidth:300 }).addTo(landingLayer); }
-      for(const r of p.k || []) if(inView(r) && z >= 11.5) L.marker([r[0], r[1]], { icon:placeIcon("park", PLACE_SVG.park, nice(r[2]) || "DNR parking lot"), zIndexOffset:-300 }).bindPopup(() => parkPopup(r), { maxWidth:300 }).addTo(landingLayer);
-      for(const r of p.s || []) if(inView(r)) L.marker([r[0], r[1]], { icon:placeIcon("shore", PLACE_SVG.shore, nice(r[2]) || "Shore fishing"), zIndexOffset:-200 }).bindPopup(() => landingPopup("s", r), { maxWidth:300 }).addTo(landingLayer);
+      for(const r of p.b || []) if(inView(r)){ const carry = /carry/i.test(r[3] || ""); pin("b", r, carry ? "carry" : "boat", PLACE_SVG[carry ? "carry" : "boat"], nice(r[2]) || "Boat landing", -200, () => landingPopup("b", r)); }
+      for(const r of p.k || []) if(inView(r) && z >= 11.5) pin("k", r, "park", PLACE_SVG.park, nice(r[2]) || "DNR parking lot", -300, () => parkPopup(r));
+      for(const r of p.s || []) if(inView(r)) pin("s", r, "shore", PLACE_SVG.shore, nice(r[2]) || "Shore fishing", -200, () => landingPopup("s", r));
     }
+    keepPins(landingLayer, landingPins, want);
   }
   if(wantC){
     const all = await Promise.all(ids.map(getCrossings)); if(seq !== placesSeq) return;
-    crossLayer.clearLayers(); let n = 0;
+    const want = new Map(); let n = 0;
     for(const list of all) for(const r of list){ if(n >= 220) break; if(!inView(r) || troutShow[r[4]] === false) continue; n++;
-      L.marker([r[0], r[1]], { icon:placeIcon("cross", PLACE_SVG.cross, `${r[2]} over ${r[3]}`), zIndexOffset:-400 }).bindPopup(() => crossPopup(r), { maxWidth:300 }).addTo(crossLayer); }
+      want.set(r[0] + "," + r[1], () => L.marker([r[0], r[1]], { icon:placeIcon("cross", PLACE_SVG.cross, `${r[2]} over ${r[3]}`), zIndexOffset:-400 }).bindPopup(() => crossPopup(r), { maxWidth:300 })); }
+    keepPins(crossLayer, crossPins, want);
   }
 }
 landingLayer.addTo(map); crossLayer.addTo(map);

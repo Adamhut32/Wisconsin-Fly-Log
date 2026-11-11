@@ -4131,35 +4131,44 @@ function crossPopup(r){
 }
 const placeIcon = (cls, svg, title) => L.divIcon({ className:"", html:`<div class="mk-place ${cls}" title="${esc(title)}">${svg}</div>`, iconSize:[0, 0] });
 let placesSeq = 0;
+/* Pins are kept from one map move to the next: only pins that left the screen are removed and only new ones are added.
+   (Redrawing them all on every move closed an open card the moment the map nudged itself to fit it, and made the pins blink.) */
+function keepPins(layer, store, wanted){
+  for(const [k, m] of store) if(!wanted.has(k)){ layer.removeLayer(m); store.delete(k); }
+  for(const [k, make] of wanted) if(!store.has(k)){ const m = make(); store.set(k, m); layer.addLayer(m); }
+}
+const landingPins = new Map(), crossPins = new Map();
 async function syncPlaces(){
   const seq = ++placesSeq, z = map.getZoom();
   const ids = [...new Set([...areaWant, currentCounty].filter(Boolean))];
   const wantL = showLandings && !hidePins && (z >= PLACE_ZOOM || !!currentCounty) && ids.length, wantC = showCrossings && z >= CROSS_ZOOM && ids.length;
-  if(!wantL) landingLayer.clearLayers();
-  if(!wantC) crossLayer.clearLayers();
+  if(!wantL) keepPins(landingLayer, landingPins, new Map());
+  if(!wantC) keepPins(crossLayer, crossPins, new Map());
   if(!wantL && !wantC) return;
   const b = map.getBounds().pad(.15), inView = r => r[0] != null && b.contains([r[0], r[1]]);
   if(wantL){
     const all = await Promise.all(ids.map(getPlaces)); if(seq !== placesSeq) return;
-    landingLayer.clearLayers();
+    const want = new Map(), pin = (kind, r, cls, svg, title, zi, pop) => want.set(kind + r[0] + "," + r[1] + r[2], () => L.marker([r[0], r[1]], { icon:placeIcon(cls, svg, title), zIndexOffset:zi }).bindPopup(pop, { maxWidth:300 }));
     for(const p of all){
-      for(const r of p.b || []) if(inView(r)){ const carry = /carry/i.test(r[3] || ""); L.marker([r[0], r[1]], { icon:placeIcon(carry ? "carry" : "boat", PLACE_SVG[carry ? "carry" : "boat"], nice(r[2]) || "Boat landing"), zIndexOffset:-200 }).bindPopup(() => landingPopup("b", r), { maxWidth:300 }).addTo(landingLayer); }
-      for(const r of p.k || []) if(inView(r) && z >= 11.5) L.marker([r[0], r[1]], { icon:placeIcon("park", PLACE_SVG.park, nice(r[2]) || "DNR parking lot"), zIndexOffset:-300 }).bindPopup(() => parkPopup(r), { maxWidth:300 }).addTo(landingLayer);
-      for(const r of p.s || []) if(inView(r)) L.marker([r[0], r[1]], { icon:placeIcon("shore", PLACE_SVG.shore, nice(r[2]) || "Shore fishing"), zIndexOffset:-200 }).bindPopup(() => landingPopup("s", r), { maxWidth:300 }).addTo(landingLayer);
+      for(const r of p.b || []) if(inView(r)){ const carry = /carry/i.test(r[3] || ""); pin("b", r, carry ? "carry" : "boat", PLACE_SVG[carry ? "carry" : "boat"], nice(r[2]) || "Boat landing", -200, () => landingPopup("b", r)); }
+      for(const r of p.k || []) if(inView(r) && z >= 11.5) pin("k", r, "park", PLACE_SVG.park, nice(r[2]) || "DNR parking lot", -300, () => parkPopup(r));
+      for(const r of p.s || []) if(inView(r)) pin("s", r, "shore", PLACE_SVG.shore, nice(r[2]) || "Shore fishing", -200, () => landingPopup("s", r));
     }
+    keepPins(landingLayer, landingPins, want);
   }
   if(wantC){
     const all = await Promise.all(ids.map(getCrossings)); if(seq !== placesSeq) return;
-    crossLayer.clearLayers(); let n = 0;
+    const want = new Map(); let n = 0;
     for(const list of all) for(const r of list){ if(n >= 220) break; if(!inView(r) || troutShow[r[4]] === false) continue; n++;
-      L.marker([r[0], r[1]], { icon:placeIcon("cross", PLACE_SVG.cross, `${r[2]} over ${r[3]}`), zIndexOffset:-400 }).bindPopup(() => crossPopup(r), { maxWidth:300 }).addTo(crossLayer); }
+      want.set(r[0] + "," + r[1], () => L.marker([r[0], r[1]], { icon:placeIcon("cross", PLACE_SVG.cross, `${r[2]} over ${r[3]}`), zIndexOffset:-400 }).bindPopup(() => crossPopup(r), { maxWidth:300 })); }
+    keepPins(crossLayer, crossPins, want);
   }
 }
 landingLayer.addTo(map); crossLayer.addTo(map);
 document.addEventListener("mapsettled", syncPlaces);
 function syncPlaceKey(){
   const a = $("landingToggle"), c = $("crossToggle");
-  a.setAttribute("aria-pressed", String(showLandings)); a.textContent = showLandings ? "Landings and parking on" : "Landings and parking off";
+  a.setAttribute("aria-pressed", String(showLandings)); a.textContent = showLandings ? "Boat landings on" : "Boat landings off";
   c.setAttribute("aria-pressed", String(showCrossings)); c.textContent = showCrossings ? "Road crossings on" : "Road crossings off";
 }
 $("landingToggle").onclick = () => { showLandings = !showLandings; lsSet("fl.landings", showLandings); syncPlaceKey(); syncPlaces(); if(showLandings && map.getZoom() < PLACE_ZOOM && !currentCounty) toast("Boat landings show when you zoom in a bit."); };
@@ -4797,7 +4806,15 @@ const FLOW_TTL = 15 * 60000, GAUGE_ZOOM = 8.75;
 let gauges = null, flowNow = lsGet("fl.flows", { at:0, q:{}, t:{} }), flowBusy = null, showGauges = lsGet("fl.gauges", true);
 const gaugeLayer = L.layerGroup().addTo(map), gaugeDetail = {}, wxCache = {};
 const usgs = async (path, params) => { const r = await fetch(USGS + path + "?" + new URLSearchParams(params)); if(!r.ok) throw new Error("usgs " + r.status); return r.json(); };
-async function loadGauges(){ if(!gauges){ try{ const r = await fetch(dataUrl("gauges.json")); gauges = r.ok ? await r.json() : []; }catch(e){ gauges = []; } } return gauges; }
+// what's normal for each gauge at each week of the year: [p10, p25, p75, p90], from the monthly data refresh
+let flowNorms = null;
+async function loadNorms(){ if(!flowNorms){ try{ const r = await fetch(dataUrl("flownorms.json")); flowNorms = r.ok ? await r.json() : {}; }catch(e){ flowNorms = {}; } } return flowNorms; }
+function normFor(id){
+  const w = flowNorms && flowNorms[id]; if(!w) return null;
+  const d = new Date(), doy = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 86400000), r = w[Math.min(52, Math.floor(doy / 7))];
+  return r && r.every(Number.isFinite) ? { 10:r[0], 25:r[1], 75:r[2], 90:r[3] } : null;
+}
+async function loadGauges(){ if(!gauges){ try{ const r = await fetch(dataUrl("gauges.json")); gauges = r.ok ? await r.json() : []; }catch(e){ gauges = []; } await loadNorms(); } return gauges; }
 async function loadFlows(){
   if(Date.now() - flowNow.at < FLOW_TTL || !navigator.onLine) return flowNow;
   return (flowBusy ||= (async () => {
@@ -4823,12 +4840,14 @@ function flowBand(v, pct){
 async function gaugeDetails(id){
   const c = gaugeDetail[id]; if(c && Date.now() - c.at < 30 * 60000) return c;
   const d = new Date(), md = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  await loadNorms();
+  const local = normFor(id);
   const [series, stats] = await Promise.all([
     usgs("ogcapi/v0/collections/continuous/items", { f:"json", monitoring_location_id:id, parameter_code:"00060", time:"P7D", limit:"3000", properties:"time,value", skipGeometry:"true" }).catch(() => null),
-    usgs("statistics/v0/observationNormals", { monitoring_location_id:id, parameter_code:"00060", computation_type:"percentile", start_date:md, end_date:md }).catch(() => null) ]);
+    local ? null : usgs("statistics/v0/observationNormals", { monitoring_location_id:id, parameter_code:"00060", computation_type:"percentile", start_date:md, end_date:md }).catch(() => null) ]);
   const pts = ((series && series.features) || []).map(f => [Date.parse(f.properties.time), parseFloat(f.properties.value)]).filter(p => Number.isFinite(p[1])).sort((a, b) => a[0] - b[0]);
-  let pct = null;
-  try{ const v = stats.features[0].properties.data[0].values[0]; pct = {}; v.percentiles.forEach((p, i) => pct[+p] = parseFloat(v.values[i])); if(!Number.isFinite(pct[10]) || !Number.isFinite(pct[90])) pct = null; }catch(e){}
+  let pct = local;
+  if(!pct) try{ const v = stats.features[0].properties.data[0].values[0]; pct = {}; v.percentiles.forEach((p, i) => pct[+p] = parseFloat(v.values[i])); if(!Number.isFinite(pct[10]) || !Number.isFinite(pct[90])) pct = null; }catch(e){}
   return (gaugeDetail[id] = { at:Date.now(), pts, pct });
 }
 function sparkline(pts, pct){
@@ -4848,7 +4867,7 @@ function trendText(pts){
   return d > .15 ? `Rising: up ${Math.round(d * 100)}% since yesterday` : d < -.15 ? `Dropping: down ${Math.round(-d * 100)}% since yesterday` : w > .3 ? `Up ${Math.round(w * 100)}% over the week, steady today` : w < -.3 ? `Down ${Math.round(-w * 100)}% over the week, steady today` : "Steady this week";
 }
 function gaugeBody(g, det){
-  const q = flowNow.q[g[0]], t = flowNow.t[g[0]], band = q && det ? flowBand(q[0], det.pct) : null, f = t ? toF(t[0]) : null;
+  const q = flowNow.q[g[0]], t = flowNow.t[g[0]], band = q ? flowBand(q[0], det ? det.pct : normFor(g[0])) : null, f = t ? toF(t[0]) : null;
   return `${q ? `<div class="flowbig"><b>${cfs(q[0])}</b> cfs${band ? ` <span class="pill flow-${band.k}">${band.t}</span>` : ""}</div><div class="meta">Read ${readAgo(q[1])}${det && det.pts.length ? " · " + esc(trendText(det.pts)) : ""}</div>` : `<p class="muted">No recent reading from this gauge.</p>`}
     ${f != null ? `<div class="meta${f >= 68 ? " warm" : ""}">Water ${Math.round(f)}°F${f >= 68 ? ". Warm for trout: fish early, or give them a rest" : ""}</div>` : ""}
     ${det ? sparkline(det.pts, det.pct) : q ? `<p class="status">Loading the last 7 days…</p>` : ""}`;
@@ -4863,15 +4882,16 @@ function gaugePopup(g){
   div.addEventListener("click", ev => { const b = ev.target.closest('[data-a="wx"]'); if(b){ b.hidden = true; showForecast(div.querySelector("[data-wx]"), g[2], g[3]); } });
   return div;
 }
+const gaugePins = new Map();
 async function syncGauges(){
-  gaugeLayer.clearLayers();
-  if(!showGauges || map.getZoom() < GAUGE_ZOOM) return;
+  const on = () => showGauges && map.getZoom() >= GAUGE_ZOOM;
+  if(!on()){ keepPins(gaugeLayer, gaugePins, new Map()); return; }
   const list = await loadGauges(); await loadFlows();
-  if(!showGauges || map.getZoom() < GAUGE_ZOOM) return;
-  gaugeLayer.clearLayers();
-  const b = map.getBounds().pad(.1);
-  for(const g of list){ if(!b.contains([g[2], g[3]])) continue; const q = flowNow.q[g[0]];
-    L.marker([g[2], g[3]], { icon:L.divIcon({ className:"", html:`<div class="mk-gauge" title="${esc(g[1])}">${q ? `<b>${cfs(q[0])}</b> cfs` : "gauge"}</div>`, iconSize:[0, 0] }), zIndexOffset:-100 }).bindPopup(() => gaugePopup(g), { maxWidth:300, minWidth:240 }).addTo(gaugeLayer); }
+  if(!on()){ keepPins(gaugeLayer, gaugePins, new Map()); return; }
+  const b = map.getBounds().pad(.1), want = new Map();
+  for(const g of list){ if(!b.contains([g[2], g[3]])) continue; const q = flowNow.q[g[0]], label = q ? `<b>${cfs(q[0])}</b> cfs` : "gauge";
+    want.set(g[0] + label, () => L.marker([g[2], g[3]], { icon:L.divIcon({ className:"", html:`<div class="mk-gauge" title="${esc(g[1])}">${label}</div>`, iconSize:[0, 0] }), zIndexOffset:-100 }).bindPopup(() => gaugePopup(g), { maxWidth:300, minWidth:240 })); }
+  keepPins(gaugeLayer, gaugePins, want);
 }
 document.addEventListener("mapsettled", syncGauges);
 function syncGaugeKey(){ const b = $("gaugeToggle"); b.setAttribute("aria-pressed", String(showGauges)); b.textContent = showGauges ? "Stream flows on" : "Stream flows off"; }
@@ -4892,7 +4912,7 @@ waterPopupExtras.push((div, info) => {
   loadGauges().then(async () => {
     const hit = nearestGauge(info.name, info.ll); if(!hit) return;
     await loadFlows(); const q = flowNow.q[hit.g[0]]; if(!q) return;
-    const paint = det => { const band = det ? flowBand(q[0], det.pct) : null, t = flowNow.t[hit.g[0]], f = t ? toF(t[0]) : null;
+    const paint = det => { const band = flowBand(q[0], det ? det.pct : normFor(hit.g[0])), t = flowNow.t[hit.g[0]], f = t ? toF(t[0]) : null;
       slot.innerHTML = `<div class="regs"><b>Flow</b><div><span>Now</span>${cfs(q[0])} cfs${band ? ` · ${band.t.toLowerCase()}` : ""}</div>${det && det.pts.length ? `<div><span>Trend</span>${esc(trendText(det.pts))}</div>` : ""}${f != null ? `<div><span>Water</span>${Math.round(f)}°F${f >= 68 ? " (warm for trout)" : ""}</div>` : ""}
         <small>${esc(hit.g[1])}, ${hit.mi < 1 ? "right here" : Math.round(hit.mi) + " mi away"} · read ${readAgo(q[1])} · <button class="link" type="button" data-gauge="${esc(hit.g[0])}">7-day chart</button></small></div>`; map._popup && map._popup.update(); };
     paint(gaugeDetail[hit.g[0]] || null); if(navigator.onLine) gaugeDetails(hit.g[0]).then(paint).catch(() => {});
