@@ -13,6 +13,9 @@ on:
       probe:
         description: "Also save the DNR stocking page for inspection (true/false)"
         default: "false"
+      fetch:
+        description: "Only fetch these web addresses (separated by spaces) into tools/probe/ and skip everything else"
+        default: ""
 permissions:
   contents: write
 concurrency: dnr-places
@@ -26,16 +29,19 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install "shapely>=2,<3" pyshp
       - name: DNR boat landings, shore fishing sites, lake facts
+        if: inputs.fetch == ''
         continue-on-error: true
         run: python3 tools/dnr_places.py
       - name: USGS stream gauges
+        if: inputs.fetch == ''
         continue-on-error: true
         run: python3 tools/usgs_gauges.py
       - name: DNR fish stocking records
+        if: inputs.fetch == ''
         continue-on-error: true
         run: python3 tools/dnr_stocking.py
       - name: Road crossings over trout streams
-        if: inputs.crossings != 'false' 
+        if: inputs.crossings != 'false' && inputs.fetch == ''
         continue-on-error: true
         run: python3 tools/road_crossings.py
       - name: Look at the stocking page
@@ -47,6 +53,13 @@ jobs:
           n=0; while read -r s; do n=$((n+1)); case "$s" in http*) u="$s";; /*) u="https://apps.dnr.wi.gov$s";; *) u="https://apps.dnr.wi.gov/fisheriesmanagement/Public/$s";; esac
             curl -sL -A "Coulee-map-refresh (GitHub Actions)" "$u" | grep -o '[A-Za-z/_.]*\(Summary\|Stocking\|stocking\)[A-Za-z/_.?=&]*' | sort -u | head -80 > "tools/probe/js$n.txt" || true; done < tools/probe/scripts.txt
           head -c 60000 tools/probe/stocking.html > tools/probe/stocking_head.html; rm tools/probe/stocking.html
+      - name: Fetch pages for inspection
+        if: inputs.fetch != ''
+        env:
+          URLS: ${{ inputs.fetch }}
+        run: |
+          mkdir -p tools/probe; n=0
+          for u in $URLS; do n=$((n+1)); curl -sL -m 90 -A "Coulee-map-refresh (GitHub Actions)" -D "tools/probe/fetch$n.headers" "$u" | head -c 30000 > "tools/probe/fetch$n.txt" || true; echo "$u" >> "tools/probe/fetch$n.headers"; done
       - name: Save
         run: |
           git config user.name "Coulee DNR refresh"
