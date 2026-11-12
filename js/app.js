@@ -90,6 +90,13 @@ function totals(){
   return { spots:spots.length, fish:catches.reduce((a,c)=>a+fishOf(c),0), counties:ids.size };
 }
 
+/* Resize an open card after part of it fills in. (Calling the card's own update re-built cards made by a function, which then
+   updated again, forever: tapping a stream-flow pin froze instead of opening its card.) */
+function refitPopup(node){
+  const p = map._popup; if(!p || !p._contentNode || (node && !p._contentNode.contains(node))) return;
+  p._updateLayout(); p._updatePosition(); if(p._adjustPan) p._adjustPan();
+}
+
 const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:18, zoomSnap:0.25, preferCanvas:false });
 map.zoomControl.setPosition("topright");
 const wiBounds = L.geoJSON(GEO.counties).getBounds();
@@ -1163,7 +1170,7 @@ function passTapDown(e){
   const before = featureTaps;
   passingTap = true;
   try{
-    for(const R of [detailRenderer, areaRenderer, accessRenderer]){
+    for(const R of [detailRenderer, areaRenderer, accessR]){
       if(!R || !R._container || !map.hasLayer(R) || R._container === ev.target) continue;   // the layer that got the tap has had its say
       R._onClick(ev);
       if(featureTaps !== before) return true;
@@ -1623,7 +1630,7 @@ async function regNear(cid, lat, lng, name){
 /* ---------- public land and easements ---------- */
 map.createPane("access"); map.getPane("access").style.zIndex = 410;
 const accessCache = {};
-let accessLayer = null, accessRenderer = null;
+let accessLayer = null;
 const ACCESS = {
   dnr:   { title:"DNR land", note:"Owned by the DNR and open to the public." },
   dnre:  { title:"DNR easement", note:"Public access through a DNR easement. On stream easements, access is usually limited to the stream corridor." },
@@ -1636,32 +1643,43 @@ function accessPopup(kind, name, extra){
   const a = ACCESS[kind] || ACCESS.dnr;
   return `<div class="pop"><h3>${esc(name || a.title)}</h3><div class="meta">${esc(a.title)}${extra?` · ${esc(extra)}`:""}</div><p style="margin:8px 0 4px">${esc(a.note)}</p><small class="muted">From DNR's public lands maps. Check posted signs and property rules before you go.</small></div>`;
 }
-let accessSeq = 0;
-async function loadAccess(id){
-  clearAccess();
-  if(!showAccess) return;
-  const seq = ++accessSeq;
-  let rows;
-  try{ rows = await getJSON(accessCache, dataUrl("access/" + id + ".json"), id); }catch(e){ return; }
-  if(detailFor !== id || !showAccess || seq !== accessSeq) return;   // a newer request (another county, the toggle) won
-  const R = accessRenderer = L.canvas({ pane:"access", tolerance:2 });
-  const g = accessLayer = L.layerGroup();
-  const col = css("--pub");
+/* Public land shows for every county on screen once you're zoomed in, like the creeks, not only in an opened county.
+   (Since tapping water stopped opening the county, public land almost never appeared.) One drawing surface is kept for good;
+   when nothing is on it, taps pass straight through to the map. */
+var accessGroups = {}, accessOn = new Set(), accessSeq = 0, accessR = null;
+function buildAccess(rows){
+  accessR ||= L.canvas({ pane:"access", tolerance:2, padding:canvasPad() });
+  const g = L.layerGroup(), col = css("--pub");
   for(const [kind, name, extra, rings] of rows){
-    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:col, weight: kind === "trout" || kind === "dnre" ? 1.4 : .8, dashArray: kind === "dnre" || kind === "trout" ? "4 3" : null, fillColor:col, fillOpacity: kind === "usfs" || kind === "cf" ? .12 : .26 });
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:accessR, color:col, weight: kind === "trout" || kind === "dnre" ? 1.4 : .8, dashArray: kind === "dnre" || kind === "trout" ? "4 3" : null, fillColor:col, fillOpacity: kind === "usfs" || kind === "cf" ? .12 : .26 });
     p.on("click", e => { if(picking){ handlePick(e.latlng); return; } waterTapAt = Date.now(); featureTaps++; L.popup({ maxWidth:280 }).setLatLng(e.latlng).setContent(accessPopup(kind, name, extra)).openOn(map); });
     g.addLayer(p);
   }
-  g.addTo(map);
+  return g;
 }
-function clearAccess(){
-  if(accessLayer){ map.removeLayer(accessLayer); accessLayer = null; }
-  if(accessRenderer){ dropCanvas(accessRenderer); accessRenderer = null; }
+async function syncAccess(){
+  if(!accessGroups) return;
+  const seq = ++accessSeq;
+  const want = new Set(showAccess ? [...(map.getZoom() >= AREA_ZOOM ? areaWant : []), detailFor].filter(Boolean) : []);
+  for(const id of [...accessOn]) if(!want.has(id)){ map.removeLayer(accessGroups[id]); accessOn.delete(id); }
+  map.getPane("access").style.pointerEvents = accessOn.size ? "" : "none";
+  await Promise.all([...want].map(async id => {
+    if(accessOn.has(id)) return;
+    if(!accessGroups[id]){ let rows; try{ rows = await getJSON(accessCache, dataUrl("access/" + id + ".json"), id); }catch(e){ return; } accessGroups[id] ||= buildAccess(rows); }
+    if(seq !== accessSeq || accessOn.has(id)) return;
+    accessGroups[id].addTo(map); accessOn.add(id);
+  }));
+  map.getPane("access").style.pointerEvents = accessOn.size ? "" : "none";
 }
+function loadAccess(){ syncAccess(); }
+function clearAccess(){ setTimeout(syncAccess, 0); }
+document.addEventListener("mapsettled", syncAccess);
+// once: switch public land back on (it had been turned off on some phones while it wasn't showing anyway)
+if(!lsGet("fl.accessReset1", false)){ showAccess = true; lsSet("fl.showAccess", true); lsSet("fl.accessReset1", true); }
 $("accessToggle").onclick = () => {
   showAccess = !showAccess; lsSet("fl.showAccess", showAccess);
   $("accessToggle").setAttribute("aria-pressed", showAccess); $("accessToggle").textContent = showAccess ? "Public land on" : "Public land off";
-  if(showAccess && detailFor) loadAccess(detailFor); else clearAccess();
+  syncAccess();
 };
 $("accessToggle").setAttribute("aria-pressed", showAccess); $("accessToggle").textContent = showAccess ? "Public land on" : "Public land off";
 
@@ -4200,7 +4218,7 @@ function stockingHtml(name, cid){
 waterPopupExtras.push((div, info) => {
   const cid = info.cid || countyAt(info.ll.lat, info.ll.lng); if(!cid) return;
   const slot = document.createElement("div"); div.querySelector(".coords").before(slot);
-  const fill = () => { slot.innerHTML = (info.isLake ? lakeFactsHtml(info.name, info.ll, cid) : "") + stockingHtml(info.name, cid); if(slot.innerHTML && map._popup) map._popup.update(); };
+  const fill = () => { slot.innerHTML = (info.isLake ? lakeFactsHtml(info.name, info.ll, cid) : "") + stockingHtml(info.name, cid); if(slot.innerHTML) refitPopup(slot); };
   Promise.all([info.isLake ? getPlaces(cid) : null, getStocking(cid), info.isLake ? getLakeClasses() : null]).then(fill);
 });
 
@@ -4807,7 +4825,7 @@ async function backfillWaters(){
    data/gauges.json lists Wisconsin's live stream gauges (name and place). Readings come straight from the USGS when the map
    needs them, are kept for 15 minutes, and the last ones are remembered so a gauge still shows something with no signal. */
 const USGS = "https://api.waterdata.usgs.gov/";
-const FLOW_TTL = 15 * 60000, GAUGE_ZOOM = 8.75;
+const FLOW_TTL = 15 * 60000, GAUGE_ZOOM = 10.5;
 let gauges = null, flowNow = lsGet("fl.flows", { at:0, q:{}, t:{} }), flowBusy = null, showGauges = lsGet("fl.gauges", true);
 const gaugeLayer = L.layerGroup().addTo(map), gaugeDetail = {}, wxCache = {};
 const usgs = async (path, params) => { const r = await fetch(USGS + path + "?" + new URLSearchParams(params)); if(!r.ok) throw new Error("usgs " + r.status); return r.json(); };
@@ -4881,7 +4899,7 @@ function gaugePopup(g){
   const div = document.createElement("div"); div.className = "pop";
   const paint = det => { div.innerHTML = `<h3>${esc(g[1])}</h3><div class="meta">USGS stream gauge${g[4] ? ` · drains ${Math.round(g[4]).toLocaleString()} sq mi` : ""}</div>${gaugeBody(g, det)}
       <div data-wx></div><div class="row"><button class="link" type="button" data-a="wx">Forecast here</button><a class="link" href="https://waterdata.usgs.gov/monitoring-location/${esc(g[0])}/" target="_blank" rel="noopener">USGS page</a></div>
-      <small class="src">Provisional data from the U.S. Geological Survey. cfs = cubic feet of water per second.</small>`; map._popup && map._popup.update(); };
+      <small class="src">Provisional data from the U.S. Geological Survey. cfs = cubic feet of water per second.</small>`; refitPopup(div); };
   paint(gaugeDetail[g[0]] || null);
   if(navigator.onLine) loadFlows().then(() => gaugeDetails(g[0])).then(paint).catch(() => {});
   div.addEventListener("click", ev => { const b = ev.target.closest('[data-a="wx"]'); if(b){ b.hidden = true; showForecast(div.querySelector("[data-wx]"), g[2], g[3]); } });
@@ -4919,7 +4937,7 @@ waterPopupExtras.push((div, info) => {
     await loadFlows(); const q = flowNow.q[hit.g[0]]; if(!q) return;
     const paint = det => { const band = flowBand(q[0], det ? det.pct : normFor(hit.g[0])), t = flowNow.t[hit.g[0]], f = t ? toF(t[0]) : null;
       slot.innerHTML = `<div class="regs"><b>Flow</b><div><span>Now</span>${cfs(q[0])} cfs${band ? ` · ${band.t.toLowerCase()}` : ""}</div>${det && det.pts.length ? `<div><span>Trend</span>${esc(trendText(det.pts))}</div>` : ""}${f != null ? `<div><span>Water</span>${Math.round(f)}°F${f >= 68 ? " (warm for trout)" : ""}</div>` : ""}
-        <small>${esc(hit.g[1])}, ${hit.mi < 1 ? "right here" : Math.round(hit.mi) + " mi away"} · read ${readAgo(q[1])} · <button class="link" type="button" data-gauge="${esc(hit.g[0])}">7-day chart</button></small></div>`; map._popup && map._popup.update(); };
+        <small>${esc(hit.g[1])}, ${hit.mi < 1 ? "right here" : Math.round(hit.mi) + " mi away"} · read ${readAgo(q[1])} · <button class="link" type="button" data-gauge="${esc(hit.g[0])}">7-day chart</button></small></div>`; refitPopup(slot); };
     paint(gaugeDetail[hit.g[0]] || null); if(navigator.onLine) gaugeDetails(hit.g[0]).then(paint).catch(() => {});
   });
   const wx = document.createElement("div"); wx.className = "row"; wx.innerHTML = `<button class="link" type="button" data-a="wx">Forecast here</button>`; const wslot = document.createElement("div"); div.appendChild(wslot); div.appendChild(wx);
@@ -4939,13 +4957,22 @@ async function forecastAt(lat, lng){
 }
 async function showForecast(slot, lat, lng){
   if(!navigator.onLine){ slot.innerHTML = `<p class="muted">The forecast needs a signal.</p>`; return; }
-  slot.innerHTML = `<p class="status">Getting the forecast…</p>`; map._popup && map._popup.update();
+  slot.innerHTML = `<p class="status">Getting the forecast…</p>`; refitPopup(slot);
   try{
     const ps = await forecastAt(lat, lng); if(!ps.length) throw new Error("empty");
     slot.innerHTML = `<div class="regs wx"><b>Forecast here</b>${ps.map(p => `<div><span>${esc(p.name)}</span>${p.temp != null ? `${p.temp}°${esc(p.unit || "F")} · ` : ""}${esc(p.text || "")}${p.rain ? ` · ${p.rain}% rain` : ""}${p.wind ? ` · wind ${esc(p.wind)}` : ""}</div>`).join("")}<small>National Weather Service</small></div>`;
   }catch(e){ slot.innerHTML = `<p class="muted">Couldn't get the forecast just now.</p>`; }
-  map._popup && map._popup.update();
+  refitPopup(slot);
 }
+
+/* iPhone page zoom: block pinching the app's panels and buttons (the map keeps its own pinch), and if a text box zoomed the
+   page anyway, snap it back when you leave the box. */
+document.addEventListener("gesturestart", e => { if(!(e.target.closest && e.target.closest("#map"))) e.preventDefault(); }, { passive:false });
+document.addEventListener("focusout", e => {
+  if(!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !window.visualViewport || visualViewport.scale <= 1.01) return;
+  const m = document.querySelector('meta[name=viewport]'); if(!m) return;
+  const c = m.content; m.content = c + ",user-scalable=no"; setTimeout(() => { m.content = c; }, 300);
+});
 
 
 /* ---------- sign in ---------- */
