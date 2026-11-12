@@ -116,6 +116,6 @@ function stockingHtml(name, cid){
 waterPopupExtras.push((div, info) => {
   const cid = info.cid || countyAt(info.ll.lat, info.ll.lng); if(!cid) return;
   const slot = document.createElement("div"); div.querySelector(".coords").before(slot);
-  const fill = () => { slot.innerHTML = (info.isLake ? lakeFactsHtml(info.name, info.ll, cid) : "") + stockingHtml(info.name, cid); if(slot.innerHTML && map._popup) map._popup.update(); };
+  const fill = () => { slot.innerHTML = (info.isLake ? lakeFactsHtml(info.name, info.ll, cid) : "") + stockingHtml(info.name, cid); if(slot.innerHTML) refitPopup(slot); };
   Promise.all([info.isLake ? getPlaces(cid) : null, getStocking(cid), info.isLake ? getLakeClasses() : null]).then(fill);
 });
