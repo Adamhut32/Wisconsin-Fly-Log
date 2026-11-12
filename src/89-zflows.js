@@ -2,7 +2,7 @@
    data/gauges.json lists Wisconsin's live stream gauges (name and place). Readings come straight from the USGS when the map
    needs them, are kept for 15 minutes, and the last ones are remembered so a gauge still shows something with no signal. */
 const USGS = "https://api.waterdata.usgs.gov/";
-const FLOW_TTL = 15 * 60000, GAUGE_ZOOM = 8.75;
+const FLOW_TTL = 15 * 60000, GAUGE_ZOOM = 10.5;
 let gauges = null, flowNow = lsGet("fl.flows", { at:0, q:{}, t:{} }), flowBusy = null, showGauges = lsGet("fl.gauges", true);
 const gaugeLayer = L.layerGroup().addTo(map), gaugeDetail = {}, wxCache = {};
 const usgs = async (path, params) => { const r = await fetch(USGS + path + "?" + new URLSearchParams(params)); if(!r.ok) throw new Error("usgs " + r.status); return r.json(); };
@@ -76,7 +76,7 @@ function gaugePopup(g){
   const div = document.createElement("div"); div.className = "pop";
   const paint = det => { div.innerHTML = `<h3>${esc(g[1])}</h3><div class="meta">USGS stream gauge${g[4] ? ` · drains ${Math.round(g[4]).toLocaleString()} sq mi` : ""}</div>${gaugeBody(g, det)}
       <div data-wx></div><div class="row"><button class="link" type="button" data-a="wx">Forecast here</button><a class="link" href="https://waterdata.usgs.gov/monitoring-location/${esc(g[0])}/" target="_blank" rel="noopener">USGS page</a></div>
-      <small class="src">Provisional data from the U.S. Geological Survey. cfs = cubic feet of water per second.</small>`; map._popup && map._popup.update(); };
+      <small class="src">Provisional data from the U.S. Geological Survey. cfs = cubic feet of water per second.</small>`; refitPopup(div); };
   paint(gaugeDetail[g[0]] || null);
   if(navigator.onLine) loadFlows().then(() => gaugeDetails(g[0])).then(paint).catch(() => {});
   div.addEventListener("click", ev => { const b = ev.target.closest('[data-a="wx"]'); if(b){ b.hidden = true; showForecast(div.querySelector("[data-wx]"), g[2], g[3]); } });
@@ -114,7 +114,7 @@ waterPopupExtras.push((div, info) => {
     await loadFlows(); const q = flowNow.q[hit.g[0]]; if(!q) return;
     const paint = det => { const band = flowBand(q[0], det ? det.pct : normFor(hit.g[0])), t = flowNow.t[hit.g[0]], f = t ? toF(t[0]) : null;
       slot.innerHTML = `<div class="regs"><b>Flow</b><div><span>Now</span>${cfs(q[0])} cfs${band ? ` · ${band.t.toLowerCase()}` : ""}</div>${det && det.pts.length ? `<div><span>Trend</span>${esc(trendText(det.pts))}</div>` : ""}${f != null ? `<div><span>Water</span>${Math.round(f)}°F${f >= 68 ? " (warm for trout)" : ""}</div>` : ""}
-        <small>${esc(hit.g[1])}, ${hit.mi < 1 ? "right here" : Math.round(hit.mi) + " mi away"} · read ${readAgo(q[1])} · <button class="link" type="button" data-gauge="${esc(hit.g[0])}">7-day chart</button></small></div>`; map._popup && map._popup.update(); };
+        <small>${esc(hit.g[1])}, ${hit.mi < 1 ? "right here" : Math.round(hit.mi) + " mi away"} · read ${readAgo(q[1])} · <button class="link" type="button" data-gauge="${esc(hit.g[0])}">7-day chart</button></small></div>`; refitPopup(slot); };
     paint(gaugeDetail[hit.g[0]] || null); if(navigator.onLine) gaugeDetails(hit.g[0]).then(paint).catch(() => {});
   });
   const wx = document.createElement("div"); wx.className = "row"; wx.innerHTML = `<button class="link" type="button" data-a="wx">Forecast here</button>`; const wslot = document.createElement("div"); div.appendChild(wslot); div.appendChild(wx);
@@ -134,10 +134,19 @@ async function forecastAt(lat, lng){
 }
 async function showForecast(slot, lat, lng){
   if(!navigator.onLine){ slot.innerHTML = `<p class="muted">The forecast needs a signal.</p>`; return; }
-  slot.innerHTML = `<p class="status">Getting the forecast…</p>`; map._popup && map._popup.update();
+  slot.innerHTML = `<p class="status">Getting the forecast…</p>`; refitPopup(slot);
   try{
     const ps = await forecastAt(lat, lng); if(!ps.length) throw new Error("empty");
     slot.innerHTML = `<div class="regs wx"><b>Forecast here</b>${ps.map(p => `<div><span>${esc(p.name)}</span>${p.temp != null ? `${p.temp}°${esc(p.unit || "F")} · ` : ""}${esc(p.text || "")}${p.rain ? ` · ${p.rain}% rain` : ""}${p.wind ? ` · wind ${esc(p.wind)}` : ""}</div>`).join("")}<small>National Weather Service</small></div>`;
   }catch(e){ slot.innerHTML = `<p class="muted">Couldn't get the forecast just now.</p>`; }
-  map._popup && map._popup.update();
+  refitPopup(slot);
 }
+
+/* iPhone page zoom: block pinching the app's panels and buttons (the map keeps its own pinch), and if a text box zoomed the
+   page anyway, snap it back when you leave the box. */
+document.addEventListener("gesturestart", e => { if(!(e.target.closest && e.target.closest("#map"))) e.preventDefault(); }, { passive:false });
+document.addEventListener("focusout", e => {
+  if(!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !window.visualViewport || visualViewport.scale <= 1.01) return;
+  const m = document.querySelector('meta[name=viewport]'); if(!m) return;
+  const c = m.content; m.content = c + ",user-scalable=no"; setTimeout(() => { m.content = c; }, 300);
+});

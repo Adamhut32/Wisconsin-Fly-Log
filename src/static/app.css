@@ -307,7 +307,10 @@ ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 form.row2{flex-direction:row}
 form.row2 input{flex:1 1 auto}
 .loc input{flex:1 1 120px}
-@media (max-width:760px){ input,select,textarea{font-size:16px} }
+/* iPhones zoom the whole page into any text box under 16px and leave it zoomed: keep every box at 16px on phones */
+@media (max-width:760px){ input,select,textarea,.search input,.loc input{font-size:16px !important} }
+/* no double-tap page zoom on buttons and panels (the map keeps its own pinch and double-tap zoom) */
+html,body,button,.lgbtn,a{touch-action:manipulation}
 /* setup guide */
 .guide{z-index:1500}
 .guide .sheet{display:flex;flex-direction:column;gap:12px}

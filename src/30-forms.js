@@ -215,7 +215,7 @@ function passTapDown(e){
   const before = featureTaps;
   passingTap = true;
   try{
-    for(const R of [detailRenderer, areaRenderer, accessRenderer]){
+    for(const R of [detailRenderer, areaRenderer, accessR]){
       if(!R || !R._container || !map.hasLayer(R) || R._container === ev.target) continue;   // the layer that got the tap has had its say
       R._onClick(ev);
       if(featureTaps !== before) return true;

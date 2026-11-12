@@ -89,3 +89,10 @@ function totals(){
   const ids = new Set([...spots.map(s=>s.county), ...catches.map(c=>c.county)].filter(Boolean));
   return { spots:spots.length, fish:catches.reduce((a,c)=>a+fishOf(c),0), counties:ids.size };
 }
+
+/* Resize an open card after part of it fills in. (Calling the card's own update re-built cards made by a function, which then
+   updated again, forever: tapping a stream-flow pin froze instead of opening its card.) */
+function refitPopup(node){
+  const p = map._popup; if(!p || !p._contentNode || (node && !p._contentNode.contains(node))) return;
+  p._updateLayout(); p._updatePosition(); if(p._adjustPan) p._adjustPan();
+}

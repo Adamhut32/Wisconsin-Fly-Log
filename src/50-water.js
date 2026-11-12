@@ -56,7 +56,7 @@ async function regNear(cid, lat, lng, name){
 /* ---------- public land and easements ---------- */
 map.createPane("access"); map.getPane("access").style.zIndex = 410;
 const accessCache = {};
-let accessLayer = null, accessRenderer = null;
+let accessLayer = null;
 const ACCESS = {
   dnr:   { title:"DNR land", note:"Owned by the DNR and open to the public." },
   dnre:  { title:"DNR easement", note:"Public access through a DNR easement. On stream easements, access is usually limited to the stream corridor." },
@@ -69,31 +69,42 @@ function accessPopup(kind, name, extra){
   const a = ACCESS[kind] || ACCESS.dnr;
   return `<div class="pop"><h3>${esc(name || a.title)}</h3><div class="meta">${esc(a.title)}${extra?` · ${esc(extra)}`:""}</div><p style="margin:8px 0 4px">${esc(a.note)}</p><small class="muted">From DNR's public lands maps. Check posted signs and property rules before you go.</small></div>`;
 }
-let accessSeq = 0;
-async function loadAccess(id){
-  clearAccess();
-  if(!showAccess) return;
-  const seq = ++accessSeq;
-  let rows;
-  try{ rows = await getJSON(accessCache, dataUrl("access/" + id + ".json"), id); }catch(e){ return; }
-  if(detailFor !== id || !showAccess || seq !== accessSeq) return;   // a newer request (another county, the toggle) won
-  const R = accessRenderer = L.canvas({ pane:"access", tolerance:2 });
-  const g = accessLayer = L.layerGroup();
-  const col = css("--pub");
+/* Public land shows for every county on screen once you're zoomed in, like the creeks, not only in an opened county.
+   (Since tapping water stopped opening the county, public land almost never appeared.) One drawing surface is kept for good;
+   when nothing is on it, taps pass straight through to the map. */
+var accessGroups = {}, accessOn = new Set(), accessSeq = 0, accessR = null;
+function buildAccess(rows){
+  accessR ||= L.canvas({ pane:"access", tolerance:2, padding:canvasPad() });
+  const g = L.layerGroup(), col = css("--pub");
   for(const [kind, name, extra, rings] of rows){
-    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:R, color:col, weight: kind === "trout" || kind === "dnre" ? 1.4 : .8, dashArray: kind === "dnre" || kind === "trout" ? "4 3" : null, fillColor:col, fillOpacity: kind === "usfs" || kind === "cf" ? .12 : .26 });
+    const p = L.polygon(rings.map(r => r.map(q => [q[1], q[0]])), { renderer:accessR, color:col, weight: kind === "trout" || kind === "dnre" ? 1.4 : .8, dashArray: kind === "dnre" || kind === "trout" ? "4 3" : null, fillColor:col, fillOpacity: kind === "usfs" || kind === "cf" ? .12 : .26 });
     p.on("click", e => { if(picking){ handlePick(e.latlng); return; } waterTapAt = Date.now(); featureTaps++; L.popup({ maxWidth:280 }).setLatLng(e.latlng).setContent(accessPopup(kind, name, extra)).openOn(map); });
     g.addLayer(p);
   }
-  g.addTo(map);
+  return g;
 }
-function clearAccess(){
-  if(accessLayer){ map.removeLayer(accessLayer); accessLayer = null; }
-  if(accessRenderer){ dropCanvas(accessRenderer); accessRenderer = null; }
+async function syncAccess(){
+  if(!accessGroups) return;
+  const seq = ++accessSeq;
+  const want = new Set(showAccess ? [...(map.getZoom() >= AREA_ZOOM ? areaWant : []), detailFor].filter(Boolean) : []);
+  for(const id of [...accessOn]) if(!want.has(id)){ map.removeLayer(accessGroups[id]); accessOn.delete(id); }
+  map.getPane("access").style.pointerEvents = accessOn.size ? "" : "none";
+  await Promise.all([...want].map(async id => {
+    if(accessOn.has(id)) return;
+    if(!accessGroups[id]){ let rows; try{ rows = await getJSON(accessCache, dataUrl("access/" + id + ".json"), id); }catch(e){ return; } accessGroups[id] ||= buildAccess(rows); }
+    if(seq !== accessSeq || accessOn.has(id)) return;
+    accessGroups[id].addTo(map); accessOn.add(id);
+  }));
+  map.getPane("access").style.pointerEvents = accessOn.size ? "" : "none";
 }
+function loadAccess(){ syncAccess(); }
+function clearAccess(){ setTimeout(syncAccess, 0); }
+document.addEventListener("mapsettled", syncAccess);
+// once: switch public land back on (it had been turned off on some phones while it wasn't showing anyway)
+if(!lsGet("fl.accessReset1", false)){ showAccess = true; lsSet("fl.showAccess", true); lsSet("fl.accessReset1", true); }
 $("accessToggle").onclick = () => {
   showAccess = !showAccess; lsSet("fl.showAccess", showAccess);
   $("accessToggle").setAttribute("aria-pressed", showAccess); $("accessToggle").textContent = showAccess ? "Public land on" : "Public land off";
-  if(showAccess && detailFor) loadAccess(detailFor); else clearAccess();
+  syncAccess();
 };
 $("accessToggle").setAttribute("aria-pressed", showAccess); $("accessToggle").textContent = showAccess ? "Public land on" : "Public land off";
