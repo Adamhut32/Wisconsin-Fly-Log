@@ -31,7 +31,9 @@ function renderStatsTab(el){
   el.innerHTML = `<div class="eyebrow">Stats</div><h2>${statYear === "all" ? "All time" : statYear}</h2>
     <div class="yearsel"><button type="button" data-year="all" aria-pressed="${statYear==="all"}">All time</button>${years.map(y => `<button type="button" data-year="${y}" aria-pressed="${statYear===y}">${y}</button>`).join("")}</div>
     ${statFilterHtml(inYear)}
+    ${statFActive() ? "" : `${countdownHtml()}${seasonRecapHtml(statYear === "all" ? String(new Date().getFullYear()) : statYear)}`}
     <div class="stats four"><div class="stat f"><b>${fish}</b><span>fish</span></div><div class="stat"><b>${days}</b><span>days fished</span></div><div class="stat"><b>${sp.length}</b><span>species</span></div><div class="stat"><b>${tripCount}</b><span>trips</span></div></div>
+    ${statFActive() ? "" : challengesHtml() + streakHtml() + countyCompletionHtml()}
     ${cs.length ? `<h4><span>Fish by month</span></h4>${chart}
     <h4><span>Species</span></h4><table class="tbl"><thead><tr><th>Species</th><th class="n">Fish</th><th class="n">Biggest</th></tr></thead><tbody>${sp.map(([k,v]) => `<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${v.big ? lenTxt(v.big.length_in) : "–"}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">Add species to your catches to see them here.</td></tr>`}</tbody></table>
     ${(() => { const wt = {}; withFish.forEach(c => { if(c.water){ const k = c.water.toLowerCase(); (wt[k] ||= { name:c.water, n:0, days:new Set(), big:null }); wt[k].n += fishOf(c); wt[k].days.add(c.caught_on); if(c.length_in != null && (!wt[k].big || +c.length_in > +wt[k].big)) wt[k].big = +c.length_in; } });
