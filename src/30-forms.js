@@ -199,7 +199,7 @@ $("addCatchBtn").onclick = () => openForm("catch");
 $("addSpotBtn").onclick = () => openForm("spot");
 $("cancelBtn").onclick = closeForm;
 $("scrim").addEventListener("click", e => { if(e.target === $("scrim")) closeForm(); });
-document.addEventListener("keydown", e => { if(e.key === "Escape"){ if(picking) endPick(); else if(!$("scrim").hidden) closeForm(); else if(!$("tripScrim").hidden) closeTripForm(); } });
+document.addEventListener("keydown", e => { if(e.key === "Escape"){ if(measuring){ stopMeasure(); clearMeasure(); } else if(picking) endPick(); else if(!$("scrim").hidden) closeForm(); else if(!$("tripScrim").hidden) closeTripForm(); } });
 
 /* pick on map */
 $("pickBtn").onclick = () => {
@@ -210,6 +210,7 @@ $("pickBtn").onclick = () => {
 function endPick(){ picking = false; $("pickbar").hidden = true; $("fab").hidden = false; map.getContainer().style.cursor = ""; $("scrim").hidden = false; }
 $("pickCancel").onclick = endPick;
 function handlePick(ll){
+  if(measuring){ measureTo(ll); return; }
   $("fCoords").value = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
   if(pickMarker) map.removeLayer(pickMarker);
   pickMarker = L.circleMarker(ll, { radius:7, color:css("--ink"), weight:2, fillColor:css("--paper"), fillOpacity:1 }).addTo(map);

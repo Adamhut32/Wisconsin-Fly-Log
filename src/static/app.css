@@ -659,3 +659,29 @@ button.who{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6
 .pcell span{position:absolute;left:0;right:0;bottom:0;padding:3px 6px;font-size:11px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.65))}
 .pbig{display:flex;gap:6px;overflow-x:auto;scroll-snap-type:x mandatory;margin:-4px -4px 10px}
 .pbig img{flex:0 0 100%;max-height:55vh;object-fit:contain;border-radius:10px;scroll-snap-align:center;background:rgba(127,127,127,.12)}
+
+/* the season: countdown, recap, challenges, streak, counties, measuring */
+.countdown{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:13.5px}
+.seasonnote{margin:4px 0}
+.seasonnote.warn{color:var(--danger)}
+.card.recap{margin:10px 0 6px}
+.recapbig{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+.recapbig div{text-align:center}.recapbig b{display:block;font-size:22px}.recapbig span{font-size:12px;color:var(--muted)}
+.recaplist{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.recaplist li{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;border-top:1px solid var(--line);padding-top:4px}
+.recaplist span{color:var(--muted)}.recaplist b{text-align:right;font-weight:600}
+.chal{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.chal li{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:13.5px}
+.chal li b{font-weight:600}.chal li .cbar{grid-column:1}.chal li small{grid-row:2;grid-column:2;color:var(--muted)}
+.chal li.done b{color:var(--t1)}
+.cbar{display:block;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.cbar i{display:block;height:100%;background:var(--fish);border-radius:3px}
+.cbar.big{height:10px;flex:1}
+.cdone{display:flex;gap:10px;align-items:center}
+.streak{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 0 2px}
+.streak div{text-align:center;border:1px solid var(--line);border-radius:10px;padding:6px}.streak b{display:block;font-size:20px}.streak span{font-size:12px;color:var(--muted)}
+.cmode,.measurebar{position:fixed;left:16px;right:16px;margin:0 auto;width:fit-content;top:calc(env(safe-area-inset-top) + 118px);z-index:1200;background:var(--paper);color:var(--ink);border:1px solid var(--line);
+  border-radius:14px;padding:9px 14px;box-shadow:0 4px 16px rgba(0,0,0,.25);font-size:14px;line-height:1.35;display:block;text-align:center}
+.cmode .link,.measurebar .link{margin-left:8px;font-weight:700}
+.measurebar small{color:var(--muted)}
+.cmode[hidden],.measurebar[hidden]{display:none}
