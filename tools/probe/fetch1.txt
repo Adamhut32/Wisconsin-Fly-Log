@@ -1,1 +1,75 @@
-{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[-90.44333333,43.19805556]},"properties":{"monitoring_location_id":"USGS-05407000","monitoring_location_name":"WISCONSIN RIVER AT MUSCODA, WI","site_type":"Stream","site_type_code":"ST","country_code":"US","state_code":"55","county_code":"043","data":[{"parameter_code":"00060","unit_of_measure":"ft^3/s","parent_time_series_id":"89f98d67cb76436cb1c7e4fc4442a4fd","parent_statistic_id":"00003","parent_statistic_name":"Mean","values":[{"time_of_year":"11-11","time_of_year_type":"day_of_year","values":["3528.0","3872.0","4985.0","6400.0","9335.0","12920.0","15760.0"],"percentiles":["5","10","25","50","75","90","95"],"sample_count":113,"approval_status":"approved","computation_id":"fa25aa1a-6ab1-4440-adc0-1c5295af6608","computation":"percentile"}]}]}}],"next":null}
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_id": "USGS-423909090172100",
+        "time": "2010-10-01T04:45:00+00:00",
+        "value": "0.0000"
+      },
+      "id": "0045bb34-9800-4285-bcad-7943f044aec5",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_id": "USGS-05424075",
+        "time": "2002-12-01T05:45:00+00:00",
+        "value": "1.30"
+      },
+      "id": "007b9d36-4cc8-461f-bbc8-4ae9c99274f9",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_id": "USGS-04087204",
+        "time": "2026-11-13T02:00:00+00:00",
+        "value": "6.95"
+      },
+      "id": "009e9d51-8b94-4ed9-b845-ee2d10859b67",
+      "geometry": null
+    }
+  ],
+  "numberReturned": 3,
+  "links": [
+    {
+      "rel": "next",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?cursor=MDA5ZTlkNTEtOGI5NC00ZWQ5LWI4NDUtZWUyZDEwODU5YjY3&state_name=Wisconsin&parameter_code=00060&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true&f=json",
+      "type": "application/geo+json",
+      "title": "Items (next)"
+    },
+    {
+      "type": "application/geo+json",
+      "rel": "self",
+      "title": "This document as GeoJSON",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00060&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "rel": "alternate",
+      "type": "application/ld+json",
+      "title": "This document as RDF (JSON-LD)",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=jsonld&state_name=Wisconsin&parameter_code=00060&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "type": "text/html",
+      "rel": "alternate",
+      "title": "This document as HTML",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=html&state_name=Wisconsin&parameter_code=00060&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "type": "text/csv; charset=utf-8",
+      "rel": "alternate",
+      "title": "This document as CSV",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items?f=csv&state_name=Wisconsin&parameter_code=00060&limit=3&properties=monitoring_location_id,time,value&skipGeometry=true"
+    },
+    {
+      "type": "application/json",
+      "title": "Latest continuous",
+      "rel": "collection",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous"
+    }
+  ],
+  "timeStamp": "2026-11-13T03:10:45.703157Z"
+}
