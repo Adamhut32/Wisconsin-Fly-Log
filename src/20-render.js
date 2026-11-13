@@ -95,7 +95,7 @@ function spotVisits(s){
 function popupShell(kind, rec, inner){
   const div = document.createElement("div"); div.className = "pop";
   div.innerHTML = inner + (rec.lat != null ? `<div class="coords">${rec.lat.toFixed(5)}, ${rec.lng.toFixed(5)}</div>` : "") +
-    `<div class="row">${rec.lat != null ? `<a class="link" href="${gmaps(rec.lat,rec.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>` : ""}
+    `<div class="row">${rec.lat != null ? `${mapLinks(rec.lat,rec.lng)}` : ""}
     ${canWrite?`<button class="link" data-a="edit">Edit</button><button class="link danger" data-a="del">Delete</button>`:""}</div><div data-slot></div>`;
   div.addEventListener("click", ev => {
     const a = ev.target.closest("[data-a]"); if(!a) return;
@@ -139,7 +139,7 @@ function friendCatchPopup(c){
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
     ${photoGallery(c)}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
-    <div class="row">${c.lat!=null?`<a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
+    <div class="row">${c.lat!=null?`${mapLinks(c.lat,c.lng)}`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
   return div;
 }
 

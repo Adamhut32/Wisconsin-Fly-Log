@@ -1,5 +1,5 @@
 HTTP/2 200 
-date: Wed, 11 Nov 2026 16:34:23 GMT
+date: Fri, 13 Nov 2026 03:10:46 GMT
 content-type: application/json; charset=utf-8
 vary: Accept-Encoding
 access-control-allow-origin: *
@@ -15,15 +15,15 @@ referrer-policy: origin-when-cross-origin
 strict-transport-security: max-age=31536000; includeSubDomains; preload
 vary: Accept-Encoding
 vary: Accept-Encoding
-via: 1.1 c28e01aa413e9ea602538ccda1511062.cloudfront.net (CloudFront), https/1.1 api-umbrella (ApacheTrafficServer [cMsSf ])
-x-amz-cf-id: nrgjcav1w5RXv5o7ZHj9GzD0EZ5ZQ4oA7D-9PMzR4LeOocuKap-e9Q==
+via: 1.1 185f4b03b711932fc7e735c08fdc5abe.cloudfront.net (CloudFront), https/1.1 api-umbrella (ApacheTrafficServer [cMsSf ])
+x-amz-cf-id: ZO7duKlW2KkHguMpNt0iC0duanV8d2gBP8hjskuAWXEM76BqH1upLQ==
 x-amz-cf-pop: HIO52-P1
-x-api-umbrella-request-id: d1pdqu64t6135csm6gvg
+x-api-umbrella-request-id: d1qbhdu8j3s7qlmisdl0
 x-build-version: 1.11.2-7a153e8a
 x-cache: Miss from cloudfront
 x-content-type-options: nosniff
-x-vcap-request-id: 3f92c35e-5b9b-4e00-6782-30c2907a20de
+x-vcap-request-id: 91e62f12-e13f-40cd-4e95-0deff14d6aa6
 x-xss-protection: 1; mode=block
 x-frame-options: SAMEORIGIN
 
-https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-05407000&parameter_code=00060&time=P7D&limit=5&properties=time,value&skipGeometry=true
+https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00060&limit=2000&properties=monitoring_location_id,time,value&skipGeometry=true

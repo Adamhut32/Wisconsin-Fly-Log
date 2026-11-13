@@ -637,3 +637,25 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--muted);font-size
 .mk-place.park{width:22px;height:22px;border-radius:5px;background:#2f5f9e;border-color:#fff;color:#fff}
 .mk-place.park svg{width:13px;height:13px}
 #map.nopins .mk-place.park{display:none}
+
+/* sharing: exact spot for some friends */
+.exactrow{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:8px;border-top:1px dashed var(--line)}
+.exactrow .lbl{font-size:13px;color:var(--muted);font-weight:600}
+/* a friend's page */
+.pjump{cursor:pointer}
+button.who{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:700}
+.sheet.person{max-width:560px}
+.phead{display:flex;gap:14px;align-items:center;margin-bottom:6px}
+.phead h2{margin:0}
+.phead .av{width:64px;height:64px;font-size:24px}
+.pbio{margin:8px 0 12px;white-space:pre-wrap}
+.pstats{display:flex;gap:8px;margin:8px 0 14px}
+.pstats div{flex:1;background:var(--card2,rgba(127,127,127,.08));border-radius:10px;padding:8px 6px;text-align:center}
+.pstats b{display:block;font-size:20px}
+.pstats span{font-size:12px;color:var(--muted)}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:52vh;overflow:auto}
+.pcell{all:unset;cursor:pointer;position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:rgba(127,127,127,.12)}
+.pcell img{width:100%;height:100%;object-fit:cover;display:block}
+.pcell span{position:absolute;left:0;right:0;bottom:0;padding:3px 6px;font-size:11px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.pbig{display:flex;gap:6px;overflow-x:auto;scroll-snap-type:x mandatory;margin:-4px -4px 10px}
+.pbig img{flex:0 0 100%;max-height:55vh;object-fit:contain;border-radius:10px;scroll-snap-align:center;background:rgba(127,127,127,.12)}

@@ -26,27 +26,27 @@ function landingPopup(kind, r){
   if(kind === "s"){
     const [lat, lng, name, water, url] = r;
     div.innerHTML = `<h3>${esc(nice(name) || "Shore fishing site")}</h3><div class="meta">Shore fishing${water ? ` · ${esc(nice(water))}` : ""}</div>
-      <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${url && /^https?:\/\//.test(url) ? `<a class="link" href="${esc(url)}" target="_blank" rel="noopener">DNR page</a>` : ""}</div><small class="src">From the Wisconsin DNR's shore fishing sites.</small>`;
+      <div class="row">${mapLinks(lat, lng)}${url && /^https?:\/\//.test(url) ? `<a class="link" href="${esc(url)}" target="_blank" rel="noopener">DNR page</a>` : ""}</div><small class="src">From the Wisconsin DNR's shore fishing sites.</small>`;
   } else {
     const [lat, lng, name, type, ramp, ada, water, owner] = r, carry = /carry/i.test(type || "");
     const bits = [carry ? "Carry-in access (no ramp)" : ramp && !/unknown|none/i.test(ramp) ? `${nice(ramp)} ramp` : /ramp/i.test(type || "") ? "Boat ramp" : "Boat access", yesish(ada) ? "Accessible features" : "", owner ? `Managed by ${nice(owner)}` : ""].filter(Boolean);
     div.innerHTML = `<h3>${esc(nice(name) || "Boat landing")}</h3><div class="meta">${carry ? "Carry-in landing" : "Boat landing"}${water ? ` · ${esc(nice(water))}` : ""}</div>
       <ul class="facts">${bits.map(b => `<li>${esc(b)}</li>`).join("")}</ul>
-      <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">From the Wisconsin DNR's boat access list. Fees and parking aren't listed; check the sign at the landing.</small>`;
+      <div class="row">${mapLinks(lat, lng)}</div><small class="src">From the Wisconsin DNR's boat access list. Fees and parking aren't listed; check the sign at the landing.</small>`;
   }
   return div;
 }
 function parkPopup(r){
   const [lat, lng, name, note] = r, div = document.createElement("div"); div.className = "pop";
   div.innerHTML = `<h3>${esc(nice(name) || "DNR parking lot")}</h3><div class="meta">DNR parking lot</div>${note ? `<p class="note" style="margin:8px 0">${esc(note)}</p>` : ""}
-    <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">From the Wisconsin DNR's list of parking lots on its lands.</small>`;
+    <div class="row">${mapLinks(lat, lng)}</div><small class="src">From the Wisconsin DNR's list of parking lots on its lands.</small>`;
   return div;
 }
 function crossPopup(r){
   const [lat, lng, road, stream, cls] = r, div = document.createElement("div"); div.className = "pop";
   div.innerHTML = `<h3>${esc(road)}</h3><div class="meta">Road crossing · ${esc(stream)}${TROUT[cls] ? ` · <span class="tclass" style="background:var(${TROUT[cls].tok})">${TROUT[cls].label} trout</span>` : ""}</div>
     <p class="note" style="margin:8px 0">Public road crossings are a common way onto a stream. Park safely and legally off the road, stay in the water or within the road's right-of-way, and respect any posted signs. Not every crossing has room to park.</p>
-    <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">Worked out from U.S. Census road lines and DNR trout streams, so a few may be private or impassable.</small>`;
+    <div class="row">${mapLinks(lat, lng)}</div><small class="src">Worked out from U.S. Census road lines and DNR trout streams, so a few may be private or impassable.</small>`;
   div.addEventListener("click", ev => { if(ev.target.closest(".tclass")) showClassHelp(); });
   return div;
 }

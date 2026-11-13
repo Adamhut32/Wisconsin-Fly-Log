@@ -64,21 +64,29 @@ function setKind(k){
 $("segFish").onclick = () => setKind("catch");
 $("segSpot").onclick = () => setKind("spot");
 function setVis(v){ visibility = v; $("visSeg").querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v)); renderShareRow(); }
-/* spots can go to only some friends */
+/* spots and catches can go to only some friends, and chosen friends can get the exact place when everyone else sees the county */
 let shareWith = null; // null = all friends, otherwise a Set of friend ids
+let exactFor = null;  // null = nobody extra, otherwise a Set of friend ids who see the exact place
 function myFriends(){ return friendships.filter(f => f.status === "accepted").map(f => f.requester === me?.id ? f.addressee : f.requester).map(id => ({ id, name:people[id]?.display_name || "Friend" })).sort((a, b) => a.name.localeCompare(b.name)); }
 function renderShareRow(){
   const el = $("shareRow"); if(!el) return;
-  const fr = myFriends();
-  if(formKind !== "spot" || visibility === "private" || !fr.length){ el.hidden = true; return; }
+  const fr = myFriends(), what = formKind === "spot" ? "spot" : "catch";
+  if(visibility === "private" || !fr.length){ el.hidden = true; return; }
   el.hidden = false;
+  const pool = shareWith ? fr.filter(f => shareWith.has(f.id)) : fr;
+  if(exactFor) for(const id of [...exactFor]) if(!pool.some(f => f.id === id)) exactFor.delete(id);
   el.innerHTML = `<div class="seg vis sm" role="group" aria-label="Which friends"><button type="button" data-sw="all" aria-pressed="${!shareWith}">All friends</button><button type="button" data-sw="some" aria-pressed="${!!shareWith}">Only some</button></div>
     ${shareWith ? `<div class="chips">${fr.map(f => `<button type="button" class="chip" data-swid="${esc(f.id)}" aria-pressed="${shareWith.has(f.id)}">${esc(f.name)}</button>`).join("")}</div>
-    <small class="hint">${shareWith.size ? `Only ${shareWith.size === 1 ? "this friend sees" : `these ${shareWith.size} friends see`} it. Followers don't.` : "Pick at least one friend, or nobody sees it."}</small>` : ""}`;
+    <small class="hint">${shareWith.size ? `Only ${shareWith.size === 1 ? "this friend sees" : `these ${shareWith.size} friends see`} this ${what}. Followers don't.` : `Pick at least one friend, or nobody sees this ${what}.`}</small>` : ""}
+    ${visibility === "county" && pool.length ? `<div class="exactrow"><span class="lbl">Exact spot for</span><div class="seg vis sm" role="group" aria-label="Who sees the exact spot"><button type="button" data-ex="none" aria-pressed="${!exactFor}">Nobody</button><button type="button" data-ex="some" aria-pressed="${!!exactFor}">Some friends</button></div>
+      ${exactFor ? `<div class="chips">${pool.map(f => `<button type="button" class="chip" data-exid="${esc(f.id)}" aria-pressed="${exactFor.has(f.id)}">${esc(f.name)}</button>`).join("")}</div>
+      <small class="hint">${exactFor.size ? `${exactFor.size === 1 ? "This friend gets" : `These ${exactFor.size} friends get`} the exact place, water and notes. Everyone else sees the county.` : "Pick the friends who get the exact place."}</small>` : ""}</div>` : ""}`;
 }
 $("shareRow").addEventListener("click", e => {
   const a = e.target.closest("[data-sw]"); if(a){ shareWith = a.dataset.sw === "some" ? new Set(shareWith || []) : null; renderShareRow(); return; }
-  const c = e.target.closest("[data-swid]"); if(c){ shareWith.has(c.dataset.swid) ? shareWith.delete(c.dataset.swid) : shareWith.add(c.dataset.swid); renderShareRow(); }
+  const c = e.target.closest("[data-swid]"); if(c){ shareWith.has(c.dataset.swid) ? shareWith.delete(c.dataset.swid) : shareWith.add(c.dataset.swid); renderShareRow(); return; }
+  const x = e.target.closest("[data-ex]"); if(x){ exactFor = x.dataset.ex === "some" ? new Set(exactFor || []) : null; renderShareRow(); return; }
+  const y = e.target.closest("[data-exid]"); if(y){ exactFor.has(y.dataset.exid) ? exactFor.delete(y.dataset.exid) : exactFor.add(y.dataset.exid); renderShareRow(); }
 });
 $("visSeg").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if(b) setVis(b.dataset.v); });
 
@@ -173,6 +181,7 @@ function openForm(kind, rec, prefill){
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
   $("fMore").open = !!($("fTrip").value || $("fSpotLink").value); renderSpeciesChips();
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
+  exactFor = rec?.exact_for?.length ? new Set(rec.exact_for) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path), openedFor = ++formOpenSeq;
   ph2File = null; ph2Removed = false; $("fPhoto2").value = "";
@@ -267,7 +276,10 @@ $("entryForm").addEventListener("submit", async ev => {
   const btn = $("saveBtn"); btn.disabled = true; const label = btn.textContent; btn.textContent = "Saving…";
   try{
     const base = { id: editing ? editing.id : uuid(), lat: c ? c.lat : null, lng: c ? c.lng : null, county: c ? countyAt(c.lat,c.lng) : (editing?.county || null),
-      notes: $("fNotes").value.trim() || null, visibility };
+      notes: $("fNotes").value.trim() || null, visibility,
+      share_with: visibility !== "private" && shareWith ? [...shareWith] : null,
+      exact_for: visibility === "county" && exactFor && exactFor.size ? [...exactFor] : null };
+    if(base.share_with && !base.share_with.length){ err.textContent = `Pick at least one friend to share this ${formKind === "spot" ? "spot" : "catch"} with, or choose All friends.`; btn.disabled = false; btn.textContent = label; return; }
     let rec, table, blob = null, second = null;
     if(formKind==="catch"){
       table = "catches";
@@ -285,8 +297,7 @@ $("entryForm").addEventListener("submit", async ev => {
       if(second && !rec.photo_path && !blob && second.blob){ blob = second.blob; rec.photo_hash = second.hash; second = null; }   // only one photo: it becomes the main one
     } else {
       table = "spots";
-      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value, share_with: visibility !== "private" && shareWith ? [...shareWith] : null };
-      if(rec.share_with && !rec.share_with.length){ err.textContent = "Pick at least one friend to share this spot with, or choose All friends."; btn.disabled = false; btn.textContent = label; return; }
+      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value };
     }
     const wasEditing = !!editing;
     if(table === "catches") lsSet("fl.method", rec.method);
