@@ -97,6 +97,12 @@ function refitPopup(node){
   p._updateLayout(); p._updatePosition(); if(p._adjustPan) p._adjustPan();
 }
 
+/* Directions links: Google Maps for everyone, Apple Maps too on iPhones, iPads and Macs. */
+const appleDevice = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+const appleMaps = (lat, lng) => `https://maps.apple.com/?ll=${(+lat).toFixed(6)},${(+lng).toFixed(6)}&q=${encodeURIComponent("Pin")}`;
+const mapLinks = (lat, lng) => `<a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>` +
+  (appleDevice ? `<a class="link" href="${appleMaps(lat, lng)}" target="_blank" rel="noopener">Open in Apple Maps</a>` : "");
+
 const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:18, zoomSnap:0.25, preferCanvas:false });
 map.zoomControl.setPosition("topright");
 const wiBounds = L.geoJSON(GEO.counties).getBounds();
@@ -246,7 +252,7 @@ function waterPopup(name, kind, ll, trout, cid){
   const regHtml = reg ? `<div class="regs"><b>${esc(reg[1])}</b>${reg[3]?`<div><span>Season</span>${esc(reg[3])}</div>`:""}${reg[4]?`<div><span>Early season</span>${esc(reg[4])}</div>`:""}${reg[2]?`<div><span>Bag</span>${esc(reg[2])}</div>`:""}${reg[5]?`<div><span>Gear</span>${esc(reg[5])}</div>`:""}${reg[6]?`<div><span>Special</span>${esc(reg[6])}</div>`:""}${seasonHtml(reg)}<small>From DNR's trout regulation map. Check the current regulations before you fish.</small></div>` : "";
   div.innerHTML = `<h3>${esc(name)}</h3><div class="meta">${esc(kind)}${trout?` · <span class="tclass" style="background:var(${TROUT[trout.c].tok})">${TROUT[trout.c].label} trout</span>`:""}${trout && trout.mi?` · ${trout.mi} mi`:""}</div>${regHtml}
     <div class="coords">${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}</div>
-    <div class="row"><a class="link" href="${gmaps(ll.lat,ll.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${canWrite?`<button class="link" data-a="addspot">Add as spot</button><button class="link" data-a="planwater">Plan a trip</button>`:""}</div>
+    <div class="row">${mapLinks(ll.lat,ll.lng)}${canWrite?`<button class="link" data-a="addspot">Add as spot</button><button class="link" data-a="planwater">Plan a trip</button>`:""}</div>
     <div class="row dnr">${dnrLinks(kind, trout ? TROUT[trout.c].label : null)}</div>`;
   div.addEventListener("click", ev => {
     if(ev.target.closest(".tclass")){ showClassHelp(); return; }   // tap the class for what it means
@@ -794,7 +800,7 @@ function spotVisits(s){
 function popupShell(kind, rec, inner){
   const div = document.createElement("div"); div.className = "pop";
   div.innerHTML = inner + (rec.lat != null ? `<div class="coords">${rec.lat.toFixed(5)}, ${rec.lng.toFixed(5)}</div>` : "") +
-    `<div class="row">${rec.lat != null ? `<a class="link" href="${gmaps(rec.lat,rec.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>` : ""}
+    `<div class="row">${rec.lat != null ? `${mapLinks(rec.lat,rec.lng)}` : ""}
     ${canWrite?`<button class="link" data-a="edit">Edit</button><button class="link danger" data-a="del">Delete</button>`:""}</div><div data-slot></div>`;
   div.addEventListener("click", ev => {
     const a = ev.target.closest("[data-a]"); if(!a) return;
@@ -838,7 +844,7 @@ function friendCatchPopup(c){
     ${c.trip_name?`<div class="meta">Trip: ${esc(c.trip_name)}</div>`:""}
     ${photoGallery(c)}
     ${c.notes?`<p style="margin:6px 0">${esc(c.notes)}</p>`:""}
-    <div class="row">${c.lat!=null?`<a class="link" href="${gmaps(c.lat,c.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
+    <div class="row">${c.lat!=null?`${mapLinks(c.lat,c.lng)}`:""}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(c.user_id)}">See ${esc((c.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
   return div;
 }
 
@@ -1019,21 +1025,29 @@ function setKind(k){
 $("segFish").onclick = () => setKind("catch");
 $("segSpot").onclick = () => setKind("spot");
 function setVis(v){ visibility = v; $("visSeg").querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v)); renderShareRow(); }
-/* spots can go to only some friends */
+/* spots and catches can go to only some friends, and chosen friends can get the exact place when everyone else sees the county */
 let shareWith = null; // null = all friends, otherwise a Set of friend ids
+let exactFor = null;  // null = nobody extra, otherwise a Set of friend ids who see the exact place
 function myFriends(){ return friendships.filter(f => f.status === "accepted").map(f => f.requester === me?.id ? f.addressee : f.requester).map(id => ({ id, name:people[id]?.display_name || "Friend" })).sort((a, b) => a.name.localeCompare(b.name)); }
 function renderShareRow(){
   const el = $("shareRow"); if(!el) return;
-  const fr = myFriends();
-  if(formKind !== "spot" || visibility === "private" || !fr.length){ el.hidden = true; return; }
+  const fr = myFriends(), what = formKind === "spot" ? "spot" : "catch";
+  if(visibility === "private" || !fr.length){ el.hidden = true; return; }
   el.hidden = false;
+  const pool = shareWith ? fr.filter(f => shareWith.has(f.id)) : fr;
+  if(exactFor) for(const id of [...exactFor]) if(!pool.some(f => f.id === id)) exactFor.delete(id);
   el.innerHTML = `<div class="seg vis sm" role="group" aria-label="Which friends"><button type="button" data-sw="all" aria-pressed="${!shareWith}">All friends</button><button type="button" data-sw="some" aria-pressed="${!!shareWith}">Only some</button></div>
     ${shareWith ? `<div class="chips">${fr.map(f => `<button type="button" class="chip" data-swid="${esc(f.id)}" aria-pressed="${shareWith.has(f.id)}">${esc(f.name)}</button>`).join("")}</div>
-    <small class="hint">${shareWith.size ? `Only ${shareWith.size === 1 ? "this friend sees" : `these ${shareWith.size} friends see`} it. Followers don't.` : "Pick at least one friend, or nobody sees it."}</small>` : ""}`;
+    <small class="hint">${shareWith.size ? `Only ${shareWith.size === 1 ? "this friend sees" : `these ${shareWith.size} friends see`} this ${what}. Followers don't.` : `Pick at least one friend, or nobody sees this ${what}.`}</small>` : ""}
+    ${visibility === "county" && pool.length ? `<div class="exactrow"><span class="lbl">Exact spot for</span><div class="seg vis sm" role="group" aria-label="Who sees the exact spot"><button type="button" data-ex="none" aria-pressed="${!exactFor}">Nobody</button><button type="button" data-ex="some" aria-pressed="${!!exactFor}">Some friends</button></div>
+      ${exactFor ? `<div class="chips">${pool.map(f => `<button type="button" class="chip" data-exid="${esc(f.id)}" aria-pressed="${exactFor.has(f.id)}">${esc(f.name)}</button>`).join("")}</div>
+      <small class="hint">${exactFor.size ? `${exactFor.size === 1 ? "This friend gets" : `These ${exactFor.size} friends get`} the exact place, water and notes. Everyone else sees the county.` : "Pick the friends who get the exact place."}</small>` : ""}</div>` : ""}`;
 }
 $("shareRow").addEventListener("click", e => {
   const a = e.target.closest("[data-sw]"); if(a){ shareWith = a.dataset.sw === "some" ? new Set(shareWith || []) : null; renderShareRow(); return; }
-  const c = e.target.closest("[data-swid]"); if(c){ shareWith.has(c.dataset.swid) ? shareWith.delete(c.dataset.swid) : shareWith.add(c.dataset.swid); renderShareRow(); }
+  const c = e.target.closest("[data-swid]"); if(c){ shareWith.has(c.dataset.swid) ? shareWith.delete(c.dataset.swid) : shareWith.add(c.dataset.swid); renderShareRow(); return; }
+  const x = e.target.closest("[data-ex]"); if(x){ exactFor = x.dataset.ex === "some" ? new Set(exactFor || []) : null; renderShareRow(); return; }
+  const y = e.target.closest("[data-exid]"); if(y){ exactFor.has(y.dataset.exid) ? exactFor.delete(y.dataset.exid) : exactFor.add(y.dataset.exid); renderShareRow(); }
 });
 $("visSeg").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if(b) setVis(b.dataset.v); });
 
@@ -1128,6 +1142,7 @@ function openForm(kind, rec, prefill){
   fillSpotOptions(r.lat != null ? { lat:+r.lat, lng:+r.lng } : null); $("fSpotLink").value = r.spot_id || $("fSpotLink").value;
   $("fMore").open = !!($("fTrip").value || $("fSpotLink").value); renderSpeciesChips();
   shareWith = rec?.share_with?.length ? new Set(rec.share_with) : null;
+  exactFor = rec?.exact_for?.length ? new Set(rec.exact_for) : null;
   if(rec) setVis(rec.visibility); else renderShareRow();
   const url = photoSrc(r.photo_path), openedFor = ++formOpenSeq;
   ph2File = null; ph2Removed = false; $("fPhoto2").value = "";
@@ -1222,7 +1237,10 @@ $("entryForm").addEventListener("submit", async ev => {
   const btn = $("saveBtn"); btn.disabled = true; const label = btn.textContent; btn.textContent = "Saving…";
   try{
     const base = { id: editing ? editing.id : uuid(), lat: c ? c.lat : null, lng: c ? c.lng : null, county: c ? countyAt(c.lat,c.lng) : (editing?.county || null),
-      notes: $("fNotes").value.trim() || null, visibility };
+      notes: $("fNotes").value.trim() || null, visibility,
+      share_with: visibility !== "private" && shareWith ? [...shareWith] : null,
+      exact_for: visibility === "county" && exactFor && exactFor.size ? [...exactFor] : null };
+    if(base.share_with && !base.share_with.length){ err.textContent = `Pick at least one friend to share this ${formKind === "spot" ? "spot" : "catch"} with, or choose All friends.`; btn.disabled = false; btn.textContent = label; return; }
     let rec, table, blob = null, second = null;
     if(formKind==="catch"){
       table = "catches";
@@ -1240,8 +1258,7 @@ $("entryForm").addEventListener("submit", async ev => {
       if(second && !rec.photo_path && !blob && second.blob){ blob = second.blob; rec.photo_hash = second.hash; second = null; }   // only one photo: it becomes the main one
     } else {
       table = "spots";
-      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value, share_with: visibility !== "private" && shareWith ? [...shareWith] : null };
-      if(rec.share_with && !rec.share_with.length){ err.textContent = "Pick at least one friend to share this spot with, or choose All friends."; btn.disabled = false; btn.textContent = label; return; }
+      rec = { ...base, name:$("fName").value.trim(), water:$("fWater").value, trout_class:$("fClass").value || null, target:$("fTarget").value.trim() || null, status:$("fStatus").value };
     }
     const wasEditing = !!editing;
     if(table === "catches") lsSet("fl.method", rec.method);
@@ -1299,8 +1316,8 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","photo_time","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
-  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","photo_time","method","photo_hash","photo_meta","water","weight_lb","more_photos","share_with","exact_for"],
+  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with","exact_for"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"],
   outings: ["id","trip_id","fished_on","hours","water","lat","lng","county","notes","on_map"]
 };
@@ -1535,7 +1552,7 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username, bio").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     for(const c of catches){ photoSrc(c.photo_path); morePaths(c).forEach(photoSrc); }   // ask for every photo link in one go, so nothing waits later
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
@@ -2289,7 +2306,7 @@ function renderFriendsTab(el){
   if(friendsView === "feed"){
     const posts = friendCatches.slice(0, 40);
     body = posts.length ? `<div class="feed">${posts.map(c => { return `<article class="post">${photoGallery(c, "ph")}
-      <div class="pb"><span class="who">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}${titlePill(c.user_id)}</span>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
+      <div class="pb"><button type="button" class="who" data-person="${esc(c.user_id)}">${avHtml(c.user_id, c.display_name, "sm")}${esc(c.display_name)}${titlePill(c.user_id)}</button>${c.rel === "following" ? ` <span class="pill">Following</span>` : ""}<div class="what">${esc(c.species||"Fish")}${c.length_in?` · ${lenTxt(c.length_in)}`:""}${fishOf(c)!==1?` ×${fishOf(c)}`:""}</div>
       <small>${esc([fmtDate(c.caught_on), c.fly, countyName(c.county)].filter(Boolean).join(" · "))}</small>${c.trip_name?`<small>Trip: ${esc(c.trip_name)}</small>`:""}
       <div class="row2" style="margin-top:6px">${profile?.role === "creator" ? `<button class="link danger" type="button" data-hide="${esc(c.id)}">Hide from feeds</button>` : ""}${c.lat!=null?`<button class="link" type="button" data-go="f:${esc(c.id)}">Show on map</button>`:c.county?`<button class="link" type="button" data-county="${esc(c.county)}">Open ${esc(byId[c.county]?.properties.name || "")} County</button>`:""}</div></div></article>`; }).join("")}</div>`
       : `<div class="empty"><b>${accepted.length || follows.length ? "No shared catches yet" : "Add your fishing friends"}</b>${accepted.length || follows.length ? "When friends and anglers you follow log catches they share, they show up here." : "Tap Friends above to add people by friend code or name, or follow anglers from Find anglers. Their shared catches show up here and on the map."}</div>`;
@@ -2307,9 +2324,9 @@ function renderFriendsTab(el){
       </div><p class="note">Boards count your catches and what friends share with you. Private catches don't count toward anyone else's view.</p>`;
   } else {
     body = `<h4><span>Friends</span><span>${accepted.length}</span></h4>
-      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc((f.requester === me.id ? f.addressee : f.requester))}">Map</button><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
+      ${accepted.length ? `<ul class="list">${accepted.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default"><span data-person="${esc(f.requester === me.id ? f.addressee : f.requester)}" class="pjump">${avHtml((f.requester === me.id ? f.addressee : f.requester), other(f).display_name)}</span><span class="t pjump" data-person="${esc(f.requester === me.id ? f.addressee : f.requester)}"><b>${esc(other(f).display_name)}${titlePill((f.requester === me.id ? f.addressee : f.requester))}</b><small>${friendCatches.filter(c => c.user_id === (f.requester === me.id ? f.addressee : f.requester)).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span data-slot-${esc(f.id)} class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc((f.requester === me.id ? f.addressee : f.requester))}">Map</button><button class="btn sm" type="button" data-chat="${esc((f.requester === me.id ? f.addressee : f.requester))}">Message</button><button class="link danger" type="button" data-unfriend="${esc(f.id)}">Remove</button></span></li>`).join("")}</ul>` : `<p class="muted">No friends added yet.</p>`}
       <h4><span>Following</span><span>${follows.filter(f => f.direction === "following").length}</span></h4>
-      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.user_id, f.display_name)}<span class="t"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc(f.user_id)}">Map</button><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></span></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
+      ${follows.some(f => f.direction === "following") ? `<ul class="list">${follows.filter(f => f.direction === "following").map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default"><span data-person="${esc(f.user_id)}" class="pjump">${avHtml(f.user_id, f.display_name)}</span><span class="t pjump" data-person="${esc(f.user_id)}"><b>${esc(f.display_name)}</b><small>${friendCatches.filter(c => c.user_id === f.user_id).reduce((a,c)=>a+fishOf(c),0)} shared fish</small></span><span class="row2" style="margin:0;flex-wrap:nowrap"><button class="btn sm" type="button" data-pmap="${esc(f.user_id)}">Map</button><button class="link" type="button" data-unfollow="${esc(f.user_id)}">Unfollow</button></span></li>`).join("")}</ul>` : `<p class="muted">You aren't following anyone. Use Find anglers to follow people with public profiles.</p>`}
       <p class="muted" style="margin-top:10px">${follows.filter(f => f.direction === "follower").length} follower${follows.filter(f => f.direction === "follower").length===1?"":"s"}${profile?.is_public ? "" : ". Turn on a public profile in the Me tab to let people follow you."}</p>
       ${outgoing.length ? `<h4><span>Waiting on</span></h4><ul class="list">${outgoing.map(f => `<li class="item" style="grid-template-columns:36px 1fr auto;cursor:default">${avHtml(f.addressee, other(f).display_name)}<span class="t"><b>${esc(other(f).display_name)}</b><small>Request sent</small></span><button class="link" type="button" data-decline="${esc(f.id)}">Cancel</button></li>`).join("")}</ul>` : ""}`;
   }
@@ -3876,7 +3893,7 @@ function friendSpotPopup(s){
   div.innerHTML = `<div class="meta" style="color:var(--friend);font-weight:700">${esc(s.display_name)}'s spot</div>
     <h3>${esc(s.name || "Spot")}</h3>
     <div class="meta">${esc([s.water, s.trout_class, s.status === "want" ? "Wants to fish" : s.status === "scouted" ? "Scouted" : s.status === "fished" ? "Fished" : "", countyName(s.county)].filter(Boolean).join(" · "))}</div>
-    <div class="row"><a class="link" href="${gmaps(s.lat, s.lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(s.user_id)}">See ${esc((s.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
+    <div class="row">${mapLinks(s.lat, s.lng)}${mapPerson ? "" : `<button class="link" type="button" data-pmap="${esc(s.user_id)}">See ${esc((s.display_name || "their").split(" ")[0])}'s map</button>`}</div>`;
   return div;
 }
 function openPersonMap(id){
@@ -3908,6 +3925,45 @@ hidePins = lsGet("fl.hidePins", false);
 function syncPins(){ const b = $("pinsToggle"); b.setAttribute("aria-pressed", String(!hidePins)); b.textContent = hidePins ? "My pins off" : "My pins on"; document.getElementById("map").classList.toggle("nopins", hidePins); }
 $("pinsToggle").onclick = () => { hidePins = !hidePins; lsSet("fl.hidePins", hidePins); syncPins(); renderAll(); countyLayer.setStyle(countyStyle); toast(hidePins ? "Your spots and catches are hidden on the map." : "Your spots and catches are back."); };
 syncPins();
+
+/* ---------- a friend's page: picture, bio, title and the fish they share with you ---------- */
+function openPerson(id){
+  const pr = people[id] || follows.find(f => f.user_id === id) || {}, name = personName(id);
+  const fc = friendCatches.filter(c => c.user_id === id), fs = friendSpots.filter(s => s.user_id === id);
+  const fish = fc.reduce((a, c) => a + fishOf(c), 0), species = new Set(fc.map(c => c.species).filter(Boolean)).size;
+  const waters = new Set(fc.map(c => c.water).filter(Boolean)).size, counties = new Set(fc.map(c => c.county).filter(Boolean)).size;
+  const withPhotos = fc.filter(c => c.photo_path).slice(0, 60);
+  const biggest = fc.filter(c => c.length_in).sort((a, b) => b.length_in - a.length_in)[0];
+  const isFriend = friendships.some(f => f.status === "accepted" && (f.requester === id || f.addressee === id));
+  const v = document.createElement("div"); v.className = "scrim"; v.setAttribute("role", "dialog"); v.setAttribute("aria-label", name);
+  v.innerHTML = `<div class="sheet person">
+    <div class="phead">${avHtml(id, name, "lg")}<div><h2>${esc(name)}</h2>${pr.username ? `<div class="muted">@${esc(pr.username)}</div>` : ""}${titlePill(id)}</div></div>
+    ${pr.bio ? `<p class="pbio">${esc(pr.bio)}</p>` : ""}
+    <div class="pstats"><div><b>${fish}</b><span>fish</span></div><div><b>${species}</b><span>species</span></div><div><b>${waters || counties}</b><span>${waters ? "waters" : "counties"}</span></div>${biggest ? `<div><b>${+biggest.length_in}"</b><span>biggest</span></div>` : ""}</div>
+    ${withPhotos.length ? `<div class="pgrid">${withPhotos.map(c => `<button type="button" class="pcell" data-pcatch="${esc(c.id)}" aria-label="${esc(c.species || "Catch")}">${phImg(c.photo_path, `alt="${esc(c.species || "Catch")}" loading="lazy"`)}<span>${esc(c.species || "")}${c.length_in ? ` · ${+c.length_in}"` : ""}</span></button>`).join("")}</div>`
+      : `<p class="muted">${fish ? "No photos shared with you yet." : `${esc(name.split(" ")[0])} hasn't shared any fish with you yet.`}</p>`}
+    <p class="note">Only the fish and spots ${esc(name.split(" ")[0])} shares with you show here${fs.length ? `, plus ${fs.length} spot${fs.length === 1 ? "" : "s"} on their map` : ""}.</p>
+    <div class="row2"><button class="btn sm" type="button" data-pmap="${esc(id)}">Their map</button>${isFriend ? `<button class="btn sm" type="button" data-chat="${esc(id)}">Message</button>` : ""}<button class="btn ink sm" type="button" data-close>Close</button></div></div>`;
+  v.addEventListener("click", ev => {
+    if(ev.target === v || ev.target.closest("[data-close],[data-pmap],[data-chat]")) { setTimeout(() => v.remove(), 0); return; }
+    const pc = ev.target.closest("[data-pcatch]"); if(pc){ const c = fc.find(x => x.id === pc.dataset.pcatch); if(c) showPersonCatch(c, v); }
+  });
+  document.body.appendChild(v); hydratePhotos();
+}
+function showPersonCatch(c, host){
+  const box = document.createElement("div"); box.className = "scrim"; box.setAttribute("role", "dialog");
+  box.innerHTML = `<div class="sheet"><div class="pbig">${[c.photo_path, ...morePaths(c)].filter(Boolean).map(ph => phImg(ph, `alt="${esc(c.species || "Catch")} photo"`)).join("")}</div>
+    <h3 style="margin:0">${esc(c.species || "Catch")}${c.length_in ? ` · ${+c.length_in}"` : ""}${c.weight_lb ? ` · ${wtTxt(c.weight_lb)}` : ""}</h3>
+    <div class="meta">${esc([c.water, countyName(c.county), c.fly, c.caught_on ? fmtDate(c.caught_on) : ""].filter(Boolean).join(" · "))}</div>
+    ${c.notes ? `<p>${esc(c.notes)}</p>` : ""}
+    <div class="row2">${c.lat != null ? `<button class="btn sm" type="button" data-onmap>Show on map</button>` : ""}<button class="btn ink sm" type="button" data-close>Back</button></div></div>`;
+  box.addEventListener("click", ev => {
+    if(ev.target.closest("[data-onmap]")){ box.remove(); host.remove(); setTab("map"); if(typeof setCollapsed === "function") setCollapsed(true); map.setView([c.lat, c.lng], Math.max(map.getZoom(), 13)); return; }
+    if(ev.target === box || ev.target.closest("[data-close]")) box.remove();
+  });
+  document.body.appendChild(box); hydratePhotos();
+}
+document.addEventListener("click", e => { const p = e.target.closest("[data-person]"); if(p && !e.target.closest("[data-pmap],[data-chat],[data-unfriend],[data-unfollow]")){ e.preventDefault(); openPerson(p.dataset.person); } });
 
 
 /* ---------- where am I: show your position and mark a spot or catch right there ---------- */
@@ -4128,27 +4184,27 @@ function landingPopup(kind, r){
   if(kind === "s"){
     const [lat, lng, name, water, url] = r;
     div.innerHTML = `<h3>${esc(nice(name) || "Shore fishing site")}</h3><div class="meta">Shore fishing${water ? ` · ${esc(nice(water))}` : ""}</div>
-      <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>${url && /^https?:\/\//.test(url) ? `<a class="link" href="${esc(url)}" target="_blank" rel="noopener">DNR page</a>` : ""}</div><small class="src">From the Wisconsin DNR's shore fishing sites.</small>`;
+      <div class="row">${mapLinks(lat, lng)}${url && /^https?:\/\//.test(url) ? `<a class="link" href="${esc(url)}" target="_blank" rel="noopener">DNR page</a>` : ""}</div><small class="src">From the Wisconsin DNR's shore fishing sites.</small>`;
   } else {
     const [lat, lng, name, type, ramp, ada, water, owner] = r, carry = /carry/i.test(type || "");
     const bits = [carry ? "Carry-in access (no ramp)" : ramp && !/unknown|none/i.test(ramp) ? `${nice(ramp)} ramp` : /ramp/i.test(type || "") ? "Boat ramp" : "Boat access", yesish(ada) ? "Accessible features" : "", owner ? `Managed by ${nice(owner)}` : ""].filter(Boolean);
     div.innerHTML = `<h3>${esc(nice(name) || "Boat landing")}</h3><div class="meta">${carry ? "Carry-in landing" : "Boat landing"}${water ? ` · ${esc(nice(water))}` : ""}</div>
       <ul class="facts">${bits.map(b => `<li>${esc(b)}</li>`).join("")}</ul>
-      <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">From the Wisconsin DNR's boat access list. Fees and parking aren't listed; check the sign at the landing.</small>`;
+      <div class="row">${mapLinks(lat, lng)}</div><small class="src">From the Wisconsin DNR's boat access list. Fees and parking aren't listed; check the sign at the landing.</small>`;
   }
   return div;
 }
 function parkPopup(r){
   const [lat, lng, name, note] = r, div = document.createElement("div"); div.className = "pop";
   div.innerHTML = `<h3>${esc(nice(name) || "DNR parking lot")}</h3><div class="meta">DNR parking lot</div>${note ? `<p class="note" style="margin:8px 0">${esc(note)}</p>` : ""}
-    <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">From the Wisconsin DNR's list of parking lots on its lands.</small>`;
+    <div class="row">${mapLinks(lat, lng)}</div><small class="src">From the Wisconsin DNR's list of parking lots on its lands.</small>`;
   return div;
 }
 function crossPopup(r){
   const [lat, lng, road, stream, cls] = r, div = document.createElement("div"); div.className = "pop";
   div.innerHTML = `<h3>${esc(road)}</h3><div class="meta">Road crossing · ${esc(stream)}${TROUT[cls] ? ` · <span class="tclass" style="background:var(${TROUT[cls].tok})">${TROUT[cls].label} trout</span>` : ""}</div>
     <p class="note" style="margin:8px 0">Public road crossings are a common way onto a stream. Park safely and legally off the road, stay in the water or within the road's right-of-way, and respect any posted signs. Not every crossing has room to park.</p>
-    <div class="row"><a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a></div><small class="src">Worked out from U.S. Census road lines and DNR trout streams, so a few may be private or impassable.</small>`;
+    <div class="row">${mapLinks(lat, lng)}</div><small class="src">Worked out from U.S. Census road lines and DNR trout streams, so a few may be private or impassable.</small>`;
   div.addEventListener("click", ev => { if(ev.target.closest(".tclass")) showClassHelp(); });
   return div;
 }
