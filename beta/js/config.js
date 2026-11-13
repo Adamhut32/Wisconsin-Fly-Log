@@ -8,7 +8,7 @@ window.FLYLOG_CONFIG = {
   hdVersion: "1",
   // which copy of the app this is: "stable" for everyone, "beta" for the founder and admins to try first
   channel: "stable",
-  build: 32,
+  build: 33,
   // public half of the web-push key pair (the private half stays on the server)
   vapidPublic: "BAFYgNDOxLjIYZJGPCn-wk0N40Q5vMlgs0Uq6mCCnAzowULN-3TpQMtURzILuAC1_7mPxQVFGODIVHXxe3MZ-LU"
 };
