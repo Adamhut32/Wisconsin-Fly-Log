@@ -1,0 +1,29 @@
+# Opens the live app on GitHub's computer, which can reach the USGS and weather services, and saves what the stream flows do.
+# Run by hand only. Writes tools/probe/live/ on the branch it runs on; nothing reaches the app.
+name: Live check of outside services
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "Which copy to open: / for the live app, /beta/ for the test version"
+        default: "/"
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install playwright==1.48.0 && python -m playwright install --with-deps chromium
+      - run: (python3 -m http.server 8790 >/dev/null 2>&1 &) && sleep 2 && python3 tools/livecheck/check.py "http://localhost:8790${{ inputs.path }}"
+      - name: Save
+        run: |
+          git config user.name "Coulee live check"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/probe/live
+          git diff --cached --quiet && exit 0
+          git commit -m "Live check results"
+          git pull --rebase && git push
