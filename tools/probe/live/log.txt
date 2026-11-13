@@ -1,0 +1,59 @@
+phone console warning: Service Worker registration blocked by Playwright
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone view0: {"zoom":9.5,"showGauges":true,"gauges":null,"flowsAt":0,"nFlows":0,"pins":0,"shown":0,"sample":[]}
+phone 200 http://localhost:8790/data/gauges.json?v=1
+phone 200 http://localhost:8790/data/flownorms.json?v=1
+phone 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00010&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
+phone 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00060&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
+phone view1: {"zoom":10.5,"showGauges":true,"gauges":186,"flowsAt":1794539589157,"nFlows":195,"pins":1,"shown":1,"sample":["6,880 cfs"]}
+phone view2: {"zoom":11.5,"showGauges":true,"gauges":186,"flowsAt":1794539589157,"nFlows":195,"pins":1,"shown":1,"sample":["185 cfs"]}
+phone view3: {"zoom":12,"showGauges":true,"gauges":186,"flowsAt":1794539589157,"nFlows":195,"pins":6,"shown":6,"sample":["8.8 cfs","13 cfs","3.3 cfs","3.2 cfs"]}
+phone card: NO CARD
+desktop console warning: Service Worker registration blocked by Playwright
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop view0: {"zoom":9.5,"showGauges":true,"gauges":null,"flowsAt":0,"nFlows":0,"pins":0,"shown":0,"sample":[]}
+desktop 200 http://localhost:8790/data/gauges.json?v=1
+desktop 200 http://localhost:8790/data/flownorms.json?v=1
+desktop 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00010&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
+desktop 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00060&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
+desktop view1: {"zoom":10.5,"showGauges":true,"gauges":186,"flowsAt":1794539638752,"nFlows":195,"pins":4,"shown":4,"sample":["209 cfs","6,880 cfs","185 cfs","547 cfs"]}
+desktop view2: {"zoom":11.5,"showGauges":true,"gauges":186,"flowsAt":1794539638752,"nFlows":195,"pins":1,"shown":1,"sample":["185 cfs"]}
+desktop view3: {"zoom":12,"showGauges":true,"gauges":186,"flowsAt":1794539638752,"nFlows":195,"pins":13,"shown":13,"sample":["8.8 cfs","13 cfs","3.3 cfs","3.2 cfs"]}
+desktop card: NO CARD
