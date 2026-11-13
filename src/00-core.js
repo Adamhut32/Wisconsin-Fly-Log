@@ -96,3 +96,9 @@ function refitPopup(node){
   const p = map._popup; if(!p || !p._contentNode || (node && !p._contentNode.contains(node))) return;
   p._updateLayout(); p._updatePosition(); if(p._adjustPan) p._adjustPan();
 }
+
+/* Directions links: Google Maps for everyone, Apple Maps too on iPhones, iPads and Macs. */
+const appleDevice = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+const appleMaps = (lat, lng) => `https://maps.apple.com/?ll=${(+lat).toFixed(6)},${(+lng).toFixed(6)}&q=${encodeURIComponent("Pin")}`;
+const mapLinks = (lat, lng) => `<a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>` +
+  (appleDevice ? `<a class="link" href="${appleMaps(lat, lng)}" target="_blank" rel="noopener">Open in Apple Maps</a>` : "");

@@ -11,8 +11,8 @@ const sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 });
 try{ navigator.storage?.persist?.(); }catch(e){}
 const COLS = {
-  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","photo_time","method","photo_hash","photo_meta","water","weight_lb","more_photos"],
-  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with"],
+  catches: ["id","trip_id","spot_id","lat","lng","county","species","length_in","count","fly","caught_on","notes","photo_path","visibility","photo_taken_on","photo_time","method","photo_hash","photo_meta","water","weight_lb","more_photos","share_with","exact_for"],
+  spots: ["id","name","lat","lng","county","water","trout_class","target","notes","status","visibility","share_with","exact_for"],
   trips: ["id","name","start_date","end_date","base","notes","shared","waters"],
   outings: ["id","trip_id","fished_on","hours","water","lat","lng","county","notes","on_map"]
 };
@@ -247,7 +247,7 @@ async function loadAll(){
     friendCatches = fc.data || []; friendSpots = fs.data || []; friendTrips = ft.data || [];
     friendships = fr.data || []; profile = pr.data || profile;
     const ids = [...new Set(friendships.flatMap(f => [f.requester, f.addressee]).filter(id => id !== me.id))];
-    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
+    if(ids.length){ const { data } = await sb.from("profiles").select("id, display_name, avatar_path, title, username, bio").in("id", ids); people = Object.fromEntries((data || []).map(p => [p.id, p])); }
     for(const c of catches){ photoSrc(c.photo_path); morePaths(c).forEach(photoSrc); }   // ask for every photo link in one go, so nothing waits later
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
