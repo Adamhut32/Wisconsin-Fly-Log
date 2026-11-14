@@ -103,6 +103,16 @@ const appleMaps = (lat, lng) => `https://maps.apple.com/?ll=${(+lat).toFixed(6)}
 const mapLinks = (lat, lng) => `<a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>` +
   (appleDevice ? `<a class="link" href="${appleMaps(lat, lng)}" target="_blank" rel="noopener">Open in Apple Maps</a>` : "");
 
+/* A release-note line that only matters to the founder and admins: founder/admin tools and behind-the-scenes work.
+   Used to sort notes automatically (they can still be switched by hand). */
+function staffOnlyNote(line){
+  const t = String(line || "").toLowerCase();
+  // about tools only the founder and admins use (not lines that just mention them, like "accounts are approved by the founder")
+  if(/\b(founder tools|admin tools|staff tools|for (the )?(founder|admins|staff)|(founder|admins?|staff) can|(founder|admin|staff) (view|screen|page|panel|only)|approval queue|review queue|flag review|analytics|test version|testers?)\b/.test(t)) return true;
+  if(/behind[- ]the[- ]scenes|under the hood|server|database|backend|back end|refactor|clean ?up|code|logging|monitoring|internal|migration|deploy|build (script|process)|workflow/.test(t)) return true;
+  return false;
+}
+
 const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:18, zoomSnap:0.25, preferCanvas:false });
 map.zoomControl.setPosition("topright");
 const wiBounds = L.geoJSON(GEO.counties).getBounds();
@@ -1559,7 +1569,7 @@ async function loadAll(){
     for(const c of catches){ photoSrc(c.photo_path); morePaths(c).forEach(photoSrc); }   // ask for every photo link in one go, so nothing waits later
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
-    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && (!profile.onboarded || lsGet("fl.guideNext", false))) setTimeout(openGuideWhenClear, 600); else checkWhatsNew(); }
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
@@ -2798,8 +2808,8 @@ function renderCreator(el){
     <p class="muted" style="margin:0 0 6px">Everyone sees this once, the next time they open the app.</p>
     <form id="relForm" novalidate><input id="relTitle" maxlength="80" placeholder="Hatch chart and faster maps" aria-label="Update title">
       <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
-      <label class="check"><input type="checkbox" id="relStaff"> Only for founder and admins (tools and behind-the-scenes changes)</label>
-      <p class="muted" style="font-size:12.5px;margin:2px 0 0">Keep notes to the big things people will notice. They show to each person once their app has this build (${CFG.build || "?"}).</p>
+      <div id="relSort" class="relsort" aria-live="polite"></div>
+      <p class="muted" style="font-size:12.5px;margin:2px 0 0">Founder tools and behind-the-scenes changes are sorted out on their own and only shown to you and the admins. Tap a line's label to switch it. Notes show to each person once their app has this build (${CFG.build || "?"}).</p>
       <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
     ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}${r.audience === "staff" ? " · founder & admins only" : ""}${r.build ? ` · build ${r.build}` : ""}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
     ${suggestionsInboxHtml()}
@@ -2811,14 +2821,27 @@ function renderCreator(el){
       <li>Make someone an Admin or Verified from Accounts above. Admins can approve accounts and answer suggestions.</li>
     </ul>`;
   if(!$("relForm")) return;
+  const relLines = () => $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
+  const relFlip = new Map();   // lines you switched by hand
+  const relIsStaff = line => relFlip.has(line) ? relFlip.get(line) : staffOnlyNote(line);
+  const drawRelSort = () => {
+    const lines = relLines(), box = $("relSort"); if(!box) return;
+    box.innerHTML = lines.length ? lines.map((l, i) => `<div class="relline"><button type="button" class="relaud ${relIsStaff(l) ? "staff" : ""}" data-rel="${i}">${relIsStaff(l) ? "Founder &amp; admins" : "Everyone"}</button><span>${esc(l)}</span></div>`).join("") : "";
+  };
+  $("relItems").addEventListener("input", drawRelSort);
+  $("relSort").addEventListener("click", e => { const b = e.target.closest("[data-rel]"); if(!b) return; const l = relLines()[+b.dataset.rel]; relFlip.set(l, !relIsStaff(l)); drawRelSort(); });
   $("relForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("relMsg"); msg.className = "hint bad";
-    const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
+    const title = $("relTitle").value.trim(), items = relLines();
     if(title.length < 2){ msg.textContent = "Add a title."; return; }
     if(!items.length || items.length > 12){ msg.textContent = "Add 1 to 12 changes, one per line."; return; }
-    const { error } = await sb.from("releases").insert({ title, items, build:CFG.build || null, audience: $("relStaff")?.checked ? "staff" : "all" });
+    const pub = items.filter(l => !relIsStaff(l)), staff = items.filter(l => relIsStaff(l)), rows = [];
+    if(pub.length) rows.push({ title, items:pub, build:CFG.build || null, audience:"all" });
+    if(staff.length) rows.push({ title: pub.length ? "Behind the scenes" : title, items:staff, build:CFG.build || null, audience:"staff" });
+    const { error } = await sb.from("releases").insert(rows);
     if(error){ msg.textContent = "Couldn't publish it. Try again."; return; }
-    toast("Published. Everyone sees it next time they open the app."); loadCreator();
+    toast(pub.length ? `Published. Everyone sees ${pub.length === items.length ? "it" : `${pub.length} of the ${items.length} lines`} next time they open the app.` : "Published for you and the admins only.");
+    relFlip.clear(); loadCreator();
   });
   $("annForm").addEventListener("submit", async e => {
     e.preventDefault(); const body = $("annBody").value.trim(); if(body.length < 2) return;
@@ -2924,7 +2947,10 @@ function renderGuide(){
       err => { m.className = "hint bad"; m.textContent = err.code === 1 ? "Location is blocked. Use the Settings steps above, then try again." : "Couldn't get a fix. Try again outside."; }, { enableHighAccuracy:true, timeout:15000 });
   };
 }
+// wait for the username question to be answered first, so the two never sit on top of each other
+function openGuideWhenClear(){ if(!$("unameScrim").hidden){ setTimeout(openGuideWhenClear, 1200); return; } openGuide(); }
 async function finishGuide(){
+  lsSet("fl.guideNext", false);
   $("guide").hidden = true; $("coachRing").hidden = true; coachDim.hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
   if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
     await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
@@ -3447,11 +3473,11 @@ function titlesHtml(){
   const next = list.filter(b => !b.earned).sort((a, b) => (focus.has(b.id) - focus.has(a.id)) || (b.v / b.goal - a.v / a.goal)).slice(0, 6);
   const hist = catches.filter(beforeJoin).length;
   return `<h4><span>Titles</span><span>${got.length}/${list.length}</span></h4>
-    ${got.length ? `<div class="badges">${got.map(b => `<span class="badge on" title="${esc(b.desc)}"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span>`).join("")}</div>` : `<p class="muted" style="margin:0 0 8px">Log fish to earn titles like Bass Master and Brookie Hunter.</p>`}
+    ${got.length ? `<div class="badges">${got.map(b => `<span class="badge on" title="${esc(b.desc)}"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small>${b.id === "counties72" ? `<button class="link" type="button" data-a="club72">See counties</button>` : ""}</span>`).join("")}</div>` : `<p class="muted" style="margin:0 0 8px">Log fish to earn titles like Bass Master and Brookie Hunter.</p>`}
     ${hist ? `<p class="note">${hist} catch${hist === 1 ? "" : "es"} from before you joined Coulee ${hist === 1 ? "is" : "are"} in your log and stats, but titles and friend leaderboards only count fish caught since you joined.</p>` : ""}
     ${titlesAll
-      ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Every title (${list.length - got.length} still to earn)</p><div class="badges">${list.filter(b => !b.earned).map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>`
-      : next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em></span>`).join("")}</div>` : ""}
+      ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Every title (${list.length - got.length} still to earn)</p><div class="badges">${list.filter(b => !b.earned).map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em>${b.id === "counties72" ? `<button class="link" type="button" data-a="club72">See counties</button>` : ""}</span>`).join("")}</div>`
+      : next.length ? `<p class="muted" style="margin:10px 0 6px;font-size:13px">Up next</p><div class="badges">${next.map(b => `<span class="badge"><b>${esc(b.name)}</b><small>${esc(b.desc)}</small><i style="--p:${Math.round(100 * b.v / b.goal)}%"></i><em>${b.v}/${b.goal}</em>${b.id === "counties72" ? `<button class="link" type="button" data-a="club72">See counties</button>` : ""}</span>`).join("")}</div>` : ""}
     <button class="link" type="button" data-a="alltitles" style="margin-top:6px">${titlesAll ? "Show just what's up next" : `See all ${list.length} titles`}</button>`;
 }
 function titlePickerHtml(){
@@ -4534,7 +4560,9 @@ function streakHtml(){
 
 /* ----- county completion ----- */
 var countyModeOn = false;
-function myCounties(){ return new Set(catches.filter(c => fishOf(c) > 0 && c.county).map(c => String(c.county)).filter(id => counties.some(f => f.id === id))); }
+// club = only fish that count for titles (caught since joining Coulee), as the 72 Club counts them
+var countyModeClub = false;
+function myCounties(club){ return new Set(catches.filter(c => fishOf(c) > 0 && c.county && (!club || countsForTitles(c))).map(c => String(c.county)).filter(id => counties.some(f => f.id === id))); }
 function countyCompletionHtml(){
   const mine = myCounties(), n = mine.size;
   return `<h4><span>Counties fished</span><span>${n} of 72</span></h4><div class="cdone"><span class="cbar big"><i style="width:${Math.round(100 * n / 72)}%"></i></span>
@@ -4542,22 +4570,24 @@ function countyCompletionHtml(){
 }
 function countyMode(f){
   if(!countyModeOn) return null;
-  const has = myCounties().has(f.id);
+  const has = myCounties(countyModeClub).has(f.id);
   if(currentCounty === f.id) return null;
   return { color: css("--county-edge"), weight: .9, fillColor: has ? css("--fish") : css("--ink"), fillOpacity: has ? .5 : .06 };
 }
-function setCountyMode(on){
-  countyModeOn = on; countyLayer.setStyle(countyStyle);
+function setCountyMode(on, club){
+  countyModeOn = on; countyModeClub = !!(on && club); countyLayer.setStyle(countyStyle);
   let chip = $("cmodeChip");
   if(on){
     if(!chip){ chip = document.createElement("div"); chip.id = "cmodeChip"; chip.className = "cmode"; document.querySelector(".mapwrap, #map").after(chip); }
-    chip.innerHTML = `<b>Your counties</b> ${myCounties().size} of 72 <button type="button" class="link" data-a="countymode-off">Done</button>`;
+    chip.innerHTML = `<b>${countyModeClub ? "72 Club" : "Your counties"}</b> ${myCounties(countyModeClub).size} of 72 <button type="button" class="link" data-a="countymode-off">Done</button>`;
     chip.hidden = false; setTab("map"); if(typeof setCollapsed === "function") setCollapsed(true); if(currentCounty) backToState(); else fitState();
   } else if(chip) chip.hidden = true;
   renderLog();
 }
 document.addEventListener("click", e => {
-  if(e.target.closest('[data-a="countymode"]')) setCountyMode(!countyModeOn);
+  if(e.target.closest('[data-a="countymode"]')) setCountyMode(!(countyModeOn && !countyModeClub));
+  else if(e.target.closest('[data-a="club72map"]')){ document.getElementById("club72")?.remove(); setCountyMode(true, true); }
+  else if(e.target.closest('[data-a="club72"]')) openClub72();
   else if(e.target.closest('[data-a="countymode-off"]')) setCountyMode(false);
 });
 
@@ -4623,6 +4653,23 @@ function measureTo(ll){
   }
 }
 document.addEventListener("click", e => { const b = e.target.closest('[data-a="measure"]'); if(b){ e.preventDefault(); startMeasure(b.dataset.name, +b.dataset.lat, +b.dataset.lng); } });
+
+/* ----- the 72 Club: which counties are done and which still need a fish (fish caught since joining only) ----- */
+function openClub72(){
+  const done = myCounties(true), left = counties.filter(f => !done.has(f.id));
+  const nm = id => countyName(id).replace(/ County$/, "");
+  const hist = catches.some(c => beforeJoin(c) && c.county && !done.has(String(c.county)));
+  const v = document.createElement("div"); v.className = "scrim"; v.id = "club72"; v.setAttribute("role", "dialog"); v.setAttribute("aria-label", "72 Club");
+  v.innerHTML = `<div class="sheet"><div class="eyebrow">Title</div><h2 style="margin:0 0 4px">72 Club</h2>
+    <p class="muted" style="margin:0 0 10px">Catch a fish in every Wisconsin county. ${done.size} of 72 done, ${left.length} to go.</p>
+    <span class="cbar big" style="display:block;margin-bottom:12px"><i style="width:${Math.round(100 * done.size / 72)}%"></i></span>
+    ${done.size ? `<div class="eyebrow">Done (${done.size})</div><div class="cchips">${[...done].map(nm).sort().map(n => `<span class="cchip done">✓ ${esc(n)}</span>`).join("")}</div>` : ""}
+    <div class="eyebrow" style="margin-top:12px">Still need a fish (${left.length})</div><div class="cchips">${left.map(f => nm(f.id)).sort().map(n => `<span class="cchip">${esc(n)}</span>`).join("")}</div>
+    ${hist ? `<p class="note">Fish from before you joined Coulee don't count toward titles, so those counties still show as needed here.</p>` : ""}
+    <div class="row2" style="margin-top:12px"><button class="btn sm" type="button" data-a="club72map">Show on map</button><button class="btn ink sm" type="button" data-close>Close</button></div></div>`;
+  v.addEventListener("click", ev => { if(ev.target === v || ev.target.closest("[data-close]")) v.remove(); });
+  document.body.appendChild(v);
+}
 
 
 /* ================= Phase 4: notifications, forums, messages, reports ================= */
@@ -5314,10 +5361,13 @@ $("authForm").addEventListener("submit", async e => {
       if(why === "confirm") throw new Error("Confirm your email first. Check your inbox for the link.");
       if(why === "down") throw new Error("Couldn't check that username right now. Try again, or sign in with your email.");
       if(why || !data?.access_token) throw new Error("That username and password don't match.");
+      lsSet("fl.guideNext", true);   // show the setup guide once this sign-in finishes loading
       const set = await sb.auth.setSession({ access_token:data.access_token, refresh_token:data.refresh_token });
-      if(set.error) throw new Error("Couldn't finish signing in. Try again, or sign in with your email.");
+      if(set.error){ lsSet("fl.guideNext", false); throw new Error("Couldn't finish signing in. Try again, or sign in with your email."); }
     } else if(authMode === "in"){
+      lsSet("fl.guideNext", true);
       const { error } = await sb.auth.signInWithPassword({ email, password:pw });
+      if(error) lsSet("fl.guideNext", false);
       if(error) throw new Error(/confirm/i.test(error.message) ? "Confirm your email first. Check your inbox for the link." : "That email and password don't match.");
     } else if(authMode === "up"){
       const { data, error } = await sb.auth.signUp({ email, password:pw, options:{ data:{ display_name:$("aName").value.trim(), birth_year:$("aYear").value.trim(), terms_version:String(TERMS_VERSION) }, emailRedirectTo:redirect } });
