@@ -102,3 +102,13 @@ const appleDevice = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
 const appleMaps = (lat, lng) => `https://maps.apple.com/?ll=${(+lat).toFixed(6)},${(+lng).toFixed(6)}&q=${encodeURIComponent("Pin")}`;
 const mapLinks = (lat, lng) => `<a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>` +
   (appleDevice ? `<a class="link" href="${appleMaps(lat, lng)}" target="_blank" rel="noopener">Open in Apple Maps</a>` : "");
+
+/* A release-note line that only matters to the founder and admins: founder/admin tools and behind-the-scenes work.
+   Used to sort notes automatically (they can still be switched by hand). */
+function staffOnlyNote(line){
+  const t = String(line || "").toLowerCase();
+  // about tools only the founder and admins use (not lines that just mention them, like "accounts are approved by the founder")
+  if(/\b(founder tools|admin tools|staff tools|for (the )?(founder|admins|staff)|(founder|admins?|staff) can|(founder|admin|staff) (view|screen|page|panel|only)|approval queue|review queue|flag review|analytics|test version|testers?)\b/.test(t)) return true;
+  if(/behind[- ]the[- ]scenes|under the hood|server|database|backend|back end|refactor|clean ?up|code|logging|monitoring|internal|migration|deploy|build (script|process)|workflow/.test(t)) return true;
+  return false;
+}
