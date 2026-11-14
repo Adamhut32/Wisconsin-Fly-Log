@@ -1559,7 +1559,7 @@ async function loadAll(){
     for(const c of catches){ photoSrc(c.photo_path); morePaths(c).forEach(photoSrc); }   // ask for every photo link in one go, so nothing waits later
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
-    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && (!profile.onboarded || lsGet("fl.guideNext", false))) setTimeout(openGuideWhenClear, 600); else checkWhatsNew(); }
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }
@@ -2924,7 +2924,10 @@ function renderGuide(){
       err => { m.className = "hint bad"; m.textContent = err.code === 1 ? "Location is blocked. Use the Settings steps above, then try again." : "Couldn't get a fix. Try again outside."; }, { enableHighAccuracy:true, timeout:15000 });
   };
 }
+// wait for the username question to be answered first, so the two never sit on top of each other
+function openGuideWhenClear(){ if(!$("unameScrim").hidden){ setTimeout(openGuideWhenClear, 1200); return; } openGuide(); }
 async function finishGuide(){
+  lsSet("fl.guideNext", false);
   $("guide").hidden = true; $("coachRing").hidden = true; coachDim.hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
   if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
     await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
@@ -4538,7 +4541,11 @@ function myCounties(){ return new Set(catches.filter(c => fishOf(c) > 0 && c.cou
 function countyCompletionHtml(){
   const mine = myCounties(), n = mine.size;
   return `<h4><span>Counties fished</span><span>${n} of 72</span></h4><div class="cdone"><span class="cbar big"><i style="width:${Math.round(100 * n / 72)}%"></i></span>
-    <button class="btn sm" type="button" data-a="countymode">${countyModeOn ? "Hide on map" : "Show on map"}</button></div>`;
+    <button class="btn sm" type="button" data-a="countymode">${countyModeOn ? "Hide on map" : "Show on map"}</button></div>
+    <details class="clist"><summary>See which counties${n ? "" : " are left"}</summary>
+      ${n ? `<div class="eyebrow">Fished (${n})</div><div class="cchips">${[...mine].map(id => countyName(id).replace(/ County$/, "")).sort().map(nm => `<span class="cchip done">✓ ${esc(nm)}</span>`).join("")}</div>` : ""}
+      <div class="eyebrow">Not yet (${72 - n})</div><div class="cchips">${counties.filter(f => !mine.has(f.id)).map(f => countyName(f.id).replace(/ County$/, "")).sort().map(nm => `<span class="cchip">${esc(nm)}</span>`).join("")}</div>
+    </details>`;
 }
 function countyMode(f){
   if(!countyModeOn) return null;
@@ -5314,10 +5321,13 @@ $("authForm").addEventListener("submit", async e => {
       if(why === "confirm") throw new Error("Confirm your email first. Check your inbox for the link.");
       if(why === "down") throw new Error("Couldn't check that username right now. Try again, or sign in with your email.");
       if(why || !data?.access_token) throw new Error("That username and password don't match.");
+      lsSet("fl.guideNext", true);   // show the setup guide once this sign-in finishes loading
       const set = await sb.auth.setSession({ access_token:data.access_token, refresh_token:data.refresh_token });
-      if(set.error) throw new Error("Couldn't finish signing in. Try again, or sign in with your email.");
+      if(set.error){ lsSet("fl.guideNext", false); throw new Error("Couldn't finish signing in. Try again, or sign in with your email."); }
     } else if(authMode === "in"){
+      lsSet("fl.guideNext", true);
       const { error } = await sb.auth.signInWithPassword({ email, password:pw });
+      if(error) lsSet("fl.guideNext", false);
       if(error) throw new Error(/confirm/i.test(error.message) ? "Confirm your email first. Check your inbox for the link." : "That email and password don't match.");
     } else if(authMode === "up"){
       const { data, error } = await sb.auth.signUp({ email, password:pw, options:{ data:{ display_name:$("aName").value.trim(), birth_year:$("aYear").value.trim(), terms_version:String(TERMS_VERSION) }, emailRedirectTo:redirect } });

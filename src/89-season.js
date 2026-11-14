@@ -128,7 +128,11 @@ function myCounties(){ return new Set(catches.filter(c => fishOf(c) > 0 && c.cou
 function countyCompletionHtml(){
   const mine = myCounties(), n = mine.size;
   return `<h4><span>Counties fished</span><span>${n} of 72</span></h4><div class="cdone"><span class="cbar big"><i style="width:${Math.round(100 * n / 72)}%"></i></span>
-    <button class="btn sm" type="button" data-a="countymode">${countyModeOn ? "Hide on map" : "Show on map"}</button></div>`;
+    <button class="btn sm" type="button" data-a="countymode">${countyModeOn ? "Hide on map" : "Show on map"}</button></div>
+    <details class="clist"><summary>See which counties${n ? "" : " are left"}</summary>
+      ${n ? `<div class="eyebrow">Fished (${n})</div><div class="cchips">${[...mine].map(id => countyName(id).replace(/ County$/, "")).sort().map(nm => `<span class="cchip done">✓ ${esc(nm)}</span>`).join("")}</div>` : ""}
+      <div class="eyebrow">Not yet (${72 - n})</div><div class="cchips">${counties.filter(f => !mine.has(f.id)).map(f => countyName(f.id).replace(/ County$/, "")).sort().map(nm => `<span class="cchip">${esc(nm)}</span>`).join("")}</div>
+    </details>`;
 }
 function countyMode(f){
   if(!countyModeOn) return null;

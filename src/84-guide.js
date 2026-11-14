@@ -62,7 +62,10 @@ function renderGuide(){
       err => { m.className = "hint bad"; m.textContent = err.code === 1 ? "Location is blocked. Use the Settings steps above, then try again." : "Couldn't get a fix. Try again outside."; }, { enableHighAccuracy:true, timeout:15000 });
   };
 }
+// wait for the username question to be answered first, so the two never sit on top of each other
+function openGuideWhenClear(){ if(!$("unameScrim").hidden){ setTimeout(openGuideWhenClear, 1200); return; } openGuide(); }
 async function finishGuide(){
+  lsSet("fl.guideNext", false);
   $("guide").hidden = true; $("coachRing").hidden = true; coachDim.hidden = true; $("guide").classList.remove("coach"); $("guide").querySelector(".sheet").style.cssText = "";
   if(profile && !profile.onboarded){ const last = await latestReleaseId().catch(() => 0); profile.onboarded = true; profile.last_seen_release = last; saveCache();
     await sb.from("profiles").update({ onboarded:true, last_seen_release:last }).eq("id", me.id); }
