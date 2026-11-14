@@ -103,6 +103,16 @@ const appleMaps = (lat, lng) => `https://maps.apple.com/?ll=${(+lat).toFixed(6)}
 const mapLinks = (lat, lng) => `<a class="link" href="${gmaps(lat, lng)}" target="_blank" rel="noopener">Open in Google Maps</a>` +
   (appleDevice ? `<a class="link" href="${appleMaps(lat, lng)}" target="_blank" rel="noopener">Open in Apple Maps</a>` : "");
 
+/* A release-note line that only matters to the founder and admins: founder/admin tools and behind-the-scenes work.
+   Used to sort notes automatically (they can still be switched by hand). */
+function staffOnlyNote(line){
+  const t = String(line || "").toLowerCase();
+  // about tools only the founder and admins use (not lines that just mention them, like "accounts are approved by the founder")
+  if(/\b(founder tools|admin tools|staff tools|for (the )?(founder|admins|staff)|(founder|admins?|staff) can|(founder|admin|staff) (view|screen|page|panel|only)|approval queue|review queue|flag review|analytics|test version|testers?)\b/.test(t)) return true;
+  if(/behind[- ]the[- ]scenes|under the hood|server|database|backend|back end|refactor|clean ?up|code|logging|monitoring|internal|migration|deploy|build (script|process)|workflow/.test(t)) return true;
+  return false;
+}
+
 const map = L.map("map", { zoomControl:true, attributionControl:false, minZoom:6, maxZoom:18, zoomSnap:0.25, preferCanvas:false });
 map.zoomControl.setPosition("topright");
 const wiBounds = L.geoJSON(GEO.counties).getBounds();
@@ -2798,8 +2808,8 @@ function renderCreator(el){
     <p class="muted" style="margin:0 0 6px">Everyone sees this once, the next time they open the app.</p>
     <form id="relForm" novalidate><input id="relTitle" maxlength="80" placeholder="Hatch chart and faster maps" aria-label="Update title">
       <textarea id="relItems" placeholder="One change per line" aria-label="Changes, one per line" style="margin-top:8px;min-height:90px"></textarea>
-      <label class="check"><input type="checkbox" id="relStaff"> Only for founder and admins (tools and behind-the-scenes changes)</label>
-      <p class="muted" style="font-size:12.5px;margin:2px 0 0">Keep notes to the big things people will notice. They show to each person once their app has this build (${CFG.build || "?"}).</p>
+      <div id="relSort" class="relsort" aria-live="polite"></div>
+      <p class="muted" style="font-size:12.5px;margin:2px 0 0">Founder tools and behind-the-scenes changes are sorted out on their own and only shown to you and the admins. Tap a line's label to switch it. Notes show to each person once their app has this build (${CFG.build || "?"}).</p>
       <span class="hint" id="relMsg" role="alert"></span><div class="actions"><button class="btn ink" type="submit">Publish update notes</button></div></form>
     ${(creatorData.r || []).length ? `<ul class="list">${creatorData.r.map(r => `<li class="item" style="grid-template-columns:1fr auto;cursor:default"><span class="t"><b class="wrap">${esc(r.title)}</b><small>${esc(fmtDate(r.published_at.slice(0,10)))} · ${r.items.length} change${r.items.length===1?"":"s"}${r.audience === "staff" ? " · founder & admins only" : ""}${r.build ? ` · build ${r.build}` : ""}</small></span><button class="link danger" type="button" data-delrel="${r.id}">Remove</button></li>`).join("")}</ul>` : ""}
     ${suggestionsInboxHtml()}
@@ -2811,14 +2821,27 @@ function renderCreator(el){
       <li>Make someone an Admin or Verified from Accounts above. Admins can approve accounts and answer suggestions.</li>
     </ul>`;
   if(!$("relForm")) return;
+  const relLines = () => $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
+  const relFlip = new Map();   // lines you switched by hand
+  const relIsStaff = line => relFlip.has(line) ? relFlip.get(line) : staffOnlyNote(line);
+  const drawRelSort = () => {
+    const lines = relLines(), box = $("relSort"); if(!box) return;
+    box.innerHTML = lines.length ? lines.map((l, i) => `<div class="relline"><button type="button" class="relaud ${relIsStaff(l) ? "staff" : ""}" data-rel="${i}">${relIsStaff(l) ? "Founder &amp; admins" : "Everyone"}</button><span>${esc(l)}</span></div>`).join("") : "";
+  };
+  $("relItems").addEventListener("input", drawRelSort);
+  $("relSort").addEventListener("click", e => { const b = e.target.closest("[data-rel]"); if(!b) return; const l = relLines()[+b.dataset.rel]; relFlip.set(l, !relIsStaff(l)); drawRelSort(); });
   $("relForm").addEventListener("submit", async e => {
     e.preventDefault(); const msg = $("relMsg"); msg.className = "hint bad";
-    const title = $("relTitle").value.trim(), items = $("relItems").value.split("\n").map(x => x.replace(/^[-•*]\s*/, "").trim()).filter(Boolean);
+    const title = $("relTitle").value.trim(), items = relLines();
     if(title.length < 2){ msg.textContent = "Add a title."; return; }
     if(!items.length || items.length > 12){ msg.textContent = "Add 1 to 12 changes, one per line."; return; }
-    const { error } = await sb.from("releases").insert({ title, items, build:CFG.build || null, audience: $("relStaff")?.checked ? "staff" : "all" });
+    const pub = items.filter(l => !relIsStaff(l)), staff = items.filter(l => relIsStaff(l)), rows = [];
+    if(pub.length) rows.push({ title, items:pub, build:CFG.build || null, audience:"all" });
+    if(staff.length) rows.push({ title: pub.length ? "Behind the scenes" : title, items:staff, build:CFG.build || null, audience:"staff" });
+    const { error } = await sb.from("releases").insert(rows);
     if(error){ msg.textContent = "Couldn't publish it. Try again."; return; }
-    toast("Published. Everyone sees it next time they open the app."); loadCreator();
+    toast(pub.length ? `Published. Everyone sees ${pub.length === items.length ? "it" : `${pub.length} of the ${items.length} lines`} next time they open the app.` : "Published for you and the admins only.");
+    relFlip.clear(); loadCreator();
   });
   $("annForm").addEventListener("submit", async e => {
     e.preventDefault(); const body = $("annBody").value.trim(); if(body.length < 2) return;
