@@ -251,7 +251,7 @@ async function loadAll(){
     for(const c of catches){ photoSrc(c.photo_path); morePaths(c).forEach(photoSrc); }   // ask for every photo link in one go, so nothing waits later
     loadState = "ready"; saveCache(); applyPrefs(); renderAll();
     loadTournaments();
-    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && !profile.onboarded) openGuide(); else checkWhatsNew(); }
+    if(applyGate()){ routeChannel(); setTimeout(tidyPush, 4000); if(profile && (!profile.onboarded || lsGet("fl.guideNext", false))) setTimeout(openGuideWhenClear, 600); else checkWhatsNew(); }
     if(isStaff()){ loadStaffList(); loadFlags(); loadReports(); }
     loadBlocks(); loadConvos();
     if(pendingDeepLink && accountState() === "ok"){ const h = pendingDeepLink; pendingDeepLink = null; setTimeout(() => openDeepLink(h), 300); }

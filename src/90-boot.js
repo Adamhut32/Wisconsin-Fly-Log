@@ -61,10 +61,13 @@ $("authForm").addEventListener("submit", async e => {
       if(why === "confirm") throw new Error("Confirm your email first. Check your inbox for the link.");
       if(why === "down") throw new Error("Couldn't check that username right now. Try again, or sign in with your email.");
       if(why || !data?.access_token) throw new Error("That username and password don't match.");
+      lsSet("fl.guideNext", true);   // show the setup guide once this sign-in finishes loading
       const set = await sb.auth.setSession({ access_token:data.access_token, refresh_token:data.refresh_token });
-      if(set.error) throw new Error("Couldn't finish signing in. Try again, or sign in with your email.");
+      if(set.error){ lsSet("fl.guideNext", false); throw new Error("Couldn't finish signing in. Try again, or sign in with your email."); }
     } else if(authMode === "in"){
+      lsSet("fl.guideNext", true);
       const { error } = await sb.auth.signInWithPassword({ email, password:pw });
+      if(error) lsSet("fl.guideNext", false);
       if(error) throw new Error(/confirm/i.test(error.message) ? "Confirm your email first. Check your inbox for the link." : "That email and password don't match.");
     } else if(authMode === "up"){
       const { data, error } = await sb.auth.signUp({ email, password:pw, options:{ data:{ display_name:$("aName").value.trim(), birth_year:$("aYear").value.trim(), terms_version:String(TERMS_VERSION) }, emailRedirectTo:redirect } });
