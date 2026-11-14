@@ -124,34 +124,34 @@ function streakHtml(){
 
 /* ----- county completion ----- */
 var countyModeOn = false;
-function myCounties(){ return new Set(catches.filter(c => fishOf(c) > 0 && c.county).map(c => String(c.county)).filter(id => counties.some(f => f.id === id))); }
+// club = only fish that count for titles (caught since joining Coulee), as the 72 Club counts them
+var countyModeClub = false;
+function myCounties(club){ return new Set(catches.filter(c => fishOf(c) > 0 && c.county && (!club || countsForTitles(c))).map(c => String(c.county)).filter(id => counties.some(f => f.id === id))); }
 function countyCompletionHtml(){
   const mine = myCounties(), n = mine.size;
   return `<h4><span>Counties fished</span><span>${n} of 72</span></h4><div class="cdone"><span class="cbar big"><i style="width:${Math.round(100 * n / 72)}%"></i></span>
-    <button class="btn sm" type="button" data-a="countymode">${countyModeOn ? "Hide on map" : "Show on map"}</button></div>
-    <details class="clist"><summary>See which counties${n ? "" : " are left"}</summary>
-      ${n ? `<div class="eyebrow">Fished (${n})</div><div class="cchips">${[...mine].map(id => countyName(id).replace(/ County$/, "")).sort().map(nm => `<span class="cchip done">✓ ${esc(nm)}</span>`).join("")}</div>` : ""}
-      <div class="eyebrow">Not yet (${72 - n})</div><div class="cchips">${counties.filter(f => !mine.has(f.id)).map(f => countyName(f.id).replace(/ County$/, "")).sort().map(nm => `<span class="cchip">${esc(nm)}</span>`).join("")}</div>
-    </details>`;
+    <button class="btn sm" type="button" data-a="countymode">${countyModeOn ? "Hide on map" : "Show on map"}</button></div>`;
 }
 function countyMode(f){
   if(!countyModeOn) return null;
-  const has = myCounties().has(f.id);
+  const has = myCounties(countyModeClub).has(f.id);
   if(currentCounty === f.id) return null;
   return { color: css("--county-edge"), weight: .9, fillColor: has ? css("--fish") : css("--ink"), fillOpacity: has ? .5 : .06 };
 }
-function setCountyMode(on){
-  countyModeOn = on; countyLayer.setStyle(countyStyle);
+function setCountyMode(on, club){
+  countyModeOn = on; countyModeClub = !!(on && club); countyLayer.setStyle(countyStyle);
   let chip = $("cmodeChip");
   if(on){
     if(!chip){ chip = document.createElement("div"); chip.id = "cmodeChip"; chip.className = "cmode"; document.querySelector(".mapwrap, #map").after(chip); }
-    chip.innerHTML = `<b>Your counties</b> ${myCounties().size} of 72 <button type="button" class="link" data-a="countymode-off">Done</button>`;
+    chip.innerHTML = `<b>${countyModeClub ? "72 Club" : "Your counties"}</b> ${myCounties(countyModeClub).size} of 72 <button type="button" class="link" data-a="countymode-off">Done</button>`;
     chip.hidden = false; setTab("map"); if(typeof setCollapsed === "function") setCollapsed(true); if(currentCounty) backToState(); else fitState();
   } else if(chip) chip.hidden = true;
   renderLog();
 }
 document.addEventListener("click", e => {
-  if(e.target.closest('[data-a="countymode"]')) setCountyMode(!countyModeOn);
+  if(e.target.closest('[data-a="countymode"]')) setCountyMode(!(countyModeOn && !countyModeClub));
+  else if(e.target.closest('[data-a="club72map"]')){ document.getElementById("club72")?.remove(); setCountyMode(true, true); }
+  else if(e.target.closest('[data-a="club72"]')) openClub72();
   else if(e.target.closest('[data-a="countymode-off"]')) setCountyMode(false);
 });
 
@@ -217,3 +217,20 @@ function measureTo(ll){
   }
 }
 document.addEventListener("click", e => { const b = e.target.closest('[data-a="measure"]'); if(b){ e.preventDefault(); startMeasure(b.dataset.name, +b.dataset.lat, +b.dataset.lng); } });
+
+/* ----- the 72 Club: which counties are done and which still need a fish (fish caught since joining only) ----- */
+function openClub72(){
+  const done = myCounties(true), left = counties.filter(f => !done.has(f.id));
+  const nm = id => countyName(id).replace(/ County$/, "");
+  const hist = catches.some(c => beforeJoin(c) && c.county && !done.has(String(c.county)));
+  const v = document.createElement("div"); v.className = "scrim"; v.id = "club72"; v.setAttribute("role", "dialog"); v.setAttribute("aria-label", "72 Club");
+  v.innerHTML = `<div class="sheet"><div class="eyebrow">Title</div><h2 style="margin:0 0 4px">72 Club</h2>
+    <p class="muted" style="margin:0 0 10px">Catch a fish in every Wisconsin county. ${done.size} of 72 done, ${left.length} to go.</p>
+    <span class="cbar big" style="display:block;margin-bottom:12px"><i style="width:${Math.round(100 * done.size / 72)}%"></i></span>
+    ${done.size ? `<div class="eyebrow">Done (${done.size})</div><div class="cchips">${[...done].map(nm).sort().map(n => `<span class="cchip done">✓ ${esc(n)}</span>`).join("")}</div>` : ""}
+    <div class="eyebrow" style="margin-top:12px">Still need a fish (${left.length})</div><div class="cchips">${left.map(f => nm(f.id)).sort().map(n => `<span class="cchip">${esc(n)}</span>`).join("")}</div>
+    ${hist ? `<p class="note">Fish from before you joined Coulee don't count toward titles, so those counties still show as needed here.</p>` : ""}
+    <div class="row2" style="margin-top:12px"><button class="btn sm" type="button" data-a="club72map">Show on map</button><button class="btn ink sm" type="button" data-close>Close</button></div></div>`;
+  v.addEventListener("click", ev => { if(ev.target === v || ev.target.closest("[data-close]")) v.remove(); });
+  document.body.appendChild(v);
+}
