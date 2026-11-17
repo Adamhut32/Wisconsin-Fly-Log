@@ -29,6 +29,7 @@ def nice(name):
     n = re.sub(r"^US Hwy ", "US ", n)
     n = re.sub(r"^(State Hwy|State Rd|State Highway|Wis Hwy) ", "Hwy ", n)
     n = re.sub(r"^(Co Rd|Co Hwy|County Rd|County Road|County Hwy|Cty Rd|Cty Hwy) ", "County ", n)
+    n = re.sub(r"^County ([A-Za-z]{1,3})$", lambda m: "County " + m.group(1).upper(), n)
     return n
 def kind(mtfcc, name):
     if mtfcc == "S1100" or re.match(r"^(I-|US |Hwy )", name): return 1

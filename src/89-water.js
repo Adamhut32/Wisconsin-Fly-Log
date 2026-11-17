@@ -17,7 +17,8 @@ async function watersNear(lat, lng){
   if(lat == null || lng == null) return [];
   const ids = counties.map(f => f.id).filter(id => { const [a, d, c, b] = countyBox[id]; return lat >= a && lat <= c && lng >= d && lng <= b; });
   const best = {};
-  const note = (name, kind, dist) => { if(!name) return; const k = name.toLowerCase(); if(!best[k] || dist < best[k].dist) best[k] = { name, kind, dist }; };
+  const note = (name, kind, dist) => { if(!name || name === "NA" || name === "Unnamed") return;   // "NA" is how the DNR files mark unnamed creeks
+  const k = name.toLowerCase(); if(!best[k] || dist < best[k].dist) best[k] = { name, kind, dist }; };
   for(const id of ids){
     let w; try{ w = await getJSON(waterCache, dataUrl("water/" + id + ".json"), id); }catch(e){ continue; }
     for(const [name, , paths] of w.s || []) for(const path of paths) for(let i = 1; i < path.length; i++){

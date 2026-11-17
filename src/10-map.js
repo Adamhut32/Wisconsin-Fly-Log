@@ -173,7 +173,7 @@ function setHover(name){
 function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
   const el = waterPopup(name, kind, e.latlng, trout, cid), here = countyAt(e.latlng.lat, e.latlng.lng);
-  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="link" type="button" data-opencounty="${esc(here)}">Open ${esc(countyName(here))}</button>`; el.appendChild(r); }
+  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="btn sm ink" type="button" data-opencounty="${esc(here)}">Go to ${esc(countyName(here))}</button>`; el.appendChild(r); }
   waterTapAt = Date.now(); featureTaps++;
   L.popup({ maxWidth:300 }).setLatLng(e.latlng).setContent(el).openOn(map);
   if(here && here !== currentCounty) outlineCounty(here);
@@ -417,6 +417,7 @@ function renderLabels(){
     }
     ctx.textAlign = "start";
   }
+  if(typeof roadLabels === "function") roadLabels(ctx, { scale, ox, oy, W, H, dpr, hits, placed, onScreen });
 }
 document.fonts && document.fonts.load('italic 500 12px "Crimson Pro"').then(drawLabels).catch(()=>{});
 

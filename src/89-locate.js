@@ -25,9 +25,11 @@ function hereHtml(fix, near){
 /* Keep listening to the GPS and pass on each better reading until it's within goodM meters or time runs out.
    Without a phone or Wi-Fi signal (offline) the first answer is often a rough guess; the real GPS fix can take
    20-40 seconds to arrive, so the first reading alone put people in the wrong place. */
-function bestFix(onFix, onDone, onErr, { maxMs = 45000, goodM = 20 } = {}){
+function bestFix(onFix, onDone, onErr, { maxMs = 90000, okMs = 45000, okM = 100, goodM = 20 } = {}){
   let best = null, done = false;
-  const finish = () => { if(done) return; done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); best ? onDone(best) : onErr({ code:3 }); };
+  // after 45 seconds settle for anything within about 300 ft; a phone with no signal at all gets up to 90 seconds to find the satellites
+  const okT = setTimeout(() => { if(best && best.coords.accuracy <= okM) finish(); }, okMs);
+  const finish = () => { if(done) return; done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); clearTimeout(okT); best ? onDone(best) : onErr({ code:3 }); };
   const id = navigator.geolocation.watchPosition(p => {
     if(done) return;
     if(!best || p.coords.accuracy < best.coords.accuracy){ best = p; onFix(p, p.coords.accuracy <= goodM); }
