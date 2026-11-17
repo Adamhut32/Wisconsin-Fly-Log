@@ -106,7 +106,7 @@ async function latestReleaseId(){ const { data } = await sb.from("releases").sel
 /* ---------- save counties for offline use ---------- */
 const OFFLINE_CACHE = "flylog-data";
 const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json"), hdUrl(id)];
-let offlineSaved = null, offlineBusy = false;
+let offlineSaved = null, offlineBusy = false, roadsMissing = new Set();
 async function countSavedCounties(){
   if(!("caches" in window)) return null;
   try{ const c = await caches.open(OFFLINE_CACHE); const keys = new Set((await c.keys()).map(r => new URL(r.url).pathname + new URL(r.url).search));
@@ -114,6 +114,9 @@ async function countSavedCounties(){
     const hdKey = id => { const u = new URL(hdUrl(id), location.href); return u.pathname + u.search; };
     // saved = the county's map file and its detailed creek lines are both on the phone
     offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion) && keys.has(hdKey(id))));
+    // roads came later (build 39): saved counties that don't have them yet
+    const roadKey = id => { const u = new URL(dataUrl("roads/" + id + ".json"), location.href); return u.pathname + u.search; };
+    roadsMissing = new Set([...offlineSaved].filter(id => !keys.has(roadKey(id))));
   }catch(e){ offlineSaved = null; }
   return offlineSaved;
 }
@@ -139,22 +142,24 @@ async function offlineAction(which){
   offlineBusy = true;
   try{ await navigator.storage?.persist?.(); }catch(e){}
   const old = lsGet("fl.offlineIds", null);
-  const ids = which === "all" ? counties.map(f => f.id) : which === "refresh" ? (old?.ids || []) : [which];
-  const label = which === "all" ? "Wisconsin" : which === "refresh" ? `${ids.length} saved counties` : countyName(which);
+  const ids = which === "all" ? counties.map(f => f.id) : which === "refresh" ? (old?.ids || []) : which === "roads" ? [...roadsMissing] : [which];
+  const label = which === "all" ? "Wisconsin" : which === "refresh" ? `${ids.length} saved counties` : which === "roads" ? "Roads" : countyName(which);
   const failed = await saveCountiesOffline(ids, (d, n) => { const el = $("offlineProg"); if(el) el.textContent = `Saving ${d} of ${n} counties…`; });
   offlineBusy = false;
-  toast(failed ? `Saved most of ${label}. A few files didn't download; try again on Wi-Fi.` : `${label} is saved for offline use.`);
+  toast(failed ? `Saved most of ${label}. A few files didn't download; try again on Wi-Fi.` : which === "roads" ? "Roads are saved for offline use." : `${label} is saved for offline use.`);
   renderLog();
 }
 $("log").addEventListener("click", e => { const b = e.target.closest("[data-offline]"); if(b){ b.disabled = true; offlineAction(b.dataset.offline); } });
 function offlineBlock(cid){
   if(!("caches" in window)) return "";
   if(offlineSaved === null){ countSavedCounties().then(() => renderLog()); return ""; }
+  if(cid && offlineSaved.has(cid) && roadsMissing.has(cid)) return `<div class="row2" style="margin-top:14px"><span class="hint">Saved for offline, but not its roads yet.</span><button class="btn sm" type="button" data-offline="${esc(cid)}">Save roads too</button></div>`;
   if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations, public land and roads work without signal.</p>`
     : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
   const n = offlineSaved.size, old = lsGet("fl.offlineIds", null);
   const stale = old && old.v !== offlineV() && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
   return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
+    ${roadsMissing.size && !stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>Roads aren't saved yet</b> for ${roadsMissing.size} of your saved ${roadsMissing.size === 1 ? "county" : "counties"}. They're added on their own while you're online, or add them now (about ${Math.max(1, Math.round(roadsMissing.size * .18))} MB).</p><div class="row2"><button class="btn sm ink" type="button" data-offline="roads">Save roads now</button><span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div></div>` : ""}
     ${stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>The map data was updated.</b> ${stale} of your saved counties need a refresh to keep working offline.</p><div class="row2"><button class="btn sm ink" type="button" data-offline="refresh">Refresh saved counties</button></div></div>` : ""}
     <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations, public land and roads on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
     <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 105 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
@@ -172,6 +177,7 @@ async function topUpSavedRoads(){
     const u = dataUrl("roads/" + id + ".json");
     try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok && !(await c.match(u))) await c.put(u, r); await new Promise(res => setTimeout(res, 400)); } }catch(e){}
   }
+  await countSavedCounties(); if(!offlineBusy && tab === "me" && !appBusy()) renderLog();
 }
 setTimeout(topUpSavedRoads, 15000);
 window.addEventListener("online", () => setTimeout(topUpSavedRoads, 5000));
