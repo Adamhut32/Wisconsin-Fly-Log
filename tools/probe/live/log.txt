@@ -1,4 +1,30 @@
 phone console warning: Service Worker registration blocked by Playwright
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/22/15
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/23/15
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/22/16
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/23/16
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/24/15
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/21/15
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/24/16
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/6/21/16
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/254
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/255
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/254
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/255
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/256
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/255
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/256
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/253
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/256
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/254
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/253
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/256
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/253
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/253
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/256
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/253
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/254
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/255
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
@@ -6,24 +32,121 @@ phone console error: Failed to load resource: the server responded with a status
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/254
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/255
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone console error: Failed to load resource: the server responded with a status of 404 ()
 phone view0: {"zoom":9.5,"showGauges":true,"gauges":null,"flowsAt":0,"nFlows":0,"pins":0,"shown":0,"sample":[]}
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/509
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/510
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/510
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/509
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/509
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/510
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/508
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/511
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/508
 phone 200 http://localhost:8790/data/gauges.json?v=1
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/511
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/508
 phone 200 http://localhost:8790/data/flownorms.json?v=1
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/509
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/511
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/510
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/510
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/508
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/509
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/511
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/508
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/511
 phone 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00010&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
 phone 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00060&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
-phone view1: {"zoom":10.5,"showGauges":true,"gauges":186,"flowsAt":1794539589157,"nFlows":195,"pins":1,"shown":1,"sample":["6,880 cfs"]}
-phone view2: {"zoom":11.5,"showGauges":true,"gauges":186,"flowsAt":1794539589157,"nFlows":195,"pins":1,"shown":1,"sample":["185 cfs"]}
-phone view3: {"zoom":12,"showGauges":true,"gauges":186,"flowsAt":1794539589157,"nFlows":195,"pins":6,"shown":6,"sample":["8.8 cfs","13 cfs","3.3 cfs","3.2 cfs"]}
+phone view1: {"zoom":10.5,"showGauges":true,"gauges":186,"flowsAt":1794881985637,"nFlows":194,"pins":1,"shown":1,"sample":["5,310 cfs"]}
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1015
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1016
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1017
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1016
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1016
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1015
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1017
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1016
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1016
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1017
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1015
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1015
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1017
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1017
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1015
+phone view2: {"zoom":11.5,"showGauges":true,"gauges":186,"flowsAt":1794881985637,"nFlows":194,"pins":1,"shown":1,"sample":["180 cfs"]}
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1504/1031
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1502/1030
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1502/1031
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1503/1030
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1504/1030
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1503/1031
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1505/1030
+phone 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1505/1031
+phone view3: {"zoom":12,"showGauges":true,"gauges":186,"flowsAt":1794881985637,"nFlows":194,"pins":6,"shown":6,"sample":["64 cfs","18 cfs","3.0 cfs","3.8 cfs"]}
 phone card: NO CARD
 desktop console warning: Service Worker registration blocked by Playwright
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/44/30
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/44/33
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/45/33
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/47/30
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/47/31
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/45/30
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/47/32
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/46/33
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/47/33
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/45/31
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/46/30
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/45/32
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/46/31
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/44/31
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/44/32
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/7/46/32
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/254
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/255
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/254
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/255
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/255
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/254
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/256
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/253
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/256
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/257
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/257
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/372/257
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/252
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/254
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/255
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/252
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/256
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/372/255
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/252
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/257
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/372/252
 desktop console error: Failed to load resource: the server responded with a status of 404 ()
 desktop console error: Failed to load resource: the server responded with a status of 404 ()
 desktop console error: Failed to load resource: the server responded with a status of 404 ()
@@ -33,27 +156,106 @@ desktop console error: Failed to load resource: the server responded with a stat
 desktop console error: Failed to load resource: the server responded with a status of 404 ()
 desktop console error: Failed to load resource: the server responded with a status of 404 ()
 desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
-desktop console error: Failed to load resource: the server responded with a status of 404 ()
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/256
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/256
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/374/253
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/372/253
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/253
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/254
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/257
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/257
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/373/253
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/375/253
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/255
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/372/256
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/377/252
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/376/252
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/10/372/254
 desktop view0: {"zoom":9.5,"showGauges":true,"gauges":null,"flowsAt":0,"nFlows":0,"pins":0,"shown":0,"sample":[]}
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/509
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/510
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/510
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/509
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/510
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/509
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/508
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/508
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/511
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/508
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/511
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/511
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/510
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/509
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/510
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/508
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/511
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/509
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/508
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/511
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/507
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/507
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/512
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/507
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/750/512
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/512
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/748/507
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/749/507
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/752/512
 desktop 200 http://localhost:8790/data/gauges.json?v=1
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/751/512
 desktop 200 http://localhost:8790/data/flownorms.json?v=1
-desktop 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00010&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
 desktop 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00060&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
-desktop view1: {"zoom":10.5,"showGauges":true,"gauges":186,"flowsAt":1794539638752,"nFlows":195,"pins":4,"shown":4,"sample":["209 cfs","6,880 cfs","185 cfs","547 cfs"]}
-desktop view2: {"zoom":11.5,"showGauges":true,"gauges":186,"flowsAt":1794539638752,"nFlows":195,"pins":1,"shown":1,"sample":["185 cfs"]}
-desktop view3: {"zoom":12,"showGauges":true,"gauges":186,"flowsAt":1794539638752,"nFlows":195,"pins":13,"shown":13,"sample":["8.8 cfs","13 cfs","3.3 cfs","3.2 cfs"]}
+desktop 200 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&state_name=Wisconsin&parameter_code=00010&limit=2000&properties=monitoring_location_id%2Ctime%2Cvalue&skipGeometry=t
+desktop view1: {"zoom":10.5,"showGauges":true,"gauges":186,"flowsAt":1794882036368,"nFlows":194,"pins":4,"shown":4,"sample":["195 cfs","5,310 cfs","180 cfs","528 cfs"]}
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/747/508
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/747/509
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/11/747/507
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1017
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1016
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1017
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1016
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1016
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1017
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1015
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1015
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1015
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1018
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1018
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1018
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1017
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1014
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1496/1019
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1014
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1015
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1017
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1019
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1495/1014
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1018
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1018
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1016
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1019
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1015
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1016
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1494/1019
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1498/1014
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1014
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1497/1019
+desktop view2: {"zoom":11.5,"showGauges":true,"gauges":186,"flowsAt":1794882036368,"nFlows":194,"pins":1,"shown":1,"sample":["180 cfs"]}
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1503/1030
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1504/1031
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1502/1031
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1504/1030
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1502/1030
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1503/1031
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1505/1031
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1504/1029
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1502/1032
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1503/1029
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1505/1029
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1502/1029
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1504/1032
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1505/1030
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1505/1032
+desktop 200 https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/12/1503/1032
+desktop view3: {"zoom":12,"showGauges":true,"gauges":186,"flowsAt":1794882036368,"nFlows":194,"pins":13,"shown":13,"sample":["64 cfs","12 cfs","3.0 cfs","3.8 cfs"]}
 desktop card: NO CARD
