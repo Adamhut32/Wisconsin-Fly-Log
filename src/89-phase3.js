@@ -98,11 +98,19 @@ function entryFlagHtml(tid, cid){
 /* ---------- founder analytics: totals and trends only, never who did what ---------- */
 let statsData = null;
 async function loadFounderStats(){ const { data, error } = await sb.rpc("founder_stats"); statsData = error ? { error:true } : data; if(tab === "me" && meView === "analytics") renderLog(); }
-function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1 } = {}){
+/* bar chart; tap (or hover) a bar to read its exact number and date underneath */
+function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1, unit = "", full = null } = {}){
   const W = 320, n = vals.length, bw = W / n, max = Math.max(1, ...vals);
-  return `<svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
-    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<rect x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(labels[i])}: ${v}</title></rect>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i * bw + bw / 2}" y="${h + 13}" text-anchor="middle">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>`;
+  const say = i => `${(full || labels)[i]}: ${vals[i].toLocaleString()}${unit ? " " + (vals[i] === 1 ? unit.replace(/s$/, "").replace(/^people$/, "person") : unit) : ""}`;
+  return `<div class="chartwrap"><svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
+    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<g class="bar" data-say="${esc(say(i))}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${h}" fill="transparent"/><rect class="b" x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(say(i))}</title></rect></g>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i * bw + bw / 2}" y="${h + 13}" text-anchor="middle">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>
+    <div class="chartread" aria-live="polite">Tap a bar to see its number</div></div>`;
 }
+document.addEventListener("click", e => {
+  const g = e.target.closest(".chartwrap .bar"); if(!g) return;
+  const w = g.closest(".chartwrap"); w.querySelectorAll(".bar.sel").forEach(x => x.classList.remove("sel")); g.classList.add("sel");
+  w.querySelector(".chartread").textContent = g.dataset.say;
+});
 function rankTable(rows, head){ return rows.length ? `<table class="tbl"><thead><tr><th>${head}</th><th class="n">Fish</th></tr></thead><tbody>${rows.map(([k, n]) => `<tr><td>${esc(k)}</td><td class="n">${n}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No data yet.</p>`; }
 function renderAnalytics(el){
   const back = `<button class="link backlink" data-me="creator" type="button">${icon("i-back")}Founder tools</button><div class="eyebrow">Founder</div><h2>Analytics</h2>`;
@@ -114,14 +122,14 @@ function renderAnalytics(el){
   el.innerHTML = back + `<p class="muted" style="margin:0 0 10px">Totals and trends only. Nothing here shows who did what or where anyone fishes.</p>
     <div class="stats four"><div class="stat"><b>${a.approved ?? 0}</b><span>anglers</span></div><div class="stat"><b>${s.active_7 ?? 0}</b><span>active this week</span></div><div class="stat"><b>${s.active_30 ?? 0}</b><span>active this month</span></div><div class="stat"><b>${a.pending ?? 0}</b><span>waiting</span></div></div>
     <div class="stats four"><div class="stat f"><b>${t.fish ?? 0}</b><span>fish logged</span></div><div class="stat"><b>${t.photos ?? 0}</b><span>photos</span></div><div class="stat"><b>${s.trips ?? 0}</b><span>trips</span></div><div class="stat"><b>${s.flags_open ?? 0}</b><span>open flags</span></div></div>
-    <h4><span>People opening the app</span><span>last 30 days</span></h4>${barsSvg(day.map(x => x[1]), day.map(x => md(x[0])), { every:5 })}
-    <h4><span>New accounts</span><span>by week</span></h4>${barsSvg(wk.map(x => x[1]), wk.map(x => md(x[0])), { every:2, color:"var(--friend)" })}
-    <h4><span>Fish caught</span><span>by month</span></h4>${barsSvg(mo.map(x => x[1]), mo.map(x => mon(x[0])), { color:"var(--fish)" })}
-    <h4><span>When catches get logged</span><span>hour of day</span></h4>${barsSvg(s.catch_hours || [], Array.from({ length:24 }, (_, h) => h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p"), { every:3 })}
-    <h4><span>Busiest days</span></h4>${barsSvg(s.catch_weekdays || [], ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"])}
+    <h4><span>People opening the app</span><span>last 30 days</span></h4>${barsSvg(day.map(x => x[1]), day.map(x => md(x[0])), { every:5, unit:"people", full:day.map(x => new Date(x[0] + "T12:00:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" })) })}
+    <h4><span>New accounts</span><span>by week</span></h4>${barsSvg(wk.map(x => x[1]), wk.map(x => md(x[0])), { every:2, color:"var(--friend)", unit:"new accounts", full:wk.map(x => "Week of " + new Date(x[0] + "T12:00:00").toLocaleDateString(undefined, { month:"short", day:"numeric" })) })}
+    <h4><span>Fish caught</span><span>by month</span></h4>${barsSvg(mo.map(x => x[1]), mo.map(x => mon(x[0])), { color:"var(--fish)", unit:"fish", full:mo.map(x => mon(x[0]) + " " + x[0].slice(0, 4)) })}
+    <h4><span>When catches get logged</span><span>hour of day</span></h4>${barsSvg(s.catch_hours || [], Array.from({ length:24 }, (_, h) => h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p"), { every:3, unit:"catches" })}
+    <h4><span>Busiest days</span></h4>${barsSvg(s.catch_weekdays || [], ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], { unit:"catches" })}
     <h4><span>Tournaments</span><span>${tn.total ?? 0} total</span></h4>
     <p style="margin:0 0 6px">${tn.live ?? 0} live · ${tn.upcoming ?? 0} upcoming · ${tn.finished ?? 0} finished · ${tn.open ?? 0} open to everyone · ${tn.entries ?? 0} entries</p>
-    ${barsSvg(tm.map(x => x[1]), tm.map(x => mon(x[0])), { h:80, color:"var(--t2)" })}
+    ${barsSvg(tm.map(x => x[1]), tm.map(x => mon(x[0])), { h:80, color:"var(--t2)", unit:"tournaments", full:tm.map(x => mon(x[0]) + " " + x[0].slice(0, 4)) })}
     <h4><span>Top species</span></h4>${rankTable(s.species || [], "Species")}
     <h4><span>Methods</span></h4>${rankTable((s.methods || []).map(([m, n]) => [METHODS[m] || m, n]), "Method")}
     <h4><span>Busiest counties</span></h4>${rankTable((s.counties || []).map(([c, n]) => [countyName(c), n]), "County")}

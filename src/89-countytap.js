@@ -11,7 +11,7 @@ function outlineCounty(id){
 function tapCounty(latlng){
   const id = countyAt(latlng.lat, latlng.lng);
   if(!id || id === currentCounty) return;
-  if(!currentCounty && map.getZoom() < AREA_ZOOM){ openCounty(id); return; }   // statewide: a tap opens the county (the county shape's own tap usually got here first)
+  if(currentCounty || map.getZoom() < AREA_ZOOM){ map.closePopup(); openCounty(id); return; }   // in a county or statewide: a tap on another county goes straight there
   outlineCounty(id);
   const s = countyStats(id);
   L.popup({ maxWidth:240, className:"cpop" }).setLatLng(latlng).setContent(`<div class="pop"><h3>${esc(countyName(id))}</h3>

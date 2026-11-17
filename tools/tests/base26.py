@@ -10,7 +10,7 @@ ME_PATCH = (HERE / "patch.js").read_text()
 async def page(b, patch=None, extra="", w=390, h=844, geo=None, url="http://localhost:8790/beta/", mock=None, ctxargs=None, tiles=False):
     patch = ME_PATCH if patch is None else patch
     ctx = await b.new_context(viewport={"width":w,"height":h}, service_workers="block", geolocation=geo, permissions=["geolocation"] if geo else [], **(ctxargs or {}))
-    pg = await ctx.new_page(); pg.errs=[]; pg.on("pageerror", lambda e: pg.errs.append(str(e)))
+    pg = await ctx.new_page(); pg.errs=[]; pg.on("pageerror", lambda e: pg.errs.append(str(e) + " @ " + (e.stack or "")[:400]))
     await pg.add_init_script(patch + extra)
     await pg.route("**/vendor/supabase.js", lambda r: r.fulfill(body=mock or MOCK, content_type="text/javascript"))
     async def appjs(r):

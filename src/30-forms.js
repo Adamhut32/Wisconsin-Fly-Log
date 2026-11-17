@@ -155,14 +155,18 @@ $("gpsBtn").onclick = () => {
   const h = $("coordHint");
   if(!navigator.geolocation){ h.className = "hint bad"; h.textContent = "This browser can't share your location. Pick on the map instead."; return; }
   h.className = "hint"; h.textContent = "Finding your location…"; $("gpsBtn").disabled = true;
-  navigator.geolocation.getCurrentPosition(pos => {
+  const ft = m => m > 1600 ? `${(m / 1609).toFixed(1)} mi` : `${Math.round(m * 3.28)} ft`;
+  bestFix((pos, settled) => {
+    $("fCoords").value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; coordHint();
+    if(!settled) h.textContent += ` Accurate to about ${ft(pos.coords.accuracy)}, still narrowing down…`;
+  }, pos => {
     $("gpsBtn").disabled = false;
     $("fCoords").value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; coordHint();
-    if(pos.coords.accuracy > 100) h.textContent += ` Accurate to about ${Math.round(pos.coords.accuracy * 3.28)} ft.`;
+    if(pos.coords.accuracy > 100) h.textContent += ` Accurate to about ${ft(pos.coords.accuracy)}.`;
   }, err => {
     $("gpsBtn").disabled = false; h.className = "hint bad";
-    h.textContent = err.code === 1 ? "Location is turned off for this app. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using." : "Couldn't get a GPS fix. Try again in the open, or pick on the map.";
-  }, { enableHighAccuracy:true, timeout:20000, maximumAge:30000 });
+    h.textContent = err.code === 1 ? "Location is turned off for this app. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using." : "Couldn't get a GPS fix. Try again in the open, or pick on the map instead.";
+  });
 };
 
 function openForm(kind, rec, prefill){

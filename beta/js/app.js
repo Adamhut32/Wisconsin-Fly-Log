@@ -197,6 +197,8 @@ let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], 
 const canvasPad = () => innerWidth * innerHeight > 1.2e6 ? .2 : innerWidth > 700 ? .35 : .4;
 /* Throw away a drawing surface and give its memory back right away. iPhones cap the total memory all map drawing surfaces
    may use and only reclaim a discarded one much later, so after a few counties the last layer drawn (public land) came up blank. */
+// a canvas we dropped can still get one late redraw from a layer leaving it; skip it instead of throwing
+(function(){ const r0 = L.Canvas.prototype._redraw; L.Canvas.prototype._redraw = function(){ if(!this._ctx){ this._redrawRequest = null; this._redrawBounds = null; return; } return r0.call(this); }; })();
 function dropCanvas(r){ if(!r) return; const c = r._container; if(map.hasLayer(r)) map.removeLayer(r); if(c){ c.width = 0; c.height = 0; } }
 function smoothPath(pts, n = 2){
   if(pts.length < 3) return pts;
@@ -1128,14 +1130,18 @@ $("gpsBtn").onclick = () => {
   const h = $("coordHint");
   if(!navigator.geolocation){ h.className = "hint bad"; h.textContent = "This browser can't share your location. Pick on the map instead."; return; }
   h.className = "hint"; h.textContent = "Finding your location…"; $("gpsBtn").disabled = true;
-  navigator.geolocation.getCurrentPosition(pos => {
+  const ft = m => m > 1600 ? `${(m / 1609).toFixed(1)} mi` : `${Math.round(m * 3.28)} ft`;
+  bestFix((pos, settled) => {
+    $("fCoords").value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; coordHint();
+    if(!settled) h.textContent += ` Accurate to about ${ft(pos.coords.accuracy)}, still narrowing down…`;
+  }, pos => {
     $("gpsBtn").disabled = false;
     $("fCoords").value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; coordHint();
-    if(pos.coords.accuracy > 100) h.textContent += ` Accurate to about ${Math.round(pos.coords.accuracy * 3.28)} ft.`;
+    if(pos.coords.accuracy > 100) h.textContent += ` Accurate to about ${ft(pos.coords.accuracy)}.`;
   }, err => {
     $("gpsBtn").disabled = false; h.className = "hint bad";
-    h.textContent = err.code === 1 ? "Location is turned off for this app. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using." : "Couldn't get a GPS fix. Try again in the open, or pick on the map.";
-  }, { enableHighAccuracy:true, timeout:20000, maximumAge:30000 });
+    h.textContent = err.code === 1 ? "Location is turned off for this app. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using." : "Couldn't get a GPS fix. Try again in the open, or pick on the map instead.";
+  });
 };
 
 function openForm(kind, rec, prefill){
@@ -3007,26 +3013,75 @@ function renderQ(){
   const ul = $("qres");
   if(!qList.length){ ul.hidden = !$("q").value.trim(); ul.innerHTML = $("q").value.trim() ? `<li><button disabled>No creeks or lakes by that name</button></li>` : ""; return; }
   ul.hidden = false;
-  ul.innerHTML = qList.map((r,i)=>`<li><button class="${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)}</small></button></li>`).join("");
+  ul.innerHTML = qList.map((r,i) => {
+    if(r.stockHead) return `<li><button class="stockhead ${i===qSel?"on":""}" data-i="${i}"><span class="wname">Waters stocked with ${esc(r.label)}</span><small>${r.n} waters the DNR stocked in the last 3 years · nearest first</small></button></li>`;
+    if(r.back) return `<li><button class="stockback" data-i="${i}">‹ Back to search</button></li>`;
+    if(r.more) return `<li><button class="stockmore" data-i="${i}">Show ${r.more} more</button></li>`;
+    if(r.stocked) return `<li><button class="${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)} · ${esc(r.what)}</small></button></li>`;
+    return `<li><button class="${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)}</small></button></li>`;
+  }).join("");
+}
+
+/* ---------- "stocked with ...": type a fish (brook trout, walleye, musky…) to list the waters the DNR stocked with it ---------- */
+let stockIdx = null, stockShown = 40;
+async function loadStockIdx(){ if(stockIdx) return stockIdx; try{ stockIdx = await (await fetch(dataUrl("stocking/index.json"))).json(); }catch(e){ stockIdx = {}; } return stockIdx; }
+const SP_ALIASES = [["brook trout","Brook Trout"],["brookie","Brook Trout"],["brookies","Brook Trout"],["brown trout","Brown Trout"],["rainbow trout","Rainbow Trout"],["rainbow","Rainbow Trout"],["steelhead","Rainbow Trout"],
+  ["trout",["Brook Trout","Brown Trout","Rainbow Trout"]],["walleye","Walleye"],["tiger musk","Northern Pike X Muskellunge"],["musky","Muskellunge"],["muskie","Muskellunge"],["muskellunge","Muskellunge"],["yellow perch","Yellow Perch"],["perch","Yellow Perch"],
+  ["crappie","Black Crappie"],["bluegill","Bluegill"],["largemouth","Largemouth Bass"],["smallmouth","Smallmouth Bass"],["bass",["Largemouth Bass","Smallmouth Bass"]],["northern pike","Northern Pike"],["pike","Northern Pike"],
+  ["catfish","Channel Catfish"],["salmon",["Chinook Salmon","Coho Salmon"]],["chinook","Chinook Salmon"],["king salmon","Chinook Salmon"],["coho","Coho Salmon"],["sturgeon","Lake Sturgeon"],["lake trout","Lake Trout"],["splake","Splake"]];
+function stockSpecies(q){
+  q = q.replace(/^stocked( with)?\s*/, "").replace(/s$/, "").trim(); if(q.length < 4) return null;
+  for(const [k, v] of SP_ALIASES){ const kk = k.replace(/s$/, ""); if(q === kk || kk.startsWith(q) || q.startsWith(kk + " ")) return [].concat(v); }
+  return null;
+}
+function stockedList(species){
+  const idx = stockIdx || {}, c = (typeof hereFix !== "undefined" && hereFix) ? L.latLng(hereFix.lat, hereFix.lng) : map.getCenter(), byKey = new Map();
+  for(const sp of species) for(const e of idx[sp] || []){ const k = e[0] + "|" + e[1]; const o = byKey.get(k) || { e, sps:[], year:0, fish:0 }; o.sps.push(sp); o.year = Math.max(o.year, e[2]); o.fish += e[3]; byKey.set(k, o); }
+  const where = o => { const hit = o.e[5] && (nameIndex || []).find(x => x[0] === o.e[0]); const p = hit && hit[1].find(q => q[0] === o.e[1]);
+    if(p) return { places:[p], ll:[(p[2] + p[4]) / 2, (p[1] + p[3]) / 2] };
+    const b = byId[o.e[1]] && L.geoJSON(byId[o.e[1]]).getBounds(); return { places:null, ll: b ? [b.getCenter().lat, b.getCenter().lng] : [c.lat, c.lng] }; };
+  return [...byKey.values()].map(o => { const w = where(o); return { stocked:true, name:o.e[0], cid:o.e[1], places:w.places,
+      counties: byId[o.e[1]]?.properties.name || "", d: map.distance(c, w.ll),
+      what: `${species.length > 1 ? o.sps.map(x => x.replace(/ (Trout|Bass|Salmon)$/, "")).join(", ") + " · " : ""}${o.year}${o.fish ? ` · ${o.fish.toLocaleString()} fish` : ""}` }; })
+    .sort((a, b) => a.d - b.d);
+}
+function showStocked(species, label){
+  const all = stockedList(species);
+  qList = [{ back:true }, ...all.slice(0, stockShown)]; if(all.length > stockShown) qList.push({ more: all.length - stockShown, species, label });
+  qSel = 1; renderQ();
 }
 $("q").addEventListener("focus", loadIndex);
 $("q").addEventListener("input", async () => {
   const q = $("q").value.trim().toLowerCase(); const idx = await loadIndex();
   if(q.length < 2){ qList = []; renderQ(); return; }
-  const out = [];
+  const sp = stockSpecies(q), out = [];
+  if(sp){ await loadStockIdx(); const n = new Set(sp.flatMap(x => (stockIdx[x] || []).map(e => e[0] + "|" + e[1]))).size;
+    if(n){ stockShown = 40; const label = sp.length > 1 ? (q.includes("salmon") ? "salmon" : q.includes("bass") ? "bass" : "trout") : sp[0].toLowerCase(); out.push({ k:-1, stockHead:true, species:sp, label, n }); } }
   for(const [name, places] of idx){ const n = name.toLowerCase(); const k = n.startsWith(q) ? 0 : n.includes(" " + q) ? 1 : n.includes(q) ? 2 : -1; if(k < 0) continue;
     out.push({ k, name, places, counties: places.map(p => byId[p[0]]?.properties.name).filter(Boolean).slice(0,3).join(", ") + (places.length > 3 ? "…" : "") }); }
   out.sort((a,b)=>a.k-b.k||a.name.length-b.name.length||a.name.localeCompare(b.name));
-  qList = out.slice(0, 10); qSel = 0; renderQ();
+  qList = out.slice(0, 11); qSel = 0; renderQ();
 });
 $("q").addEventListener("keydown", e => {
   if(e.key === "ArrowDown"){ qSel = Math.min(qSel+1, qList.length-1); renderQ(); e.preventDefault(); }
   if(e.key === "ArrowUp"){ qSel = Math.max(qSel-1, 0); renderQ(); e.preventDefault(); }
-  if(e.key === "Enter" && qList[qSel]){ goTo(qList[qSel]); e.preventDefault(); }
+  if(e.key === "Enter" && qList[qSel]){ pickQ(qList[qSel]); e.preventDefault(); }
   if(e.key === "Escape"){ $("qres").hidden = true; $("q").blur(); }
 });
-$("qres").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if(b) goTo(qList[+b.dataset.i]); });
-document.addEventListener("click", e => { if(!e.target.closest(".search")) $("qres").hidden = true; });
+$("qres").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if(b) pickQ(qList[+b.dataset.i]); });
+function pickQ(r){
+  if(!r) return;
+  if(r.stockHead){ stockShown = 40; showStocked(r.species, r.label); lastStock = r; return; }
+  if(r.more){ stockShown += 40; showStocked(r.species, r.label); return; }
+  if(r.back){ $("q").dispatchEvent(new Event("input")); return; }
+  if(r.stocked){
+    if(r.places) return goTo({ name:r.name, places:r.places });
+    $("qres").hidden = true; $("q").blur(); openCounty(r.cid); toast(`${r.name} isn't drawn on the map by that name; it's in ${countyName(r.cid)}.`); return;
+  }
+  goTo(r);
+}
+let lastStock = null;
+document.addEventListener("click", e => { if(!e.target.closest(".search") && !e.target.closest("#qres")) $("qres").hidden = true; });
 async function goTo(r){
   $("qres").hidden = true; $("q").value = r.name; $("q").blur();
   // the place with the biggest stretch of this water
@@ -3214,6 +3269,24 @@ function setMapView(v){
   document.dispatchEvent(new Event("mapview"));
 }
 setMapView(mapView);
+
+/* ---------- roads and road names over the Map and Satellite views (Topo already has them) ---------- */
+pane("roads", 397, false);
+let showRoads = lsGet("fl.roads", true), roadsLayer = null;
+function syncRoads(){
+  const want = showRoads && mapView !== "topo";
+  if(want && !roadsLayer){
+    roadsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+      { pane:"roads", maxNativeZoom:19, maxZoom:18, crossOrigin:true, updateWhenIdle:true, keepBuffer:2, opacity: mapView === "field" ? .75 : .95 });
+    roadsLayer.addTo(map);
+  } else if(!want && roadsLayer){ map.removeLayer(roadsLayer); roadsLayer = null; }
+  if(roadsLayer) roadsLayer.setOpacity(mapView === "field" ? .75 : .95);
+  const b = $("roadsToggle"); if(b){ b.setAttribute("aria-pressed", String(showRoads)); b.textContent = showRoads ? "Roads on" : "Roads off"; b.hidden = mapView === "topo"; }
+  const c = $("viewCredit"); if(c) c.textContent = [VIEWS[mapView].credit, roadsLayer ? "Roads: Esri, HERE, Garmin" : ""].filter(Boolean).join(" · ");
+}
+document.addEventListener("mapview", syncRoads);
+$("roadsToggle").onclick = () => { showRoads = !showRoads; lsSet("fl.roads", showRoads); syncRoads(); };
+syncRoads();
 
 /* ---------- update ready banner ---------- */
 let updateWaiting = false;
@@ -3834,7 +3907,7 @@ function outlineCounty(id){
 function tapCounty(latlng){
   const id = countyAt(latlng.lat, latlng.lng);
   if(!id || id === currentCounty) return;
-  if(!currentCounty && map.getZoom() < AREA_ZOOM){ openCounty(id); return; }   // statewide: a tap opens the county (the county shape's own tap usually got here first)
+  if(currentCounty || map.getZoom() < AREA_ZOOM){ map.closePopup(); openCounty(id); return; }   // in a county or statewide: a tap on another county goes straight there
   outlineCounty(id);
   const s = countyStats(id);
   L.popup({ maxWidth:240, className:"cpop" }).setLatLng(latlng).setContent(`<div class="pop"><h3>${esc(countyName(id))}</h3>
@@ -4017,32 +4090,48 @@ function hereHtml(fix, near){
   const w = pickWater(near);
   return `<div class="pop"><h3>You're here</h3>
     <div class="meta">${w ? `<b>${esc(w.name)}</b> · ${esc(distTxt(w.dist))}` : near[0] ? `Nearest named water: ${esc(near[0].name)}, ${esc(distTxt(near[0].dist))}` : "No named water close by"}</div>
-    <div class="meta">${fix.cid ? esc(countyName(fix.cid)) : "Outside Wisconsin"} · accurate to about ${Math.max(10, Math.round(fix.acc * 3.281 / 10) * 10)} ft</div>
+    <div class="meta">${fix.cid ? esc(countyName(fix.cid)) : "Outside Wisconsin"} · accurate to about ${fix.acc > 1600 ? `${(fix.acc / 1609).toFixed(1)} mi` : `${Math.max(10, Math.round(fix.acc * 3.281 / 10) * 10)} ft`}${fix.settling ? ` · <span class="settle">narrowing down…</span>` : ""}</div>
     ${canWrite ? `<div class="row"><button class="btn sm" type="button" data-here="spot">${icon("i-pin")}Add spot here</button><button class="btn sm" type="button" data-here="catch">${icon("i-fish")}Log a catch here</button></div>` : ""}</div>`;
+}
+/* Keep listening to the GPS and pass on each better reading until it's within goodM meters or time runs out.
+   Without a phone or Wi-Fi signal (offline) the first answer is often a rough guess; the real GPS fix can take
+   20-40 seconds to arrive, so the first reading alone put people in the wrong place. */
+function bestFix(onFix, onDone, onErr, { maxMs = 45000, goodM = 20 } = {}){
+  let best = null, done = false;
+  const finish = () => { if(done) return; done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); best ? onDone(best) : onErr({ code:3 }); };
+  const id = navigator.geolocation.watchPosition(p => {
+    if(done) return;
+    if(!best || p.coords.accuracy < best.coords.accuracy){ best = p; onFix(p, p.coords.accuracy <= goodM); }
+    if(p.coords.accuracy <= goodM) finish();
+  }, e => { if(e.code === 1 || !best){ done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); onErr(e); } }, { enableHighAccuracy:true, maximumAge:0, timeout:maxMs });
+  const t = setTimeout(finish, maxMs);
+  return finish;
 }
 function locateMe(){
   const b = document.querySelector(".locbtn");
   if(!navigator.geolocation){ toast("This phone can't share its location with Coulee."); return; }
   b?.classList.add("busy");
-  navigator.geolocation.getCurrentPosition(async pos => {
-    b?.classList.remove("busy");
+  let pop = null, first = true, near = [];
+  const show = async (pos, settled) => {
     const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy || 30;
-    hereFix = { lat, lng, acc, cid:countyAt(lat, lng) };
+    hereFix = { lat, lng, acc, cid:countyAt(lat, lng), settling:!settled };
     if(hereLayer) map.removeLayer(hereLayer);
     hereLayer = L.layerGroup([
       L.circle([lat, lng], { radius:acc, pane:"me", color:"#2F7BF5", weight:1, fillColor:"#2F7BF5", fillOpacity:.12, interactive:false }),
-      L.marker([lat, lng], { pane:"me", icon:L.divIcon({ className:"", html:`<div class="hereDot"></div>`, iconSize:[18,18], iconAnchor:[9,9] }), keyboard:false })
+      L.marker([lat, lng], { pane:"me", icon:L.divIcon({ className:"", html:`<div class="hereDot${settled ? "" : " settling"}"></div>`, iconSize:[18,18], iconAnchor:[9,9] }), keyboard:false })
     ]).addTo(map);
-    map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration:.7 });
-    const near = await watersNear(lat, lng).catch(() => []);
-    const pop = L.popup({ className:"hpop", offset:[0, -6], maxWidth:300, autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 90) }).setLatLng([lat, lng]).setContent(hereHtml(hereFix, near));
-    setTimeout(() => pop.openOn(map), 750);
-    hereLayer.eachLayer(l => l instanceof L.Marker && l.on("click", () => pop.openOn(map)));
-  }, err => {
+    hereLayer.eachLayer(l => l instanceof L.Marker && l.on("click", () => pop && pop.openOn(map)));
+    if(first){ first = false; map.flyTo([lat, lng], Math.max(map.getZoom(), acc > 300 ? 12 : 14), { duration:.7 }); }
+    else if(!map.getBounds().pad(-.2).contains([lat, lng])) map.panTo([lat, lng]);
+    near = await watersNear(lat, lng).catch(() => near);
+    if(!pop){ pop = L.popup({ className:"hpop", offset:[0, -6], maxWidth:300, autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 90) }); setTimeout(() => pop.openOn(map), 750); }
+    pop.setLatLng([lat, lng]).setContent(hereHtml(hereFix, near));
+  };
+  bestFix(show, pos => { b?.classList.remove("busy"); show(pos, true); }, err => {
     b?.classList.remove("busy");
     if(err.code === 1) toast(isIOS ? "Location is off for Coulee. Settings → Privacy & Security → Location Services → Safari Websites (or Coulee) → While Using." : "Location is blocked. Allow it in your browser's site settings.");
     else toast("Couldn't get a fix. Try again with a clearer view of the sky.");
-  }, { enableHighAccuracy:true, timeout:20000, maximumAge:15000 });
+  });
 }
 document.addEventListener("click", async e => {
   const h = e.target.closest("[data-here]"); if(!h || !hereFix) return;
@@ -4153,11 +4242,19 @@ function entryFlagHtml(tid, cid){
 /* ---------- founder analytics: totals and trends only, never who did what ---------- */
 let statsData = null;
 async function loadFounderStats(){ const { data, error } = await sb.rpc("founder_stats"); statsData = error ? { error:true } : data; if(tab === "me" && meView === "analytics") renderLog(); }
-function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1 } = {}){
+/* bar chart; tap (or hover) a bar to read its exact number and date underneath */
+function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1, unit = "", full = null } = {}){
   const W = 320, n = vals.length, bw = W / n, max = Math.max(1, ...vals);
-  return `<svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
-    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<rect x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(labels[i])}: ${v}</title></rect>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i * bw + bw / 2}" y="${h + 13}" text-anchor="middle">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>`;
+  const say = i => `${(full || labels)[i]}: ${vals[i].toLocaleString()}${unit ? " " + (vals[i] === 1 ? unit.replace(/s$/, "").replace(/^people$/, "person") : unit) : ""}`;
+  return `<div class="chartwrap"><svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
+    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<g class="bar" data-say="${esc(say(i))}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${h}" fill="transparent"/><rect class="b" x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(say(i))}</title></rect></g>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i * bw + bw / 2}" y="${h + 13}" text-anchor="middle">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>
+    <div class="chartread" aria-live="polite">Tap a bar to see its number</div></div>`;
 }
+document.addEventListener("click", e => {
+  const g = e.target.closest(".chartwrap .bar"); if(!g) return;
+  const w = g.closest(".chartwrap"); w.querySelectorAll(".bar.sel").forEach(x => x.classList.remove("sel")); g.classList.add("sel");
+  w.querySelector(".chartread").textContent = g.dataset.say;
+});
 function rankTable(rows, head){ return rows.length ? `<table class="tbl"><thead><tr><th>${head}</th><th class="n">Fish</th></tr></thead><tbody>${rows.map(([k, n]) => `<tr><td>${esc(k)}</td><td class="n">${n}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No data yet.</p>`; }
 function renderAnalytics(el){
   const back = `<button class="link backlink" data-me="creator" type="button">${icon("i-back")}Founder tools</button><div class="eyebrow">Founder</div><h2>Analytics</h2>`;
@@ -4169,14 +4266,14 @@ function renderAnalytics(el){
   el.innerHTML = back + `<p class="muted" style="margin:0 0 10px">Totals and trends only. Nothing here shows who did what or where anyone fishes.</p>
     <div class="stats four"><div class="stat"><b>${a.approved ?? 0}</b><span>anglers</span></div><div class="stat"><b>${s.active_7 ?? 0}</b><span>active this week</span></div><div class="stat"><b>${s.active_30 ?? 0}</b><span>active this month</span></div><div class="stat"><b>${a.pending ?? 0}</b><span>waiting</span></div></div>
     <div class="stats four"><div class="stat f"><b>${t.fish ?? 0}</b><span>fish logged</span></div><div class="stat"><b>${t.photos ?? 0}</b><span>photos</span></div><div class="stat"><b>${s.trips ?? 0}</b><span>trips</span></div><div class="stat"><b>${s.flags_open ?? 0}</b><span>open flags</span></div></div>
-    <h4><span>People opening the app</span><span>last 30 days</span></h4>${barsSvg(day.map(x => x[1]), day.map(x => md(x[0])), { every:5 })}
-    <h4><span>New accounts</span><span>by week</span></h4>${barsSvg(wk.map(x => x[1]), wk.map(x => md(x[0])), { every:2, color:"var(--friend)" })}
-    <h4><span>Fish caught</span><span>by month</span></h4>${barsSvg(mo.map(x => x[1]), mo.map(x => mon(x[0])), { color:"var(--fish)" })}
-    <h4><span>When catches get logged</span><span>hour of day</span></h4>${barsSvg(s.catch_hours || [], Array.from({ length:24 }, (_, h) => h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p"), { every:3 })}
-    <h4><span>Busiest days</span></h4>${barsSvg(s.catch_weekdays || [], ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"])}
+    <h4><span>People opening the app</span><span>last 30 days</span></h4>${barsSvg(day.map(x => x[1]), day.map(x => md(x[0])), { every:5, unit:"people", full:day.map(x => new Date(x[0] + "T12:00:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" })) })}
+    <h4><span>New accounts</span><span>by week</span></h4>${barsSvg(wk.map(x => x[1]), wk.map(x => md(x[0])), { every:2, color:"var(--friend)", unit:"new accounts", full:wk.map(x => "Week of " + new Date(x[0] + "T12:00:00").toLocaleDateString(undefined, { month:"short", day:"numeric" })) })}
+    <h4><span>Fish caught</span><span>by month</span></h4>${barsSvg(mo.map(x => x[1]), mo.map(x => mon(x[0])), { color:"var(--fish)", unit:"fish", full:mo.map(x => mon(x[0]) + " " + x[0].slice(0, 4)) })}
+    <h4><span>When catches get logged</span><span>hour of day</span></h4>${barsSvg(s.catch_hours || [], Array.from({ length:24 }, (_, h) => h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p"), { every:3, unit:"catches" })}
+    <h4><span>Busiest days</span></h4>${barsSvg(s.catch_weekdays || [], ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], { unit:"catches" })}
     <h4><span>Tournaments</span><span>${tn.total ?? 0} total</span></h4>
     <p style="margin:0 0 6px">${tn.live ?? 0} live · ${tn.upcoming ?? 0} upcoming · ${tn.finished ?? 0} finished · ${tn.open ?? 0} open to everyone · ${tn.entries ?? 0} entries</p>
-    ${barsSvg(tm.map(x => x[1]), tm.map(x => mon(x[0])), { h:80, color:"var(--t2)" })}
+    ${barsSvg(tm.map(x => x[1]), tm.map(x => mon(x[0])), { h:80, color:"var(--t2)", unit:"tournaments", full:tm.map(x => mon(x[0]) + " " + x[0].slice(0, 4)) })}
     <h4><span>Top species</span></h4>${rankTable(s.species || [], "Species")}
     <h4><span>Methods</span></h4>${rankTable((s.methods || []).map(([m, n]) => [METHODS[m] || m, n]), "Method")}
     <h4><span>Busiest counties</span></h4>${rankTable((s.counties || []).map(([c, n]) => [countyName(c), n]), "County")}
