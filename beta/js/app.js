@@ -3496,16 +3496,31 @@ $("log").addEventListener("click", e => { const b = e.target.closest("[data-offl
 function offlineBlock(cid){
   if(!("caches" in window)) return "";
   if(offlineSaved === null){ countSavedCounties().then(() => renderLog()); return ""; }
-  if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations and public land work without signal.</p>`
+  if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations, public land and roads work without signal.</p>`
     : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
   const n = offlineSaved.size, old = lsGet("fl.offlineIds", null);
   const stale = old && old.v !== offlineV() && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
   return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
     ${stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>The map data was updated.</b> ${stale} of your saved counties need a refresh to keep working offline.</p><div class="row2"><button class="btn sm ink" type="button" data-offline="refresh">Refresh saved counties</button></div></div>` : ""}
-    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
-    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 90 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
+    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations, public land and roads on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
+    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 105 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
 }
+
+/* Roads came after many people had already saved counties (build 39). When online, quietly add the roads to every
+   county already saved on this phone, one county at a time, well after the map has loaded. ~75 KB per county. */
+async function topUpSavedRoads(){
+  if(!("caches" in window) || !navigator.onLine || offlineBusy) return;
+  await countSavedCounties(); if(!offlineSaved || !offlineSaved.size) return;
+  const c = await caches.open(OFFLINE_CACHE);
+  for(const id of offlineSaved){
+    if(!navigator.onLine || offlineBusy) return;
+    const u = dataUrl("roads/" + id + ".json");
+    try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok && !(await c.match(u))) await c.put(u, r); await new Promise(res => setTimeout(res, 400)); } }catch(e){}
+  }
+}
+setTimeout(topUpSavedRoads, 15000);
+window.addEventListener("online", () => setTimeout(topUpSavedRoads, 5000));
 
 /* after a map data update, say so once instead of only showing it in Me -> Offline maps */
 let offlineNudged = false;
