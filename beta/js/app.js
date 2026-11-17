@@ -288,7 +288,7 @@ function setHover(name){
 function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
   const el = waterPopup(name, kind, e.latlng, trout, cid), here = countyAt(e.latlng.lat, e.latlng.lng);
-  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="link" type="button" data-opencounty="${esc(here)}">Open ${esc(countyName(here))}</button>`; el.appendChild(r); }
+  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="btn sm ink" type="button" data-opencounty="${esc(here)}">Go to ${esc(countyName(here))}</button>`; el.appendChild(r); }
   waterTapAt = Date.now(); featureTaps++;
   L.popup({ maxWidth:300 }).setLatLng(e.latlng).setContent(el).openOn(map);
   if(here && here !== currentCounty) outlineCounty(here);
@@ -532,6 +532,7 @@ function renderLabels(){
     }
     ctx.textAlign = "start";
   }
+  if(typeof roadLabels === "function") roadLabels(ctx, { scale, ox, oy, W, H, dpr, hits, placed, onScreen });
 }
 document.fonts && document.fonts.load('italic 500 12px "Crimson Pro"').then(drawLabels).catch(()=>{});
 
@@ -3011,78 +3012,125 @@ let nameIndex = null, qSel = 0, qList = [];
 async function loadIndex(){ if(nameIndex) return nameIndex; try{ const r = await fetch(dataUrl("water/index.json")); nameIndex = await r.json(); }catch(e){ nameIndex = []; } return nameIndex; }
 function renderQ(){
   const ul = $("qres");
-  if(!qList.length){ ul.hidden = !$("q").value.trim(); ul.innerHTML = $("q").value.trim() ? `<li><button disabled>No creeks or lakes by that name</button></li>` : ""; return; }
+  if(!qList.length){ ul.hidden = !$("q").value.trim(); ul.innerHTML = $("q").value.trim() ? `<li><button disabled>No creeks, lakes or stocked fish by that name</button></li>` : ""; return; }
   ul.hidden = false;
   ul.innerHTML = qList.map((r,i) => {
-    if(r.stockHead) return `<li><button class="stockhead ${i===qSel?"on":""}" data-i="${i}"><span class="wname">Waters stocked with ${esc(r.label)}</span><small>${r.n} waters the DNR stocked in the last 3 years · nearest first</small></button></li>`;
+    if(r.stockHead) return `<li class="stockcard"><div class="sctop"><b>${esc(cap(r.label))}</b> stocked in <b>${r.n}</b> water${r.n === 1 ? "" : "s"}<small>Wisconsin DNR stocking, last 3 years</small></div>
+      <button class="btn sm ink" type="button" data-i="${i}">Show them on the map</button></li>`;
+    if(r.sub) return `<li class="qsub">${esc(r.sub)}</li>`;
     if(r.back) return `<li><button class="stockback" data-i="${i}">‹ Back to search</button></li>`;
-    if(r.more) return `<li><button class="stockmore" data-i="${i}">Show ${r.more} more</button></li>`;
-    if(r.stocked) return `<li><button class="${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)} · ${esc(r.what)}</small></button></li>`;
+    if(r.more) return `<li><button class="stockmore" data-i="${i}">${esc(r.text)}</button></li>`;
+    if(r.stocked) return `<li><button class="srow ${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)}${r.dist ? ` · ${esc(r.dist)}` : ""}<br>${esc(r.what)}</small></button></li>`;
     return `<li><button class="${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)}</small></button></li>`;
   }).join("");
 }
+const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 
-/* ---------- "stocked with ...": type a fish (brook trout, walleye, musky…) to list the waters the DNR stocked with it ---------- */
-let stockIdx = null, stockShown = 40;
+/* ---------- stocked fish: type a fish (brook trout, walleye, musky…) to see where the DNR stocked it ----------
+   Build 38 hid this behind a header you had to tap, the list closed itself on that tap, it sat under the map style
+   buttons on phones, and "nearest" meant nearest the middle of the map without saying so. Now the closest waters show
+   right away with distances, and "Show them on the map" puts every one on the map. */
+let stockIdx = null, stockAll = 5;
 async function loadStockIdx(){ if(stockIdx) return stockIdx; try{ stockIdx = await (await fetch(dataUrl("stocking/index.json"))).json(); }catch(e){ stockIdx = {}; } return stockIdx; }
-const SP_ALIASES = [["brook trout","Brook Trout"],["brookie","Brook Trout"],["brookies","Brook Trout"],["brown trout","Brown Trout"],["rainbow trout","Rainbow Trout"],["rainbow","Rainbow Trout"],["steelhead","Rainbow Trout"],
+const SP_ALIASES = [["brook trout","Brook Trout"],["brookie","Brook Trout"],["brown trout","Brown Trout"],["brownie","Brown Trout"],["rainbow trout","Rainbow Trout"],["rainbow","Rainbow Trout"],["bow","Rainbow Trout"],["steelhead","Rainbow Trout"],
   ["trout",["Brook Trout","Brown Trout","Rainbow Trout"]],["walleye","Walleye"],["tiger musk","Northern Pike X Muskellunge"],["musky","Muskellunge"],["muskie","Muskellunge"],["muskellunge","Muskellunge"],["yellow perch","Yellow Perch"],["perch","Yellow Perch"],
-  ["crappie","Black Crappie"],["bluegill","Bluegill"],["largemouth","Largemouth Bass"],["smallmouth","Smallmouth Bass"],["bass",["Largemouth Bass","Smallmouth Bass"]],["northern pike","Northern Pike"],["pike","Northern Pike"],
-  ["catfish","Channel Catfish"],["salmon",["Chinook Salmon","Coho Salmon"]],["chinook","Chinook Salmon"],["king salmon","Chinook Salmon"],["coho","Coho Salmon"],["sturgeon","Lake Sturgeon"],["lake trout","Lake Trout"],["splake","Splake"]];
+  ["crappie","Black Crappie"],["bluegill","Bluegill"],["panfish",["Bluegill","Black Crappie","Yellow Perch","Pumpkinseed"]],["largemouth","Largemouth Bass"],["smallmouth","Smallmouth Bass"],["smallie","Smallmouth Bass"],["bass",["Largemouth Bass","Smallmouth Bass"]],["northern pike","Northern Pike"],["northern","Northern Pike"],["pike","Northern Pike"],
+  ["catfish","Channel Catfish"],["salmon",["Chinook Salmon","Coho Salmon"]],["chinook","Chinook Salmon"],["king salmon","Chinook Salmon"],["king","Chinook Salmon"],["coho","Coho Salmon"],["sturgeon","Lake Sturgeon"],["lake trout","Lake Trout"],["laker","Lake Trout"],["splake","Splake"]];
+const SP_LABEL = { "Brook Trout,Brown Trout,Rainbow Trout":"trout", "Largemouth Bass,Smallmouth Bass":"bass", "Chinook Salmon,Coho Salmon":"salmon", "Bluegill,Black Crappie,Yellow Perch,Pumpkinseed":"panfish" };
 function stockSpecies(q){
-  q = q.replace(/^stocked( with)?\s*/, "").replace(/s$/, "").trim(); if(q.length < 4) return null;
-  for(const [k, v] of SP_ALIASES){ const kk = k.replace(/s$/, ""); if(q === kk || kk.startsWith(q) || q.startsWith(kk + " ")) return [].concat(v); }
+  q = q.replace(/^stocked( with)?\s*/, "").replace(/\s*stocked$/, "").replace(/s$/, "").trim(); if(q.length < 3) return null;
+  for(const [k, v] of SP_ALIASES){ const kk = k.replace(/s$/, ""); if(q === kk || (q.length >= 4 && kk.startsWith(q)) || q.startsWith(kk + " ")) return [].concat(v); }
+  return null;
+}
+// where distances are measured from: you (if Coulee has your location), else the map when you're zoomed in on an area
+function stockFrom(){
+  if(typeof hereFix !== "undefined" && hereFix && hereFix.cid) return { ll:L.latLng(hereFix.lat, hereFix.lng), you:true };
+  if(map.getZoom() >= 8.5 || currentCounty) return { ll:map.getCenter(), you:false };
   return null;
 }
 function stockedList(species){
-  const idx = stockIdx || {}, c = (typeof hereFix !== "undefined" && hereFix) ? L.latLng(hereFix.lat, hereFix.lng) : map.getCenter(), byKey = new Map();
+  const idx = stockIdx || {}, from = stockFrom(), byKey = new Map();
   for(const sp of species) for(const e of idx[sp] || []){ const k = e[0] + "|" + e[1]; const o = byKey.get(k) || { e, sps:[], year:0, fish:0 }; o.sps.push(sp); o.year = Math.max(o.year, e[2]); o.fish += e[3]; byKey.set(k, o); }
   const where = o => { const hit = o.e[5] && (nameIndex || []).find(x => x[0] === o.e[0]); const p = hit && hit[1].find(q => q[0] === o.e[1]);
-    if(p) return { places:[p], ll:[(p[2] + p[4]) / 2, (p[1] + p[3]) / 2] };
-    const b = byId[o.e[1]] && L.geoJSON(byId[o.e[1]]).getBounds(); return { places:null, ll: b ? [b.getCenter().lat, b.getCenter().lng] : [c.lat, c.lng] }; };
-  return [...byKey.values()].map(o => { const w = where(o); return { stocked:true, name:o.e[0], cid:o.e[1], places:w.places,
-      counties: byId[o.e[1]]?.properties.name || "", d: map.distance(c, w.ll),
-      what: `${species.length > 1 ? o.sps.map(x => x.replace(/ (Trout|Bass|Salmon)$/, "")).join(", ") + " · " : ""}${o.year}${o.fish ? ` · ${o.fish.toLocaleString()} fish` : ""}` }; })
-    .sort((a, b) => a.d - b.d);
+    if(p) return { places:[p], ll:L.latLng((p[2] + p[4]) / 2, (p[1] + p[3]) / 2) };
+    const b = countyBounds && countyBounds[o.e[1]]; return { places:null, ll: b ? b.getCenter() : null }; };
+  return [...byKey.values()].map(o => { const w = where(o), d = from && w.ll ? map.distance(from.ll, w.ll) : null;
+      return { stocked:true, name:o.e[0], cid:o.e[1], places:w.places, ll:w.ll, year:o.year, fish:o.fish, d,
+        counties: countyName(o.e[1]) || "", dist: d == null ? "" : `${Math.max(1, Math.round(d / 1609))} mi${from.you ? " away" : ""}`,
+        what: `${species.length > 1 ? o.sps.map(x => x.replace(/ (Trout|Bass|Salmon)$/, "")).join(", ") + " · " : ""}Stocked ${o.year}${o.fish ? ` · ${o.fish.toLocaleString()} fish` : ""}` }; })
+    .sort((a, b) => from ? (a.d ?? 1e12) - (b.d ?? 1e12) : b.year - a.year || b.fish - a.fish);
 }
-function showStocked(species, label){
-  const all = stockedList(species);
-  qList = [{ back:true }, ...all.slice(0, stockShown)]; if(all.length > stockShown) qList.push({ more: all.length - stockShown, species, label });
-  qSel = 1; renderQ();
+function stockSortNote(){ const f = stockFrom(); return f ? (f.you ? "Closest to you" : "Closest to the part of the map you're looking at") : "Most recently stocked (zoom in or tap the location button to sort by distance)"; }
+function showStockedList(head){
+  const all = stockedList(head.species);
+  qList = [{ back:true }, head, { sub:stockSortNote() }, ...all.slice(0, stockAll)]; if(all.length > stockAll) qList.push({ more:true, all:true, head, text:`Show ${Math.min(40, all.length - stockAll)} more` });
+  qSel = -1; renderQ(); $("qres").scrollTop = 0;
 }
 $("q").addEventListener("focus", loadIndex);
 $("q").addEventListener("input", async () => {
   const q = $("q").value.trim().toLowerCase(); const idx = await loadIndex();
   if(q.length < 2){ qList = []; renderQ(); return; }
-  const sp = stockSpecies(q), out = [];
-  if(sp){ await loadStockIdx(); const n = new Set(sp.flatMap(x => (stockIdx[x] || []).map(e => e[0] + "|" + e[1]))).size;
-    if(n){ stockShown = 40; const label = sp.length > 1 ? (q.includes("salmon") ? "salmon" : q.includes("bass") ? "bass" : "trout") : sp[0].toLowerCase(); out.push({ k:-1, stockHead:true, species:sp, label, n }); } }
-  for(const [name, places] of idx){ const n = name.toLowerCase(); const k = n.startsWith(q) ? 0 : n.includes(" " + q) ? 1 : n.includes(q) ? 2 : -1; if(k < 0) continue;
-    out.push({ k, name, places, counties: places.map(p => byId[p[0]]?.properties.name).filter(Boolean).slice(0,3).join(", ") + (places.length > 3 ? "…" : "") }); }
-  out.sort((a,b)=>a.k-b.k||a.name.length-b.name.length||a.name.localeCompare(b.name));
-  qList = out.slice(0, 11); qSel = 0; renderQ();
+  const sp = stockSpecies(q), out = [], names = [];
+  for(const [name, places] of idx){ if(name === "NA" || name === "Unnamed") continue; const n = name.toLowerCase(); const k = n.startsWith(q) ? 0 : n.includes(" " + q) ? 1 : n.includes(q) ? 2 : -1; if(k < 0) continue;
+    names.push({ k, name, places, counties: places.map(p => byId[p[0]]?.properties.name).filter(Boolean).slice(0,3).join(", ") + (places.length > 3 ? "…" : "") }); }
+  names.sort((a,b)=>a.k-b.k||a.name.length-b.name.length||a.name.localeCompare(b.name));
+  if(sp){ await loadStockIdx(); if($("q").value.trim().toLowerCase() !== q) return;
+    const all = stockedList(sp);
+    if(all.length){ const head = { stockHead:true, species:sp, label:SP_LABEL[sp.join(",")] || sp[0].toLowerCase(), n:all.length };
+      stockAll = 5; out.push(head, { sub:stockSortNote() }, ...all.slice(0, 3));
+      if(all.length > 3) out.push({ more:true, head, text:`See all ${all.length} in a list` });
+      if(names.length) out.push({ sub:"Creeks and lakes by that name" }); } }
+  out.push(...names.slice(0, sp ? 6 : 11));
+  qList = out; qSel = out.findIndex(r => !r.sub && !r.stockHead && !r.more); renderQ();
 });
 $("q").addEventListener("keydown", e => {
-  if(e.key === "ArrowDown"){ qSel = Math.min(qSel+1, qList.length-1); renderQ(); e.preventDefault(); }
-  if(e.key === "ArrowUp"){ qSel = Math.max(qSel-1, 0); renderQ(); e.preventDefault(); }
+  const ok = i => qList[i] && !qList[i].sub;
+  if(e.key === "ArrowDown"){ let i = qSel; do i++; while(i < qList.length && !ok(i)); if(ok(i)){ qSel = i; renderQ(); } e.preventDefault(); }
+  if(e.key === "ArrowUp"){ let i = qSel; do i--; while(i >= 0 && !ok(i)); if(ok(i)){ qSel = i; renderQ(); } e.preventDefault(); }
   if(e.key === "Enter" && qList[qSel]){ pickQ(qList[qSel]); e.preventDefault(); }
   if(e.key === "Escape"){ $("qres").hidden = true; $("q").blur(); }
 });
-$("qres").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if(b) pickQ(qList[+b.dataset.i]); });
+$("qres").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if(b){ e.stopPropagation(); pickQ(qList[+b.dataset.i]); } });
 function pickQ(r){
-  if(!r) return;
-  if(r.stockHead){ stockShown = 40; showStocked(r.species, r.label); lastStock = r; return; }
-  if(r.more){ stockShown += 40; showStocked(r.species, r.label); return; }
+  if(!r || r.sub) return;
+  if(r.stockHead) return showStockMap(r);
+  if(r.more){ stockAll = r.all ? stockAll + 40 : 40; showStockedList(r.head); return; }
   if(r.back){ $("q").dispatchEvent(new Event("input")); return; }
-  if(r.stocked){
-    if(r.places) return goTo({ name:r.name, places:r.places });
-    $("qres").hidden = true; $("q").blur(); openCounty(r.cid); toast(`${r.name} isn't drawn on the map by that name; it's in ${countyName(r.cid)}.`); return;
-  }
+  if(r.stocked) return goStocked(r);
   goTo(r);
 }
-let lastStock = null;
-document.addEventListener("click", e => { if(!e.target.closest(".search") && !e.target.closest("#qres")) $("qres").hidden = true; });
-async function goTo(r){
+function goStocked(r){
+  const note = `${r.what}`;
+  if(r.places) return goTo({ name:r.name, places:r.places }, note);
+  $("qres").hidden = true; $("q").blur(); openCounty(r.cid); toast(`${r.name} isn't drawn on the map under that name. It's in ${countyName(r.cid)}. ${note}.`);
+}
+// a tap that re-draws the list replaces the button that was tapped; that must not count as a tap outside the search
+document.addEventListener("click", e => { if(!e.target.isConnected) return; if(!e.target.closest(".search") && !e.target.closest("#qres")) $("qres").hidden = true; });
+
+/* every stocked water on the map, with a bar under the search to clear them */
+pane("stockpins", 615, true);
+var stockLayer = null, stockRows = [], stockR = null;
+function showStockMap(head){
+  clearStockMap();
+  const rows = stockedList(head.species).filter(r => r.places);
+  if(!rows.length){ toast("None of those waters are drawn on the map."); return; }
+  stockRows = rows; stockR ||= L.canvas({ pane:"stockpins", padding:.3, tolerance:8 });
+  stockLayer = L.layerGroup(rows.map((r, i) => L.circleMarker(r.ll, { renderer:stockR, radius:7, weight:2, color:"#FFFFFF", fillColor:"#C2571B", fillOpacity:.95 })
+    .bindPopup(() => `<div class="pop"><h3>${esc(r.name)}</h3><div class="meta">${esc(r.counties)}${r.dist ? ` · ${esc(r.dist)}` : ""}</div><div class="meta">${esc(cap(head.label))}: ${esc(r.what)}</div>
+      <div class="row"><button class="btn sm ink" type="button" data-stockgo="${i}">Go to this water</button></div></div>`, { maxWidth:280 }))).addTo(map);
+  let chip = $("stockChip"); if(!chip){ chip = document.createElement("div"); chip.id = "stockChip"; chip.className = "stockchip"; document.querySelector(".crumb").appendChild(chip); }
+  chip.innerHTML = `<span>${esc(cap(head.label))} stocked · ${rows.length} waters</span><button type="button" aria-label="Clear stocked waters" data-stockclear>✕</button>`;
+  chip.hidden = false;
+  $("qres").hidden = true; $("q").blur();
+  if(currentCounty) leaveCounty();
+  map.fitBounds(L.latLngBounds(rows.map(r => r.ll)), { padding:[40, 40], maxZoom:11 });
+}
+function clearStockMap(){ if(stockLayer){ map.removeLayer(stockLayer); stockLayer = null; } if(stockR){ dropCanvas(stockR); stockR = null; } const c = $("stockChip"); if(c) c.hidden = true; }
+document.addEventListener("click", e => {
+  if(e.target.closest("[data-stockclear]")){ clearStockMap(); return; }
+  const g = e.target.closest("[data-stockgo]"); if(g){ const r = stockRows[+g.dataset.stockgo]; map.closePopup(); if(r) goStocked(r); }
+});
+async function goTo(r, note){
   $("qres").hidden = true; $("q").value = r.name; $("q").blur();
   // the place with the biggest stretch of this water
   const p = r.places.slice().sort((a,b)=>((b[3]-b[1])*(b[4]-b[2]))-((a[3]-a[1])*(a[4]-a[2])))[0];
@@ -3092,7 +3140,18 @@ async function goTo(r){
   const b = L.latLngBounds([p[2],p[1]],[p[4],p[3]]);
   map.fitBounds(b, { padding:[50,50], maxZoom:14 });
   map.once("moveend", () => { if(p[5] === "s"){ setHover(r.name); clearTimeout(flashT); flashT = setTimeout(() => setHover(null), 3200); }
-    else { const l = detailLakes.find(x => x.name === r.name); if(l){ l.poly.setStyle({ color:css("--hl"), weight:4 }); setTimeout(() => l.poly.setStyle({ color:css("--stream"), weight:.7 }), 3200); } } });
+    else { const l = detailLakes.find(x => x.name === r.name); if(l){ l.poly.setStyle({ color:css("--hl"), weight:4 }); setTimeout(() => l.poly.setStyle({ color:css("--stream"), weight:.7 }), 3200); } }
+    if(note) waterNote(r.name, p, note); });
+}
+
+// after going to a stocked water: a small card on the water itself, so you can see which one it is and what was stocked
+function waterNote(name, p, note){
+  const c = L.latLng((p[2] + p[4]) / 2, (p[1] + p[3]) / 2);
+  let at = c, best = Infinity;
+  const l = p[5] !== "s" && detailLakes.find(x => x.name === name);
+  if(l) at = l.poly.getBounds().getCenter();
+  else for(const s of detailStreams) if(s.name === name) for(const line of s.ll) for(const q of line){ const d = map.distance(c, q); if(d < best){ best = d; at = L.latLng(q[0], q[1]); } }
+  L.popup({ maxWidth:260, className:"stocknote" }).setLatLng(at).setContent(`<div class="pop"><h3>${esc(name)}</h3><div class="meta">${esc(note)}</div></div>`).openOn(map);
 }
 
 
@@ -3270,24 +3329,6 @@ function setMapView(v){
 }
 setMapView(mapView);
 
-/* ---------- roads and road names over the Map and Satellite views (Topo already has them) ---------- */
-pane("roads", 397, false);
-let showRoads = lsGet("fl.roads", true), roadsLayer = null;
-function syncRoads(){
-  const want = showRoads && mapView !== "topo";
-  if(want && !roadsLayer){
-    roadsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
-      { pane:"roads", maxNativeZoom:19, maxZoom:18, crossOrigin:true, updateWhenIdle:true, keepBuffer:2, opacity: mapView === "field" ? .75 : .95 });
-    roadsLayer.addTo(map);
-  } else if(!want && roadsLayer){ map.removeLayer(roadsLayer); roadsLayer = null; }
-  if(roadsLayer) roadsLayer.setOpacity(mapView === "field" ? .75 : .95);
-  const b = $("roadsToggle"); if(b){ b.setAttribute("aria-pressed", String(showRoads)); b.textContent = showRoads ? "Roads on" : "Roads off"; b.hidden = mapView === "topo"; }
-  const c = $("viewCredit"); if(c) c.textContent = [VIEWS[mapView].credit, roadsLayer ? "Roads: Esri, HERE, Garmin" : ""].filter(Boolean).join(" · ");
-}
-document.addEventListener("mapview", syncRoads);
-$("roadsToggle").onclick = () => { showRoads = !showRoads; lsSet("fl.roads", showRoads); syncRoads(); };
-syncRoads();
-
 /* ---------- update ready banner ---------- */
 let updateWaiting = false;
 function appBusy(){
@@ -3430,7 +3471,7 @@ async function saveCountiesOffline(ids, onProgress){
   for(const id of ids){
     for(const u of countyFiles(id)){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); else failed++; } }catch(e){ failed++; } }
     // nice to have offline too, but a county without them is still "saved": boat landings and lake facts, road crossings, stocking
-    for(const u of [dataUrl("places/" + id + ".json"), dataUrl("crossings/" + id + ".json"), dataUrl("stocking/" + id + ".json")]){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
+    for(const u of [dataUrl("places/" + id + ".json"), dataUrl("crossings/" + id + ".json"), dataUrl("stocking/" + id + ".json"), dataUrl("roads/" + id + ".json")]){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();
@@ -4096,9 +4137,11 @@ function hereHtml(fix, near){
 /* Keep listening to the GPS and pass on each better reading until it's within goodM meters or time runs out.
    Without a phone or Wi-Fi signal (offline) the first answer is often a rough guess; the real GPS fix can take
    20-40 seconds to arrive, so the first reading alone put people in the wrong place. */
-function bestFix(onFix, onDone, onErr, { maxMs = 45000, goodM = 20 } = {}){
+function bestFix(onFix, onDone, onErr, { maxMs = 90000, okMs = 45000, okM = 100, goodM = 20 } = {}){
   let best = null, done = false;
-  const finish = () => { if(done) return; done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); best ? onDone(best) : onErr({ code:3 }); };
+  // after 45 seconds settle for anything within about 300 ft; a phone with no signal at all gets up to 90 seconds to find the satellites
+  const okT = setTimeout(() => { if(best && best.coords.accuracy <= okM) finish(); }, okMs);
+  const finish = () => { if(done) return; done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); clearTimeout(okT); best ? onDone(best) : onErr({ code:3 }); };
   const id = navigator.geolocation.watchPosition(p => {
     if(done) return;
     if(!best || p.coords.accuracy < best.coords.accuracy){ best = p; onFix(p, p.coords.accuracy <= goodM); }
@@ -4247,7 +4290,7 @@ function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1, unit
   const W = 320, n = vals.length, bw = W / n, max = Math.max(1, ...vals);
   const say = i => `${(full || labels)[i]}: ${vals[i].toLocaleString()}${unit ? " " + (vals[i] === 1 ? unit.replace(/s$/, "").replace(/^people$/, "person") : unit) : ""}`;
   return `<div class="chartwrap"><svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
-    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<g class="bar" data-say="${esc(say(i))}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${h}" fill="transparent"/><rect class="b" x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(say(i))}</title></rect></g>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i * bw + bw / 2}" y="${h + 13}" text-anchor="middle">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>
+    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<g class="bar" data-say="${esc(say(i))}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${h}" fill="transparent"/><rect class="b" x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(say(i))}</title></rect></g>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i === 0 ? i * bw + 1 : i * bw + bw / 2}" y="${h + 13}" text-anchor="${i === 0 ? "start" : "middle"}">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>
     <div class="chartread" aria-live="polite">Tap a bar to see its number</div></div>`;
 }
 document.addEventListener("click", e => {
@@ -4530,6 +4573,95 @@ $("log").addEventListener("click", e => {
   const w = e.target.closest("[data-pw]"); if(w){ savePrefs({ waters:w.dataset.pw }); return; }
   const t = e.target.closest("[data-pt]"); if(t){ const s = new Set(fprefs().targets || []); s.has(t.dataset.pt) ? s.delete(t.dataset.pt) : s.add(t.dataset.pt); savePrefs({ targets:[...s] }); }
 });
+
+/* ---------- public roads: Coulee's own lines from the Census road files, drawn in the map's style ----------
+   (Build 38 laid a picture layer of roads from an outside map service over the map: blurry text that clashed with the
+   creek names, extra downloads that slowed the map, and nothing offline.) These are real lines, loaded per county like
+   public land, sharp at any zoom, saved with a county for offline use, and named with the map's own lettering.
+   Highways and county roads show from zoom 10.5, every other named public road from zoom 12. Topo already has roads. */
+pane("roads", 397, false);
+var ROAD_ZOOM = 10.5, LOCAL_ROAD_ZOOM = 12, roadCache = {}, roadGroups = {}, roadItems = {}, roadOn = new Set(), roadSeq = 0, roadR = null;
+var showRoads = lsGet("fl.roads", true);
+function decodeRoad(a){ const out = []; let la = 0, ln = 0; for(let i = 0; i + 1 < a.length; i += 2){ la += a[i]; ln += a[i+1]; out.push([la / 1e5, ln / 1e5]); } return out; }
+function roadWeight(k, z){ return k === 1 ? (z >= 14 ? 3.4 : z >= 12 ? 2.6 : 2) : k === 2 ? (z >= 14 ? 2.6 : z >= 12 ? 2 : 1.5) : (z >= 15 ? 2 : z >= 13.5 ? 1.5 : 1); }
+function roadStyle(k, z){
+  const w = roadWeight(k, z);
+  if(mapView === "sat") return { color: k === 3 ? "rgba(255,255,255,.5)" : "rgba(255,240,205,.78)", weight: w * .8 };
+  return { color: css(k === 3 ? "--road" : "--road-major"), weight: w };
+}
+function buildRoads(id, d){
+  roadR ||= L.canvas({ pane:"roads", padding:canvasPad() });
+  const by = { 1:[], 2:[], 3:[] }, items = [];
+  for(let [name, k, lines] of d.r || []){ name = name.replace(/^County ([A-Za-z]{1,3})$/, (m, x) => "County " + x.toUpperCase()); const ll = lines.map(decodeRoad); by[k]?.push(...ll); items.push({ name, k, lines:ll }); }
+  roadItems[id] = items;
+  const z = map.getZoom(), g = { group:L.layerGroup(), parts:{} };
+  for(const k of [1, 2, 3]) if(by[k].length) g.parts[k] = L.polyline(by[k], { renderer:roadR, interactive:false, lineCap:"round", lineJoin:"round", smoothFactor:1.5, ...roadStyle(k, z) });
+  return g;
+}
+async function syncRoadLines(){
+  const seq = ++roadSeq, z = map.getZoom();
+  const want = new Set(showRoads && mapView !== "topo" && z >= ROAD_ZOOM ? [...areaWant, currentCounty].filter(Boolean) : []);
+  for(const id of [...roadOn]) if(!want.has(id)){ roadGroups[id].group.remove(); roadOn.delete(id); }
+  await Promise.all([...want].map(async id => {
+    if(!roadGroups[id]){ let d; try{ d = await getJSON(roadCache, dataUrl("roads/" + id + ".json"), id); }catch(e){ return; } await new Promise(r => setTimeout(r, 40)); if(seq !== roadSeq) return; roadGroups[id] ||= buildRoads(id, d); }   // let the creeks and land draw first
+    if(seq !== roadSeq) return;
+    if(!roadOn.has(id)){ roadGroups[id].group.addTo(map); roadOn.add(id); }
+  }));
+  if(seq !== roadSeq) return;
+  // local roads only up close; widths follow the zoom
+  for(const id of roadOn){ const g = roadGroups[id];
+    for(const k of [1, 2, 3]){ const p = g.parts[k]; if(!p) continue;
+      const on = k < 3 || z >= LOCAL_ROAD_ZOOM;
+      if(on && !g.group.hasLayer(p)) g.group.addLayer(p); else if(!on && g.group.hasLayer(p)) g.group.removeLayer(p);
+      if(on){ const st = roadStyle(k, z); if(p.options.weight !== st.weight || p.options.color !== st.color) p.setStyle(st); } } }
+  // nothing to draw: give the drawing memory back (iPhone caps it; see dropCanvas)
+  if(!roadOn.size && roadR){ dropCanvas(roadR); roadR = null; roadGroups = {}; roadItems = {}; }
+  drawLabels();
+  const b = $("roadsToggle"); if(b){ b.setAttribute("aria-pressed", String(showRoads)); b.textContent = showRoads ? "Roads on" : "Roads off"; b.hidden = mapView === "topo"; }
+}
+document.addEventListener("mapsettled", syncRoadLines);
+document.addEventListener("mapview", () => { for(const id of roadOn) for(const k of [1, 2, 3]) roadGroups[id].parts[k]?.setStyle(roadStyle(k, map.getZoom())); syncRoadLines(); });
+$("roadsToggle").onclick = () => { showRoads = !showRoads; lsSet("fl.roads", showRoads); syncRoadLines(); };
+syncRoadLines();
+/* Road names: drawn after creek and lake names (those win any overlap), straight along the longest stretch of road on screen,
+   highways and county roads from zoom 12.5, other roads from zoom 14. Called from renderLabels. */
+function roadLabels(ctx, o){
+  const z = map.getZoom(); if(!roadOn || !roadOn.size || z < 12.5) return;
+  const sat = mapView === "sat";
+  ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = `600 ${z >= 15 ? 11.5 : 10.5}px "Source Sans 3", "Segoe UI", system-ui, sans-serif`;
+  const fill = sat ? "#FFFFFF" : css("--road-ink"), halo = sat ? "rgba(20,20,16,.75)" : css("--land");
+  const done = new Set(), list = [];
+  for(const id of roadOn) for(const r of roadItems[id] || []) if(r.k < 3 || z >= 14) list.push(r);
+  list.sort((a, b) => a.k - b.k);
+  let n = 0;
+  for(const r of list){
+    if(done.has(r.name) || n > 60) continue;
+    const tw = ctx.measureText(r.name).width + 10;
+    let best = null, bestLen = 0;
+    for(const line of r.lines){
+      const m = merc(line), a = m.a;
+      if(m.x1 * o.scale - o.ox < 0 || m.x0 * o.scale - o.ox > o.W || m.y1 * o.scale - o.oy < 0 || m.y0 * o.scale - o.oy > o.H) continue;
+      for(let i = 0; i + 3 < a.length; i += 2){
+        const x1 = a[i] * o.scale - o.ox, y1 = a[i+1] * o.scale - o.oy, x2 = a[i+2] * o.scale - o.ox, y2 = a[i+3] * o.scale - o.oy;
+        const len = Math.hypot(x2 - x1, y2 - y1); if(len < tw + 12 || len <= bestLen) continue;
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2; if(!o.onScreen({ x:mx, y:my })) continue;
+        best = { mx, my, ang:Math.atan2(y2 - y1, x2 - x1) }; bestLen = len;
+      }
+    }
+    if(!best) continue;
+    let ang = best.ang; if(ang > Math.PI / 2) ang -= Math.PI; if(ang < -Math.PI / 2) ang += Math.PI;
+    const cos = Math.abs(Math.cos(ang)), sin = Math.abs(Math.sin(ang)), hw = tw / 2, hh = 7;
+    const box = { x:best.mx - (hw * cos + hh * sin), y:best.my - (hw * sin + hh * cos), w:2 * (hw * cos + hh * sin), h:2 * (hw * sin + hh * cos) };
+    if(o.hits(box)) continue;
+    o.placed.push(box); done.add(r.name); n++;
+    ctx.translate(best.mx, best.my); ctx.rotate(ang);
+    ctx.lineJoin = "round"; ctx.lineWidth = 3; ctx.strokeStyle = halo; ctx.strokeText(r.name, 0, 0);
+    ctx.fillStyle = fill; ctx.fillText(r.name, 0, 0);
+    ctx.setTransform(o.dpr, 0, 0, o.dpr, 0, 0);
+  }
+  ctx.restore();
+}
 
 /* ---------- the season: out-of-season flags, opener countdown, season recap, challenges, streaks,
    county completion, and measuring along a creek ----------
@@ -5186,7 +5318,8 @@ async function watersNear(lat, lng){
   if(lat == null || lng == null) return [];
   const ids = counties.map(f => f.id).filter(id => { const [a, d, c, b] = countyBox[id]; return lat >= a && lat <= c && lng >= d && lng <= b; });
   const best = {};
-  const note = (name, kind, dist) => { if(!name) return; const k = name.toLowerCase(); if(!best[k] || dist < best[k].dist) best[k] = { name, kind, dist }; };
+  const note = (name, kind, dist) => { if(!name || name === "NA" || name === "Unnamed") return;   // "NA" is how the DNR files mark unnamed creeks
+  const k = name.toLowerCase(); if(!best[k] || dist < best[k].dist) best[k] = { name, kind, dist }; };
   for(const id of ids){
     let w; try{ w = await getJSON(waterCache, dataUrl("water/" + id + ".json"), id); }catch(e){ continue; }
     for(const [name, , paths] of w.s || []) for(const path of paths) for(let i = 1; i < path.length; i++){

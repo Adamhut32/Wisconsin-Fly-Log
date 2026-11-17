@@ -16,6 +16,12 @@ on:
       skip_dnr:
         description: "Skip the DNR downloads and only refresh the USGS gauge files (true/false)"
         default: "false"
+      roads:
+        description: "Rebuild the public roads layer from the Census (true/false)"
+        default: "true"
+      only_roads:
+        description: "Only rebuild the public roads layer and skip everything else (true/false)"
+        default: "false"
       fetch:
         description: "Only fetch these web addresses (separated by spaces) into tools/probe/ and skip everything else"
         default: ""
@@ -32,21 +38,25 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install "shapely>=2,<3" pyshp
       - name: DNR boat landings, shore fishing sites, lake facts
-        if: inputs.fetch == '' && inputs.skip_dnr != 'true'
+        if: inputs.fetch == '' && inputs.skip_dnr != 'true' && inputs.only_roads != 'true'
         continue-on-error: true
         run: python3 tools/dnr_places.py
       - name: USGS stream gauges
-        if: inputs.fetch == ''
+        if: inputs.fetch == '' && inputs.only_roads != 'true'
         continue-on-error: true
         run: python3 tools/usgs_gauges.py
       - name: DNR fish stocking records
-        if: inputs.fetch == '' && inputs.skip_dnr != 'true'
+        if: inputs.fetch == '' && inputs.skip_dnr != 'true' && inputs.only_roads != 'true'
         continue-on-error: true
         run: python3 tools/dnr_stocking.py
       - name: Road crossings over trout streams
-        if: inputs.crossings != 'false' && inputs.fetch == ''
+        if: inputs.crossings != 'false' && inputs.fetch == '' && inputs.only_roads != 'true'
         continue-on-error: true
         run: python3 tools/road_crossings.py
+      - name: Public roads (Census TIGER)
+        if: inputs.roads != 'false' && inputs.fetch == ''
+        continue-on-error: true
+        run: python3 tools/public_roads.py
       - name: Look at the stocking page
         if: inputs.probe == 'true'
         run: |
