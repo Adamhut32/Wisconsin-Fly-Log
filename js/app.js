@@ -197,6 +197,8 @@ let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], 
 const canvasPad = () => innerWidth * innerHeight > 1.2e6 ? .2 : innerWidth > 700 ? .35 : .4;
 /* Throw away a drawing surface and give its memory back right away. iPhones cap the total memory all map drawing surfaces
    may use and only reclaim a discarded one much later, so after a few counties the last layer drawn (public land) came up blank. */
+// a canvas we dropped can still get one late redraw from a layer leaving it; skip it instead of throwing
+(function(){ const r0 = L.Canvas.prototype._redraw; L.Canvas.prototype._redraw = function(){ if(!this._ctx){ this._redrawRequest = null; this._redrawBounds = null; return; } return r0.call(this); }; })();
 function dropCanvas(r){ if(!r) return; const c = r._container; if(map.hasLayer(r)) map.removeLayer(r); if(c){ c.width = 0; c.height = 0; } }
 function smoothPath(pts, n = 2){
   if(pts.length < 3) return pts;
@@ -286,7 +288,7 @@ function setHover(name){
 function openWaterPopup(e, name, kind, trout, cid){
   if(picking){ handlePick(e.latlng); return; }
   const el = waterPopup(name, kind, e.latlng, trout, cid), here = countyAt(e.latlng.lat, e.latlng.lng);
-  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="link" type="button" data-opencounty="${esc(here)}">Open ${esc(countyName(here))}</button>`; el.appendChild(r); }
+  if(here && here !== currentCounty){ const r = document.createElement("div"); r.className = "row"; r.innerHTML = `<button class="btn sm ink" type="button" data-opencounty="${esc(here)}">Go to ${esc(countyName(here))}</button>`; el.appendChild(r); }
   waterTapAt = Date.now(); featureTaps++;
   L.popup({ maxWidth:300 }).setLatLng(e.latlng).setContent(el).openOn(map);
   if(here && here !== currentCounty) outlineCounty(here);
@@ -530,6 +532,7 @@ function renderLabels(){
     }
     ctx.textAlign = "start";
   }
+  if(typeof roadLabels === "function") roadLabels(ctx, { scale, ox, oy, W, H, dpr, hits, placed, onScreen });
 }
 document.fonts && document.fonts.load('italic 500 12px "Crimson Pro"').then(drawLabels).catch(()=>{});
 
@@ -1128,14 +1131,18 @@ $("gpsBtn").onclick = () => {
   const h = $("coordHint");
   if(!navigator.geolocation){ h.className = "hint bad"; h.textContent = "This browser can't share your location. Pick on the map instead."; return; }
   h.className = "hint"; h.textContent = "Finding your location…"; $("gpsBtn").disabled = true;
-  navigator.geolocation.getCurrentPosition(pos => {
+  const ft = m => m > 1600 ? `${(m / 1609).toFixed(1)} mi` : `${Math.round(m * 3.28)} ft`;
+  bestFix((pos, settled) => {
+    $("fCoords").value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; coordHint();
+    if(!settled) h.textContent += ` Accurate to about ${ft(pos.coords.accuracy)}, still narrowing down…`;
+  }, pos => {
     $("gpsBtn").disabled = false;
     $("fCoords").value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; coordHint();
-    if(pos.coords.accuracy > 100) h.textContent += ` Accurate to about ${Math.round(pos.coords.accuracy * 3.28)} ft.`;
+    if(pos.coords.accuracy > 100) h.textContent += ` Accurate to about ${ft(pos.coords.accuracy)}.`;
   }, err => {
     $("gpsBtn").disabled = false; h.className = "hint bad";
-    h.textContent = err.code === 1 ? "Location is turned off for this app. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using." : "Couldn't get a GPS fix. Try again in the open, or pick on the map.";
-  }, { enableHighAccuracy:true, timeout:20000, maximumAge:30000 });
+    h.textContent = err.code === 1 ? "Location is turned off for this app. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using." : "Couldn't get a GPS fix. Try again in the open, or pick on the map instead.";
+  });
 };
 
 function openForm(kind, rec, prefill){
@@ -3005,29 +3012,125 @@ let nameIndex = null, qSel = 0, qList = [];
 async function loadIndex(){ if(nameIndex) return nameIndex; try{ const r = await fetch(dataUrl("water/index.json")); nameIndex = await r.json(); }catch(e){ nameIndex = []; } return nameIndex; }
 function renderQ(){
   const ul = $("qres");
-  if(!qList.length){ ul.hidden = !$("q").value.trim(); ul.innerHTML = $("q").value.trim() ? `<li><button disabled>No creeks or lakes by that name</button></li>` : ""; return; }
+  if(!qList.length){ ul.hidden = !$("q").value.trim(); ul.innerHTML = $("q").value.trim() ? `<li><button disabled>No creeks, lakes or stocked fish by that name</button></li>` : ""; return; }
   ul.hidden = false;
-  ul.innerHTML = qList.map((r,i)=>`<li><button class="${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)}</small></button></li>`).join("");
+  ul.innerHTML = qList.map((r,i) => {
+    if(r.stockHead) return `<li class="stockcard"><div class="sctop"><b>${esc(cap(r.label))}</b> stocked in <b>${r.n}</b> water${r.n === 1 ? "" : "s"}<small>Wisconsin DNR stocking, last 3 years</small></div>
+      <button class="btn sm ink" type="button" data-i="${i}">Show them on the map</button></li>`;
+    if(r.sub) return `<li class="qsub">${esc(r.sub)}</li>`;
+    if(r.back) return `<li><button class="stockback" data-i="${i}">‹ Back to search</button></li>`;
+    if(r.more) return `<li><button class="stockmore" data-i="${i}">${esc(r.text)}</button></li>`;
+    if(r.stocked) return `<li><button class="srow ${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)}${r.dist ? ` · ${esc(r.dist)}` : ""}<br>${esc(r.what)}</small></button></li>`;
+    return `<li><button class="${i===qSel?"on":""}" data-i="${i}"><span class="wname">${esc(r.name)}</span><small>${esc(r.counties)}</small></button></li>`;
+  }).join("");
+}
+const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+
+/* ---------- stocked fish: type a fish (brook trout, walleye, musky…) to see where the DNR stocked it ----------
+   Build 38 hid this behind a header you had to tap, the list closed itself on that tap, it sat under the map style
+   buttons on phones, and "nearest" meant nearest the middle of the map without saying so. Now the closest waters show
+   right away with distances, and "Show them on the map" puts every one on the map. */
+let stockIdx = null, stockAll = 5;
+async function loadStockIdx(){ if(stockIdx) return stockIdx; try{ stockIdx = await (await fetch(dataUrl("stocking/index.json"))).json(); }catch(e){ stockIdx = {}; } return stockIdx; }
+const SP_ALIASES = [["brook trout","Brook Trout"],["brookie","Brook Trout"],["brown trout","Brown Trout"],["brownie","Brown Trout"],["rainbow trout","Rainbow Trout"],["rainbow","Rainbow Trout"],["bow","Rainbow Trout"],["steelhead","Rainbow Trout"],
+  ["trout",["Brook Trout","Brown Trout","Rainbow Trout"]],["walleye","Walleye"],["tiger musk","Northern Pike X Muskellunge"],["musky","Muskellunge"],["muskie","Muskellunge"],["muskellunge","Muskellunge"],["yellow perch","Yellow Perch"],["perch","Yellow Perch"],
+  ["crappie","Black Crappie"],["bluegill","Bluegill"],["panfish",["Bluegill","Black Crappie","Yellow Perch","Pumpkinseed"]],["largemouth","Largemouth Bass"],["smallmouth","Smallmouth Bass"],["smallie","Smallmouth Bass"],["bass",["Largemouth Bass","Smallmouth Bass"]],["northern pike","Northern Pike"],["northern","Northern Pike"],["pike","Northern Pike"],
+  ["catfish","Channel Catfish"],["salmon",["Chinook Salmon","Coho Salmon"]],["chinook","Chinook Salmon"],["king salmon","Chinook Salmon"],["king","Chinook Salmon"],["coho","Coho Salmon"],["sturgeon","Lake Sturgeon"],["lake trout","Lake Trout"],["laker","Lake Trout"],["splake","Splake"]];
+const SP_LABEL = { "Brook Trout,Brown Trout,Rainbow Trout":"trout", "Largemouth Bass,Smallmouth Bass":"bass", "Chinook Salmon,Coho Salmon":"salmon", "Bluegill,Black Crappie,Yellow Perch,Pumpkinseed":"panfish" };
+function stockSpecies(q){
+  q = q.replace(/^stocked( with)?\s*/, "").replace(/\s*stocked$/, "").replace(/s$/, "").trim(); if(q.length < 3) return null;
+  for(const [k, v] of SP_ALIASES){ const kk = k.replace(/s$/, ""); if(q === kk || (q.length >= 4 && kk.startsWith(q)) || q.startsWith(kk + " ")) return [].concat(v); }
+  return null;
+}
+// where distances are measured from: you (if Coulee has your location), else the map when you're zoomed in on an area
+function stockFrom(){
+  if(typeof hereFix !== "undefined" && hereFix && hereFix.cid) return { ll:L.latLng(hereFix.lat, hereFix.lng), you:true };
+  if(map.getZoom() >= 8.5 || currentCounty) return { ll:map.getCenter(), you:false };
+  return null;
+}
+function stockedList(species){
+  const idx = stockIdx || {}, from = stockFrom(), byKey = new Map();
+  for(const sp of species) for(const e of idx[sp] || []){ const k = e[0] + "|" + e[1]; const o = byKey.get(k) || { e, sps:[], year:0, fish:0 }; o.sps.push(sp); o.year = Math.max(o.year, e[2]); o.fish += e[3]; byKey.set(k, o); }
+  const where = o => { const hit = o.e[5] && (nameIndex || []).find(x => x[0] === o.e[0]); const p = hit && hit[1].find(q => q[0] === o.e[1]);
+    if(p) return { places:[p], ll:L.latLng((p[2] + p[4]) / 2, (p[1] + p[3]) / 2) };
+    const b = countyBounds && countyBounds[o.e[1]]; return { places:null, ll: b ? b.getCenter() : null }; };
+  return [...byKey.values()].map(o => { const w = where(o), d = from && w.ll ? map.distance(from.ll, w.ll) : null;
+      return { stocked:true, name:o.e[0], cid:o.e[1], places:w.places, ll:w.ll, year:o.year, fish:o.fish, d,
+        counties: countyName(o.e[1]) || "", dist: d == null ? "" : `${Math.max(1, Math.round(d / 1609))} mi${from.you ? " away" : ""}`,
+        what: `${species.length > 1 ? o.sps.map(x => x.replace(/ (Trout|Bass|Salmon)$/, "")).join(", ") + " · " : ""}Stocked ${o.year}${o.fish ? ` · ${o.fish.toLocaleString()} fish` : ""}` }; })
+    .sort((a, b) => from ? (a.d ?? 1e12) - (b.d ?? 1e12) : b.year - a.year || b.fish - a.fish);
+}
+function stockSortNote(){ const f = stockFrom(); return f ? (f.you ? "Closest to you" : "Closest to the part of the map you're looking at") : "Most recently stocked (zoom in or tap the location button to sort by distance)"; }
+function showStockedList(head){
+  const all = stockedList(head.species);
+  qList = [{ back:true }, head, { sub:stockSortNote() }, ...all.slice(0, stockAll)]; if(all.length > stockAll) qList.push({ more:true, all:true, head, text:`Show ${Math.min(40, all.length - stockAll)} more` });
+  qSel = -1; renderQ(); $("qres").scrollTop = 0;
 }
 $("q").addEventListener("focus", loadIndex);
 $("q").addEventListener("input", async () => {
   const q = $("q").value.trim().toLowerCase(); const idx = await loadIndex();
   if(q.length < 2){ qList = []; renderQ(); return; }
-  const out = [];
-  for(const [name, places] of idx){ const n = name.toLowerCase(); const k = n.startsWith(q) ? 0 : n.includes(" " + q) ? 1 : n.includes(q) ? 2 : -1; if(k < 0) continue;
-    out.push({ k, name, places, counties: places.map(p => byId[p[0]]?.properties.name).filter(Boolean).slice(0,3).join(", ") + (places.length > 3 ? "…" : "") }); }
-  out.sort((a,b)=>a.k-b.k||a.name.length-b.name.length||a.name.localeCompare(b.name));
-  qList = out.slice(0, 10); qSel = 0; renderQ();
+  const sp = stockSpecies(q), out = [], names = [];
+  for(const [name, places] of idx){ if(name === "NA" || name === "Unnamed") continue; const n = name.toLowerCase(); const k = n.startsWith(q) ? 0 : n.includes(" " + q) ? 1 : n.includes(q) ? 2 : -1; if(k < 0) continue;
+    names.push({ k, name, places, counties: places.map(p => byId[p[0]]?.properties.name).filter(Boolean).slice(0,3).join(", ") + (places.length > 3 ? "…" : "") }); }
+  names.sort((a,b)=>a.k-b.k||a.name.length-b.name.length||a.name.localeCompare(b.name));
+  if(sp){ await loadStockIdx(); if($("q").value.trim().toLowerCase() !== q) return;
+    const all = stockedList(sp);
+    if(all.length){ const head = { stockHead:true, species:sp, label:SP_LABEL[sp.join(",")] || sp[0].toLowerCase(), n:all.length };
+      stockAll = 5; out.push(head, { sub:stockSortNote() }, ...all.slice(0, 3));
+      if(all.length > 3) out.push({ more:true, head, text:`See all ${all.length} in a list` });
+      if(names.length) out.push({ sub:"Creeks and lakes by that name" }); } }
+  out.push(...names.slice(0, sp ? 6 : 11));
+  qList = out; qSel = out.findIndex(r => !r.sub && !r.stockHead && !r.more); renderQ();
 });
 $("q").addEventListener("keydown", e => {
-  if(e.key === "ArrowDown"){ qSel = Math.min(qSel+1, qList.length-1); renderQ(); e.preventDefault(); }
-  if(e.key === "ArrowUp"){ qSel = Math.max(qSel-1, 0); renderQ(); e.preventDefault(); }
-  if(e.key === "Enter" && qList[qSel]){ goTo(qList[qSel]); e.preventDefault(); }
+  const ok = i => qList[i] && !qList[i].sub;
+  if(e.key === "ArrowDown"){ let i = qSel; do i++; while(i < qList.length && !ok(i)); if(ok(i)){ qSel = i; renderQ(); } e.preventDefault(); }
+  if(e.key === "ArrowUp"){ let i = qSel; do i--; while(i >= 0 && !ok(i)); if(ok(i)){ qSel = i; renderQ(); } e.preventDefault(); }
+  if(e.key === "Enter" && qList[qSel]){ pickQ(qList[qSel]); e.preventDefault(); }
   if(e.key === "Escape"){ $("qres").hidden = true; $("q").blur(); }
 });
-$("qres").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if(b) goTo(qList[+b.dataset.i]); });
-document.addEventListener("click", e => { if(!e.target.closest(".search")) $("qres").hidden = true; });
-async function goTo(r){
+$("qres").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if(b){ e.stopPropagation(); pickQ(qList[+b.dataset.i]); } });
+function pickQ(r){
+  if(!r || r.sub) return;
+  if(r.stockHead) return showStockMap(r);
+  if(r.more){ stockAll = r.all ? stockAll + 40 : 40; showStockedList(r.head); return; }
+  if(r.back){ $("q").dispatchEvent(new Event("input")); return; }
+  if(r.stocked) return goStocked(r);
+  goTo(r);
+}
+function goStocked(r){
+  const note = `${r.what}`;
+  if(r.places) return goTo({ name:r.name, places:r.places }, note);
+  $("qres").hidden = true; $("q").blur(); openCounty(r.cid); toast(`${r.name} isn't drawn on the map under that name. It's in ${countyName(r.cid)}. ${note}.`);
+}
+// a tap that re-draws the list replaces the button that was tapped; that must not count as a tap outside the search
+document.addEventListener("click", e => { if(!e.target.isConnected) return; if(!e.target.closest(".search") && !e.target.closest("#qres")) $("qres").hidden = true; });
+
+/* every stocked water on the map, with a bar under the search to clear them */
+pane("stockpins", 615, true);
+var stockLayer = null, stockRows = [], stockR = null;
+function showStockMap(head){
+  clearStockMap();
+  const rows = stockedList(head.species).filter(r => r.places);
+  if(!rows.length){ toast("None of those waters are drawn on the map."); return; }
+  stockRows = rows; stockR ||= L.canvas({ pane:"stockpins", padding:.3, tolerance:8 });
+  stockLayer = L.layerGroup(rows.map((r, i) => L.circleMarker(r.ll, { renderer:stockR, radius:7, weight:2, color:"#FFFFFF", fillColor:"#C2571B", fillOpacity:.95 })
+    .bindPopup(() => `<div class="pop"><h3>${esc(r.name)}</h3><div class="meta">${esc(r.counties)}${r.dist ? ` · ${esc(r.dist)}` : ""}</div><div class="meta">${esc(cap(head.label))}: ${esc(r.what)}</div>
+      <div class="row"><button class="btn sm ink" type="button" data-stockgo="${i}">Go to this water</button></div></div>`, { maxWidth:280 }))).addTo(map);
+  let chip = $("stockChip"); if(!chip){ chip = document.createElement("div"); chip.id = "stockChip"; chip.className = "stockchip"; document.querySelector(".crumb").appendChild(chip); }
+  chip.innerHTML = `<span>${esc(cap(head.label))} stocked · ${rows.length} waters</span><button type="button" aria-label="Clear stocked waters" data-stockclear>✕</button>`;
+  chip.hidden = false;
+  $("qres").hidden = true; $("q").blur();
+  if(currentCounty) leaveCounty();
+  map.fitBounds(L.latLngBounds(rows.map(r => r.ll)), { padding:[40, 40], maxZoom:11 });
+}
+function clearStockMap(){ if(stockLayer){ map.removeLayer(stockLayer); stockLayer = null; } if(stockR){ dropCanvas(stockR); stockR = null; } const c = $("stockChip"); if(c) c.hidden = true; }
+document.addEventListener("click", e => {
+  if(e.target.closest("[data-stockclear]")){ clearStockMap(); return; }
+  const g = e.target.closest("[data-stockgo]"); if(g){ const r = stockRows[+g.dataset.stockgo]; map.closePopup(); if(r) goStocked(r); }
+});
+async function goTo(r, note){
   $("qres").hidden = true; $("q").value = r.name; $("q").blur();
   // the place with the biggest stretch of this water
   const p = r.places.slice().sort((a,b)=>((b[3]-b[1])*(b[4]-b[2]))-((a[3]-a[1])*(a[4]-a[2])))[0];
@@ -3037,7 +3140,18 @@ async function goTo(r){
   const b = L.latLngBounds([p[2],p[1]],[p[4],p[3]]);
   map.fitBounds(b, { padding:[50,50], maxZoom:14 });
   map.once("moveend", () => { if(p[5] === "s"){ setHover(r.name); clearTimeout(flashT); flashT = setTimeout(() => setHover(null), 3200); }
-    else { const l = detailLakes.find(x => x.name === r.name); if(l){ l.poly.setStyle({ color:css("--hl"), weight:4 }); setTimeout(() => l.poly.setStyle({ color:css("--stream"), weight:.7 }), 3200); } } });
+    else { const l = detailLakes.find(x => x.name === r.name); if(l){ l.poly.setStyle({ color:css("--hl"), weight:4 }); setTimeout(() => l.poly.setStyle({ color:css("--stream"), weight:.7 }), 3200); } }
+    if(note) waterNote(r.name, p, note); });
+}
+
+// after going to a stocked water: a small card on the water itself, so you can see which one it is and what was stocked
+function waterNote(name, p, note){
+  const c = L.latLng((p[2] + p[4]) / 2, (p[1] + p[3]) / 2);
+  let at = c, best = Infinity;
+  const l = p[5] !== "s" && detailLakes.find(x => x.name === name);
+  if(l) at = l.poly.getBounds().getCenter();
+  else for(const s of detailStreams) if(s.name === name) for(const line of s.ll) for(const q of line){ const d = map.distance(c, q); if(d < best){ best = d; at = L.latLng(q[0], q[1]); } }
+  L.popup({ maxWidth:260, className:"stocknote" }).setLatLng(at).setContent(`<div class="pop"><h3>${esc(name)}</h3><div class="meta">${esc(note)}</div></div>`).openOn(map);
 }
 
 
@@ -3338,7 +3452,7 @@ async function latestReleaseId(){ const { data } = await sb.from("releases").sel
 /* ---------- save counties for offline use ---------- */
 const OFFLINE_CACHE = "flylog-data";
 const countyFiles = id => [dataUrl("water/" + id + ".json"), dataUrl("water/trout/" + id + ".json"), dataUrl("access/" + id + ".json"), hdUrl(id)];
-let offlineSaved = null, offlineBusy = false;
+let offlineSaved = null, offlineBusy = false, roadsMissing = new Set();
 async function countSavedCounties(){
   if(!("caches" in window)) return null;
   try{ const c = await caches.open(OFFLINE_CACHE); const keys = new Set((await c.keys()).map(r => new URL(r.url).pathname + new URL(r.url).search));
@@ -3346,6 +3460,9 @@ async function countSavedCounties(){
     const hdKey = id => { const u = new URL(hdUrl(id), location.href); return u.pathname + u.search; };
     // saved = the county's map file and its detailed creek lines are both on the phone
     offlineSaved = new Set(counties.map(f => f.id).filter(id => keys.has(base + id + ".json?v=" + CFG.dataVersion) && keys.has(hdKey(id))));
+    // roads came later (build 39): saved counties that don't have them yet
+    const roadKey = id => { const u = new URL(dataUrl("roads/" + id + ".json"), location.href); return u.pathname + u.search; };
+    roadsMissing = new Set([...offlineSaved].filter(id => !keys.has(roadKey(id))));
   }catch(e){ offlineSaved = null; }
   return offlineSaved;
 }
@@ -3357,7 +3474,7 @@ async function saveCountiesOffline(ids, onProgress){
   for(const id of ids){
     for(const u of countyFiles(id)){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); else failed++; } }catch(e){ failed++; } }
     // nice to have offline too, but a county without them is still "saved": boat landings and lake facts, road crossings, stocking
-    for(const u of [dataUrl("places/" + id + ".json"), dataUrl("crossings/" + id + ".json"), dataUrl("stocking/" + id + ".json")]){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
+    for(const u of [dataUrl("places/" + id + ".json"), dataUrl("crossings/" + id + ".json"), dataUrl("stocking/" + id + ".json"), dataUrl("roads/" + id + ".json")]){ try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok) await c.put(u, r); } }catch(e){} }
     done++; onProgress && onProgress(done, ids.length);
   }
   await countSavedCounties();
@@ -3371,27 +3488,45 @@ async function offlineAction(which){
   offlineBusy = true;
   try{ await navigator.storage?.persist?.(); }catch(e){}
   const old = lsGet("fl.offlineIds", null);
-  const ids = which === "all" ? counties.map(f => f.id) : which === "refresh" ? (old?.ids || []) : [which];
-  const label = which === "all" ? "Wisconsin" : which === "refresh" ? `${ids.length} saved counties` : countyName(which);
+  const ids = which === "all" ? counties.map(f => f.id) : which === "refresh" ? (old?.ids || []) : which === "roads" ? [...roadsMissing] : [which];
+  const label = which === "all" ? "Wisconsin" : which === "refresh" ? `${ids.length} saved counties` : which === "roads" ? "Roads" : countyName(which);
   const failed = await saveCountiesOffline(ids, (d, n) => { const el = $("offlineProg"); if(el) el.textContent = `Saving ${d} of ${n} counties…`; });
   offlineBusy = false;
-  toast(failed ? `Saved most of ${label}. A few files didn't download; try again on Wi-Fi.` : `${label} is saved for offline use.`);
+  toast(failed ? `Saved most of ${label}. A few files didn't download; try again on Wi-Fi.` : which === "roads" ? "Roads are saved for offline use." : `${label} is saved for offline use.`);
   renderLog();
 }
 $("log").addEventListener("click", e => { const b = e.target.closest("[data-offline]"); if(b){ b.disabled = true; offlineAction(b.dataset.offline); } });
 function offlineBlock(cid){
   if(!("caches" in window)) return "";
   if(offlineSaved === null){ countSavedCounties().then(() => renderLog()); return ""; }
-  if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations and public land work without signal.</p>`
+  if(cid && offlineSaved.has(cid) && roadsMissing.has(cid)) return `<div class="row2" style="margin-top:14px"><span class="hint">Saved for offline, but not its roads yet.</span><button class="btn sm" type="button" data-offline="${esc(cid)}">Save roads too</button></div>`;
+  if(cid) return offlineSaved.has(cid) ? `<p class="note">Saved for offline: creek names, trout classes, regulations, public land and roads work without signal.</p>`
     : `<div class="row2" style="margin-top:14px"><button class="btn sm" type="button" data-offline="${esc(cid)}">Save ${esc(byId[cid].properties.name)} County for offline</button></div>`;
   const n = offlineSaved.size, old = lsGet("fl.offlineIds", null);
   const stale = old && old.v !== offlineV() && old.ids?.length ? old.ids.filter(id => !offlineSaved.has(id)).length : 0;
   return `<h4><span>Offline maps</span><span>${n}/72 counties saved</span></h4>
+    ${roadsMissing.size && !stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>Roads aren't saved yet</b> for ${roadsMissing.size} of your saved ${roadsMissing.size === 1 ? "county" : "counties"}. They're added on their own while you're online, or add them now (about ${Math.max(1, Math.round(roadsMissing.size * .18))} MB).</p><div class="row2"><button class="btn sm ink" type="button" data-offline="roads">Save roads now</button><span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div></div>` : ""}
     ${stale ? `<div class="card notice"><p style="margin:0 0 8px"><b>The map data was updated.</b> ${stale} of your saved counties need a refresh to keep working offline.</p><div class="row2"><button class="btn sm ink" type="button" data-offline="refresh">Refresh saved counties</button></div></div>` : ""}
-    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations and public land on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
-    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 90 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
+    <div class="card"><p>Saved counties keep their creeks and names, trout classes, regulations, public land and roads on this phone, so they work with no signal. Counties you open are saved automatically, and their detailed creek lines once you zoom in close. Tap Save to get everything at once. Your catches still log offline and sync later.</p>
+    <div class="row2">${n < 72 ? `<button class="btn sm ink" type="button" data-offline="all">Save all of Wisconsin (about 105 MB)</button>` : `<span class="pill fished">All of Wisconsin is saved</span>`}<span class="hint" id="offlineProg">${offlineBusy ? "Saving…" : ""}</span></div>
     <p class="muted">Use Wi-Fi for the full download. The base map (state, counties and big rivers) is always saved.</p></div>`;
 }
+
+/* Roads came after many people had already saved counties (build 39). When online, quietly add the roads to every
+   county already saved on this phone, one county at a time, well after the map has loaded. ~75 KB per county. */
+async function topUpSavedRoads(){
+  if(!("caches" in window) || !navigator.onLine || offlineBusy) return;
+  await countSavedCounties(); if(!offlineSaved || !offlineSaved.size) return;
+  const c = await caches.open(OFFLINE_CACHE);
+  for(const id of offlineSaved){
+    if(!navigator.onLine || offlineBusy) return;
+    const u = dataUrl("roads/" + id + ".json");
+    try{ if(!(await c.match(u))){ const r = await fetch(u); if(r.ok && !(await c.match(u))) await c.put(u, r); await new Promise(res => setTimeout(res, 400)); } }catch(e){}
+  }
+  await countSavedCounties(); if(!offlineBusy && tab === "me" && !appBusy()) renderLog();
+}
+setTimeout(topUpSavedRoads, 15000);
+window.addEventListener("online", () => setTimeout(topUpSavedRoads, 5000));
 
 /* after a map data update, say so once instead of only showing it in Me -> Offline maps */
 let offlineNudged = false;
@@ -3834,7 +3969,7 @@ function outlineCounty(id){
 function tapCounty(latlng){
   const id = countyAt(latlng.lat, latlng.lng);
   if(!id || id === currentCounty) return;
-  if(!currentCounty && map.getZoom() < AREA_ZOOM){ openCounty(id); return; }   // statewide: a tap opens the county (the county shape's own tap usually got here first)
+  if(currentCounty || map.getZoom() < AREA_ZOOM){ map.closePopup(); openCounty(id); return; }   // in a county or statewide: a tap on another county goes straight there
   outlineCounty(id);
   const s = countyStats(id);
   L.popup({ maxWidth:240, className:"cpop" }).setLatLng(latlng).setContent(`<div class="pop"><h3>${esc(countyName(id))}</h3>
@@ -4017,32 +4152,50 @@ function hereHtml(fix, near){
   const w = pickWater(near);
   return `<div class="pop"><h3>You're here</h3>
     <div class="meta">${w ? `<b>${esc(w.name)}</b> · ${esc(distTxt(w.dist))}` : near[0] ? `Nearest named water: ${esc(near[0].name)}, ${esc(distTxt(near[0].dist))}` : "No named water close by"}</div>
-    <div class="meta">${fix.cid ? esc(countyName(fix.cid)) : "Outside Wisconsin"} · accurate to about ${Math.max(10, Math.round(fix.acc * 3.281 / 10) * 10)} ft</div>
+    <div class="meta">${fix.cid ? esc(countyName(fix.cid)) : "Outside Wisconsin"} · accurate to about ${fix.acc > 1600 ? `${(fix.acc / 1609).toFixed(1)} mi` : `${Math.max(10, Math.round(fix.acc * 3.281 / 10) * 10)} ft`}${fix.settling ? ` · <span class="settle">narrowing down…</span>` : ""}</div>
     ${canWrite ? `<div class="row"><button class="btn sm" type="button" data-here="spot">${icon("i-pin")}Add spot here</button><button class="btn sm" type="button" data-here="catch">${icon("i-fish")}Log a catch here</button></div>` : ""}</div>`;
+}
+/* Keep listening to the GPS and pass on each better reading until it's within goodM meters or time runs out.
+   Without a phone or Wi-Fi signal (offline) the first answer is often a rough guess; the real GPS fix can take
+   20-40 seconds to arrive, so the first reading alone put people in the wrong place. */
+function bestFix(onFix, onDone, onErr, { maxMs = 90000, okMs = 45000, okM = 100, goodM = 20 } = {}){
+  let best = null, done = false;
+  // after 45 seconds settle for anything within about 300 ft; a phone with no signal at all gets up to 90 seconds to find the satellites
+  const okT = setTimeout(() => { if(best && best.coords.accuracy <= okM) finish(); }, okMs);
+  const finish = () => { if(done) return; done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); clearTimeout(okT); best ? onDone(best) : onErr({ code:3 }); };
+  const id = navigator.geolocation.watchPosition(p => {
+    if(done) return;
+    if(!best || p.coords.accuracy < best.coords.accuracy){ best = p; onFix(p, p.coords.accuracy <= goodM); }
+    if(p.coords.accuracy <= goodM) finish();
+  }, e => { if(e.code === 1 || !best){ done = true; navigator.geolocation.clearWatch(id); clearTimeout(t); onErr(e); } }, { enableHighAccuracy:true, maximumAge:0, timeout:maxMs });
+  const t = setTimeout(finish, maxMs);
+  return finish;
 }
 function locateMe(){
   const b = document.querySelector(".locbtn");
   if(!navigator.geolocation){ toast("This phone can't share its location with Coulee."); return; }
   b?.classList.add("busy");
-  navigator.geolocation.getCurrentPosition(async pos => {
-    b?.classList.remove("busy");
+  let pop = null, first = true, near = [];
+  const show = async (pos, settled) => {
     const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy || 30;
-    hereFix = { lat, lng, acc, cid:countyAt(lat, lng) };
+    hereFix = { lat, lng, acc, cid:countyAt(lat, lng), settling:!settled };
     if(hereLayer) map.removeLayer(hereLayer);
     hereLayer = L.layerGroup([
       L.circle([lat, lng], { radius:acc, pane:"me", color:"#2F7BF5", weight:1, fillColor:"#2F7BF5", fillOpacity:.12, interactive:false }),
-      L.marker([lat, lng], { pane:"me", icon:L.divIcon({ className:"", html:`<div class="hereDot"></div>`, iconSize:[18,18], iconAnchor:[9,9] }), keyboard:false })
+      L.marker([lat, lng], { pane:"me", icon:L.divIcon({ className:"", html:`<div class="hereDot${settled ? "" : " settling"}"></div>`, iconSize:[18,18], iconAnchor:[9,9] }), keyboard:false })
     ]).addTo(map);
-    map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration:.7 });
-    const near = await watersNear(lat, lng).catch(() => []);
-    const pop = L.popup({ className:"hpop", offset:[0, -6], maxWidth:300, autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 90) }).setLatLng([lat, lng]).setContent(hereHtml(hereFix, near));
-    setTimeout(() => pop.openOn(map), 750);
-    hereLayer.eachLayer(l => l instanceof L.Marker && l.on("click", () => pop.openOn(map)));
-  }, err => {
+    hereLayer.eachLayer(l => l instanceof L.Marker && l.on("click", () => pop && pop.openOn(map)));
+    if(first){ first = false; map.flyTo([lat, lng], Math.max(map.getZoom(), acc > 300 ? 12 : 14), { duration:.7 }); }
+    else if(!map.getBounds().pad(-.2).contains([lat, lng])) map.panTo([lat, lng]);
+    near = await watersNear(lat, lng).catch(() => near);
+    if(!pop){ pop = L.popup({ className:"hpop", offset:[0, -6], maxWidth:300, autoPanPaddingTopLeft:L.point(16, 150), autoPanPaddingBottomRight:L.point(16, 90) }); setTimeout(() => pop.openOn(map), 750); }
+    pop.setLatLng([lat, lng]).setContent(hereHtml(hereFix, near));
+  };
+  bestFix(show, pos => { b?.classList.remove("busy"); show(pos, true); }, err => {
     b?.classList.remove("busy");
     if(err.code === 1) toast(isIOS ? "Location is off for Coulee. Settings → Privacy & Security → Location Services → Safari Websites (or Coulee) → While Using." : "Location is blocked. Allow it in your browser's site settings.");
     else toast("Couldn't get a fix. Try again with a clearer view of the sky.");
-  }, { enableHighAccuracy:true, timeout:20000, maximumAge:15000 });
+  });
 }
 document.addEventListener("click", async e => {
   const h = e.target.closest("[data-here]"); if(!h || !hereFix) return;
@@ -4153,11 +4306,19 @@ function entryFlagHtml(tid, cid){
 /* ---------- founder analytics: totals and trends only, never who did what ---------- */
 let statsData = null;
 async function loadFounderStats(){ const { data, error } = await sb.rpc("founder_stats"); statsData = error ? { error:true } : data; if(tab === "me" && meView === "analytics") renderLog(); }
-function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1 } = {}){
+/* bar chart; tap (or hover) a bar to read its exact number and date underneath */
+function barsSvg(vals, labels, { h = 110, color = "var(--spot)", every = 1, unit = "", full = null } = {}){
   const W = 320, n = vals.length, bw = W / n, max = Math.max(1, ...vals);
-  return `<svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
-    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<rect x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(labels[i])}: ${v}</title></rect>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i * bw + bw / 2}" y="${h + 13}" text-anchor="middle">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>`;
+  const say = i => `${(full || labels)[i]}: ${vals[i].toLocaleString()}${unit ? " " + (vals[i] === 1 ? unit.replace(/s$/, "").replace(/^people$/, "person") : unit) : ""}`;
+  return `<div class="chartwrap"><svg class="chart" viewBox="0 0 ${W} ${h + 18}" role="img"><line x1="0" y1="${h}" x2="${W}" y2="${h}" stroke="var(--line)"/>
+    ${vals.map((v, i) => { const bh = Math.round(v / max * (h - 14)); return `<g class="bar" data-say="${esc(say(i))}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${h}" fill="transparent"/><rect class="b" x="${i * bw + 1.5}" y="${h - bh}" width="${Math.max(1, bw - 3)}" height="${bh}" rx="1.5" fill="${v ? color : "var(--line)"}"><title>${esc(say(i))}</title></rect></g>${v && n <= 14 ? `<text x="${i * bw + bw / 2}" y="${h - bh - 3}" text-anchor="middle">${v}</text>` : ""}${i % every === 0 ? `<text x="${i === 0 ? i * bw + 1 : i * bw + bw / 2}" y="${h + 13}" text-anchor="${i === 0 ? "start" : "middle"}">${esc(labels[i])}</text>` : ""}`; }).join("")}</svg>
+    <div class="chartread" aria-live="polite">Tap a bar to see its number</div></div>`;
 }
+document.addEventListener("click", e => {
+  const g = e.target.closest(".chartwrap .bar"); if(!g) return;
+  const w = g.closest(".chartwrap"); w.querySelectorAll(".bar.sel").forEach(x => x.classList.remove("sel")); g.classList.add("sel");
+  w.querySelector(".chartread").textContent = g.dataset.say;
+});
 function rankTable(rows, head){ return rows.length ? `<table class="tbl"><thead><tr><th>${head}</th><th class="n">Fish</th></tr></thead><tbody>${rows.map(([k, n]) => `<tr><td>${esc(k)}</td><td class="n">${n}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No data yet.</p>`; }
 function renderAnalytics(el){
   const back = `<button class="link backlink" data-me="creator" type="button">${icon("i-back")}Founder tools</button><div class="eyebrow">Founder</div><h2>Analytics</h2>`;
@@ -4169,14 +4330,14 @@ function renderAnalytics(el){
   el.innerHTML = back + `<p class="muted" style="margin:0 0 10px">Totals and trends only. Nothing here shows who did what or where anyone fishes.</p>
     <div class="stats four"><div class="stat"><b>${a.approved ?? 0}</b><span>anglers</span></div><div class="stat"><b>${s.active_7 ?? 0}</b><span>active this week</span></div><div class="stat"><b>${s.active_30 ?? 0}</b><span>active this month</span></div><div class="stat"><b>${a.pending ?? 0}</b><span>waiting</span></div></div>
     <div class="stats four"><div class="stat f"><b>${t.fish ?? 0}</b><span>fish logged</span></div><div class="stat"><b>${t.photos ?? 0}</b><span>photos</span></div><div class="stat"><b>${s.trips ?? 0}</b><span>trips</span></div><div class="stat"><b>${s.flags_open ?? 0}</b><span>open flags</span></div></div>
-    <h4><span>People opening the app</span><span>last 30 days</span></h4>${barsSvg(day.map(x => x[1]), day.map(x => md(x[0])), { every:5 })}
-    <h4><span>New accounts</span><span>by week</span></h4>${barsSvg(wk.map(x => x[1]), wk.map(x => md(x[0])), { every:2, color:"var(--friend)" })}
-    <h4><span>Fish caught</span><span>by month</span></h4>${barsSvg(mo.map(x => x[1]), mo.map(x => mon(x[0])), { color:"var(--fish)" })}
-    <h4><span>When catches get logged</span><span>hour of day</span></h4>${barsSvg(s.catch_hours || [], Array.from({ length:24 }, (_, h) => h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p"), { every:3 })}
-    <h4><span>Busiest days</span></h4>${barsSvg(s.catch_weekdays || [], ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"])}
+    <h4><span>People opening the app</span><span>last 30 days</span></h4>${barsSvg(day.map(x => x[1]), day.map(x => md(x[0])), { every:5, unit:"people", full:day.map(x => new Date(x[0] + "T12:00:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" })) })}
+    <h4><span>New accounts</span><span>by week</span></h4>${barsSvg(wk.map(x => x[1]), wk.map(x => md(x[0])), { every:2, color:"var(--friend)", unit:"new accounts", full:wk.map(x => "Week of " + new Date(x[0] + "T12:00:00").toLocaleDateString(undefined, { month:"short", day:"numeric" })) })}
+    <h4><span>Fish caught</span><span>by month</span></h4>${barsSvg(mo.map(x => x[1]), mo.map(x => mon(x[0])), { color:"var(--fish)", unit:"fish", full:mo.map(x => mon(x[0]) + " " + x[0].slice(0, 4)) })}
+    <h4><span>When catches get logged</span><span>hour of day</span></h4>${barsSvg(s.catch_hours || [], Array.from({ length:24 }, (_, h) => h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p"), { every:3, unit:"catches" })}
+    <h4><span>Busiest days</span></h4>${barsSvg(s.catch_weekdays || [], ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], { unit:"catches" })}
     <h4><span>Tournaments</span><span>${tn.total ?? 0} total</span></h4>
     <p style="margin:0 0 6px">${tn.live ?? 0} live · ${tn.upcoming ?? 0} upcoming · ${tn.finished ?? 0} finished · ${tn.open ?? 0} open to everyone · ${tn.entries ?? 0} entries</p>
-    ${barsSvg(tm.map(x => x[1]), tm.map(x => mon(x[0])), { h:80, color:"var(--t2)" })}
+    ${barsSvg(tm.map(x => x[1]), tm.map(x => mon(x[0])), { h:80, color:"var(--t2)", unit:"tournaments", full:tm.map(x => mon(x[0]) + " " + x[0].slice(0, 4)) })}
     <h4><span>Top species</span></h4>${rankTable(s.species || [], "Species")}
     <h4><span>Methods</span></h4>${rankTable((s.methods || []).map(([m, n]) => [METHODS[m] || m, n]), "Method")}
     <h4><span>Busiest counties</span></h4>${rankTable((s.counties || []).map(([c, n]) => [countyName(c), n]), "County")}
@@ -4433,6 +4594,95 @@ $("log").addEventListener("click", e => {
   const w = e.target.closest("[data-pw]"); if(w){ savePrefs({ waters:w.dataset.pw }); return; }
   const t = e.target.closest("[data-pt]"); if(t){ const s = new Set(fprefs().targets || []); s.has(t.dataset.pt) ? s.delete(t.dataset.pt) : s.add(t.dataset.pt); savePrefs({ targets:[...s] }); }
 });
+
+/* ---------- public roads: Coulee's own lines from the Census road files, drawn in the map's style ----------
+   (Build 38 laid a picture layer of roads from an outside map service over the map: blurry text that clashed with the
+   creek names, extra downloads that slowed the map, and nothing offline.) These are real lines, loaded per county like
+   public land, sharp at any zoom, saved with a county for offline use, and named with the map's own lettering.
+   Highways and county roads show from zoom 10.5, every other named public road from zoom 12. Topo already has roads. */
+pane("roads", 397, false);
+var ROAD_ZOOM = 10.5, LOCAL_ROAD_ZOOM = 12, roadCache = {}, roadGroups = {}, roadItems = {}, roadOn = new Set(), roadSeq = 0, roadR = null;
+var showRoads = lsGet("fl.roads", true);
+function decodeRoad(a){ const out = []; let la = 0, ln = 0; for(let i = 0; i + 1 < a.length; i += 2){ la += a[i]; ln += a[i+1]; out.push([la / 1e5, ln / 1e5]); } return out; }
+function roadWeight(k, z){ return k === 1 ? (z >= 14 ? 3.4 : z >= 12 ? 2.6 : 2) : k === 2 ? (z >= 14 ? 2.6 : z >= 12 ? 2 : 1.5) : (z >= 15 ? 2 : z >= 13.5 ? 1.5 : 1); }
+function roadStyle(k, z){
+  const w = roadWeight(k, z);
+  if(mapView === "sat") return { color: k === 3 ? "rgba(255,255,255,.5)" : "rgba(255,240,205,.78)", weight: w * .8 };
+  return { color: css(k === 3 ? "--road" : "--road-major"), weight: w };
+}
+function buildRoads(id, d){
+  roadR ||= L.canvas({ pane:"roads", padding:canvasPad() });
+  const by = { 1:[], 2:[], 3:[] }, items = [];
+  for(let [name, k, lines] of d.r || []){ name = name.replace(/^County ([A-Za-z]{1,3})$/, (m, x) => "County " + x.toUpperCase()); const ll = lines.map(decodeRoad); by[k]?.push(...ll); items.push({ name, k, lines:ll }); }
+  roadItems[id] = items;
+  const z = map.getZoom(), g = { group:L.layerGroup(), parts:{} };
+  for(const k of [1, 2, 3]) if(by[k].length) g.parts[k] = L.polyline(by[k], { renderer:roadR, interactive:false, lineCap:"round", lineJoin:"round", smoothFactor:1.5, ...roadStyle(k, z) });
+  return g;
+}
+async function syncRoadLines(){
+  const seq = ++roadSeq, z = map.getZoom();
+  const want = new Set(showRoads && mapView !== "topo" && z >= ROAD_ZOOM ? [...areaWant, currentCounty].filter(Boolean) : []);
+  for(const id of [...roadOn]) if(!want.has(id)){ roadGroups[id].group.remove(); roadOn.delete(id); }
+  await Promise.all([...want].map(async id => {
+    if(!roadGroups[id]){ let d; try{ d = await getJSON(roadCache, dataUrl("roads/" + id + ".json"), id); }catch(e){ return; } await new Promise(r => setTimeout(r, 40)); if(seq !== roadSeq) return; roadGroups[id] ||= buildRoads(id, d); }   // let the creeks and land draw first
+    if(seq !== roadSeq) return;
+    if(!roadOn.has(id)){ roadGroups[id].group.addTo(map); roadOn.add(id); }
+  }));
+  if(seq !== roadSeq) return;
+  // local roads only up close; widths follow the zoom
+  for(const id of roadOn){ const g = roadGroups[id];
+    for(const k of [1, 2, 3]){ const p = g.parts[k]; if(!p) continue;
+      const on = k < 3 || z >= LOCAL_ROAD_ZOOM;
+      if(on && !g.group.hasLayer(p)) g.group.addLayer(p); else if(!on && g.group.hasLayer(p)) g.group.removeLayer(p);
+      if(on){ const st = roadStyle(k, z); if(p.options.weight !== st.weight || p.options.color !== st.color) p.setStyle(st); } } }
+  // nothing to draw: give the drawing memory back (iPhone caps it; see dropCanvas)
+  if(!roadOn.size && roadR){ dropCanvas(roadR); roadR = null; roadGroups = {}; roadItems = {}; }
+  drawLabels();
+  const b = $("roadsToggle"); if(b){ b.setAttribute("aria-pressed", String(showRoads)); b.textContent = showRoads ? "Roads on" : "Roads off"; b.hidden = mapView === "topo"; }
+}
+document.addEventListener("mapsettled", syncRoadLines);
+document.addEventListener("mapview", () => { for(const id of roadOn) for(const k of [1, 2, 3]) roadGroups[id].parts[k]?.setStyle(roadStyle(k, map.getZoom())); syncRoadLines(); });
+$("roadsToggle").onclick = () => { showRoads = !showRoads; lsSet("fl.roads", showRoads); syncRoadLines(); };
+syncRoadLines();
+/* Road names: drawn after creek and lake names (those win any overlap), straight along the longest stretch of road on screen,
+   highways and county roads from zoom 12.5, other roads from zoom 14. Called from renderLabels. */
+function roadLabels(ctx, o){
+  const z = map.getZoom(); if(!roadOn || !roadOn.size || z < 12.5) return;
+  const sat = mapView === "sat";
+  ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = `600 ${z >= 15 ? 11.5 : 10.5}px "Source Sans 3", "Segoe UI", system-ui, sans-serif`;
+  const fill = sat ? "#FFFFFF" : css("--road-ink"), halo = sat ? "rgba(20,20,16,.75)" : css("--land");
+  const done = new Set(), list = [];
+  for(const id of roadOn) for(const r of roadItems[id] || []) if(r.k < 3 || z >= 14) list.push(r);
+  list.sort((a, b) => a.k - b.k);
+  let n = 0;
+  for(const r of list){
+    if(done.has(r.name) || n > 60) continue;
+    const tw = ctx.measureText(r.name).width + 10;
+    let best = null, bestLen = 0;
+    for(const line of r.lines){
+      const m = merc(line), a = m.a;
+      if(m.x1 * o.scale - o.ox < 0 || m.x0 * o.scale - o.ox > o.W || m.y1 * o.scale - o.oy < 0 || m.y0 * o.scale - o.oy > o.H) continue;
+      for(let i = 0; i + 3 < a.length; i += 2){
+        const x1 = a[i] * o.scale - o.ox, y1 = a[i+1] * o.scale - o.oy, x2 = a[i+2] * o.scale - o.ox, y2 = a[i+3] * o.scale - o.oy;
+        const len = Math.hypot(x2 - x1, y2 - y1); if(len < tw + 12 || len <= bestLen) continue;
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2; if(!o.onScreen({ x:mx, y:my })) continue;
+        best = { mx, my, ang:Math.atan2(y2 - y1, x2 - x1) }; bestLen = len;
+      }
+    }
+    if(!best) continue;
+    let ang = best.ang; if(ang > Math.PI / 2) ang -= Math.PI; if(ang < -Math.PI / 2) ang += Math.PI;
+    const cos = Math.abs(Math.cos(ang)), sin = Math.abs(Math.sin(ang)), hw = tw / 2, hh = 7;
+    const box = { x:best.mx - (hw * cos + hh * sin), y:best.my - (hw * sin + hh * cos), w:2 * (hw * cos + hh * sin), h:2 * (hw * sin + hh * cos) };
+    if(o.hits(box)) continue;
+    o.placed.push(box); done.add(r.name); n++;
+    ctx.translate(best.mx, best.my); ctx.rotate(ang);
+    ctx.lineJoin = "round"; ctx.lineWidth = 3; ctx.strokeStyle = halo; ctx.strokeText(r.name, 0, 0);
+    ctx.fillStyle = fill; ctx.fillText(r.name, 0, 0);
+    ctx.setTransform(o.dpr, 0, 0, o.dpr, 0, 0);
+  }
+  ctx.restore();
+}
 
 /* ---------- the season: out-of-season flags, opener countdown, season recap, challenges, streaks,
    county completion, and measuring along a creek ----------
@@ -5089,7 +5339,8 @@ async function watersNear(lat, lng){
   if(lat == null || lng == null) return [];
   const ids = counties.map(f => f.id).filter(id => { const [a, d, c, b] = countyBox[id]; return lat >= a && lat <= c && lng >= d && lng <= b; });
   const best = {};
-  const note = (name, kind, dist) => { if(!name) return; const k = name.toLowerCase(); if(!best[k] || dist < best[k].dist) best[k] = { name, kind, dist }; };
+  const note = (name, kind, dist) => { if(!name || name === "NA" || name === "Unnamed") return;   // "NA" is how the DNR files mark unnamed creeks
+  const k = name.toLowerCase(); if(!best[k] || dist < best[k].dist) best[k] = { name, kind, dist }; };
   for(const id of ids){
     let w; try{ w = await getJSON(waterCache, dataUrl("water/" + id + ".json"), id); }catch(e){ continue; }
     for(const [name, , paths] of w.s || []) for(const path of paths) for(let i = 1; i < path.length; i++){

@@ -1,7 +1,7 @@
 /* Field map: printed-gazetteer paper, ink county lines, blue water with paper casing, italic serif water names. Layout: one-screen app — header, map, logbook panel. */
 :root{
   --paper:#E4DCC6; --paper-2:#EAE3CF; --land:#F5EFDF; --panel:#FAF6EB; --ink:#2C2922; --muted:#6B6452; --line:#D9CFB6;
-  --grid:#D6CCB1; --county:#EFE8D6; --county-edge:#A79D84; --water:#2E6A93; --stream:#2E6A93; --lake:#A9C7D8; --label:#22506F;
+  --grid:#D6CCB1; --county:#EFE8D6; --county-edge:#A79D84; --water:#2E6A93; --stream:#2E6A93; --lake:#A9C7D8; --label:#22506F; --road:#D3C6A8; --road-major:#C2AE86; --road-ink:#6B6452;
   --spot:#2C6A4D; --fish:#C4531C; --fish-soft:#F2D8C6; --spot-soft:#D5E4D6; --danger:#A3352B; --hl:#E0A631; --friend:#5B6FB5; --pub:#6E9A55;
   --t1:#2E8B57; --t2:#D9A13B; --t3:#B8573A;
   --r-drift:#A7773C; --r-drift-ink:#7C5524; --r-north:#3F6F4C; --r-north-ink:#2F5639; --r-sands:#B59A5E; --r-sands-ink:#7F6A39;
@@ -13,14 +13,14 @@
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --paper:#171612; --paper-2:#1C1B16; --land:#25231D; --panel:#1F1E19; --ink:#EDE6D3; --muted:#A39B86; --line:#3A372E;
-  --grid:#2A2822; --county:#25231D; --county-edge:#5C5747; --water:#6FA9CF; --stream:#6FA9CF; --lake:#244150; --label:#A8CFE6;
+  --grid:#2A2822; --county:#25231D; --county-edge:#5C5747; --water:#6FA9CF; --stream:#6FA9CF; --lake:#244150; --label:#A8CFE6; --road:#3D3A30; --road-major:#57503F; --road-ink:#A39B86;
   --spot:#63B28A; --fish:#E37B45; --fish-soft:#4A2A1A; --spot-soft:#1D3A2C; --danger:#E0786C; --hl:#D9A441; --friend:#8C9DE0; --pub:#7FAF66;
   --t1:#3FA06A; --t2:#D2A048; --t3:#C9694B;
   --r-drift:#C49253; --r-drift-ink:#D7AE77; --r-north:#5F9A6E; --r-north-ink:#8CC29A; --r-sands:#C7AE73; --r-sands-ink:#DCC795;
   --shadow:0 6px 24px rgba(0,0,0,.5); --state-shadow:rgba(0,0,0,.6); color-scheme:dark; }}
 :root[data-theme="dark"]{
   --paper:#171612; --paper-2:#1C1B16; --land:#25231D; --panel:#1F1E19; --ink:#EDE6D3; --muted:#A39B86; --line:#3A372E;
-  --grid:#2A2822; --county:#25231D; --county-edge:#5C5747; --water:#6FA9CF; --stream:#6FA9CF; --lake:#244150; --label:#A8CFE6;
+  --grid:#2A2822; --county:#25231D; --county-edge:#5C5747; --water:#6FA9CF; --stream:#6FA9CF; --lake:#244150; --label:#A8CFE6; --road:#3D3A30; --road-major:#57503F; --road-ink:#A39B86;
   --spot:#63B28A; --fish:#E37B45; --fish-soft:#4A2A1A; --spot-soft:#1D3A2C; --danger:#E0786C; --hl:#D9A441; --friend:#8C9DE0; --pub:#7FAF66;
   --t1:#3FA06A; --t2:#D2A048; --t3:#C9694B;
   --r-drift:#C49253; --r-drift-ink:#D7AE77; --r-north:#5F9A6E; --r-north-ink:#8CC29A; --r-sands:#C7AE73; --r-sands-ink:#DCC795;
@@ -694,3 +694,23 @@ button.who{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6
 .relline{display:flex;gap:8px;align-items:flex-start;font-size:13.5px}
 .relaud{flex:0 0 auto;font:inherit;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid var(--t1);color:var(--t1);background:transparent;cursor:pointer}
 .relaud.staff{border-color:var(--muted);color:var(--muted);background:rgba(127,127,127,.12)}
+.hereDot.settling{animation:herepulse 1.2s ease-in-out infinite}
+@keyframes herepulse{50%{opacity:.45}}
+.hpop .settle{color:var(--muted);font-style:italic}
+.chartwrap .bar{cursor:pointer}.chartwrap .bar.sel .b{opacity:1;stroke:var(--ink);stroke-width:1.2}
+.chartwrap:has(.bar.sel) .bar:not(.sel) .b{opacity:.55}
+.chartread{font-size:13px;color:var(--muted);text-align:center;margin:2px 0 10px;min-height:1.3em}
+/* search results sit above the map buttons while open, and get the full width on phones */
+.crumb:has(#qres:not([hidden])){z-index:1001}
+.search ul{right:auto;width:min(400px,calc(100vw - 28px));max-height:min(62vh,460px)}
+#qres .stockback,#qres .stockmore{font-weight:600;color:var(--t1)}
+#qres .stockcard{padding:10px 10px 8px;margin:2px 0 4px;background:var(--county);border-radius:10px}
+#qres .stockcard .sctop{font-size:14.5px;line-height:1.35;margin-bottom:8px}
+#qres .stockcard .sctop small{display:block;color:var(--muted);font-size:12px;white-space:normal}
+#qres .stockcard .btn{width:100%;justify-content:center;display:flex}
+#qres .qsub{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 10px 2px}
+#qres .srow{display:block}
+#qres .srow small{display:block;white-space:normal;line-height:1.35;margin-top:1px}
+.stockchip{display:flex;align-items:center;gap:8px;background:#C2571B;color:#fff;border-radius:999px;padding:5px 6px 5px 14px;box-shadow:var(--shadow);font-size:13.5px;font-weight:600;flex-basis:100%;max-width:max-content}
+.stockchip small{font-weight:500;opacity:.85}
+.stockchip button{border:0;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;width:28px;height:28px;font-size:14px;cursor:pointer}
