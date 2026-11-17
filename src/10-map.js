@@ -82,6 +82,8 @@ let detailLayer = null, detailFor = null, detailStreams = [], detailLakes = [], 
 const canvasPad = () => innerWidth * innerHeight > 1.2e6 ? .2 : innerWidth > 700 ? .35 : .4;
 /* Throw away a drawing surface and give its memory back right away. iPhones cap the total memory all map drawing surfaces
    may use and only reclaim a discarded one much later, so after a few counties the last layer drawn (public land) came up blank. */
+// a canvas we dropped can still get one late redraw from a layer leaving it; skip it instead of throwing
+(function(){ const r0 = L.Canvas.prototype._redraw; L.Canvas.prototype._redraw = function(){ if(!this._ctx){ this._redrawRequest = null; this._redrawBounds = null; return; } return r0.call(this); }; })();
 function dropCanvas(r){ if(!r) return; const c = r._container; if(map.hasLayer(r)) map.removeLayer(r); if(c){ c.width = 0; c.height = 0; } }
 function smoothPath(pts, n = 2){
   if(pts.length < 3) return pts;

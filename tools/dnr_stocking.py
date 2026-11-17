@@ -58,3 +58,6 @@ for code, fid, name in counties:
     (OUT / f"{fid}.json").write_text(json.dumps(rows, separators=(",", ":"), ensure_ascii=False)); total += len(rows)
     print(name, len(rows), flush=True)
 print("total stocking rows", total)
+
+# statewide index for "stocked with ..." search
+import subprocess; subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve().parent / "stocking_index.py")], check=False)

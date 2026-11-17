@@ -13,7 +13,7 @@ async def main():
             ctx = await b.new_context(service_workers="block", **args); pg = await ctx.new_page()
             pg.on("console", lambda m, n=name: log.append(f"{n} console {m.type}: {m.text}"[:400]))
             pg.on("pageerror", lambda e, n=name: log.append(f"{n} ERROR {e}"[:600]))
-            pg.on("response", lambda r, n=name: log.append(f"{n} {r.status} {r.url[:200]}") if ("waterdata" in r.url or "weather.gov" in r.url or "gauges" in r.url or "flownorms" in r.url) else None)
+            pg.on("response", lambda r, n=name: log.append(f"{n} {r.status} {r.url[:200]}") if ("waterdata" in r.url or "weather.gov" in r.url or "gauges" in r.url or "flownorms" in r.url or "arcgisonline" in r.url) else None)
             pg.on("requestfailed", lambda r, n=name: log.append(f"{n} FAILED {r.url[:200]} {r.failure}"))
             await pg.add_init_script(PATCH)
             await pg.route("**/vendor/supabase.js", lambda r: r.fulfill(body=MOCK, content_type="text/javascript"))

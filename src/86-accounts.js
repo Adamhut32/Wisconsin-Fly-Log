@@ -173,6 +173,24 @@ function setMapView(v){
 }
 setMapView(mapView);
 
+/* ---------- roads and road names over the Map and Satellite views (Topo already has them) ---------- */
+pane("roads", 397, false);
+let showRoads = lsGet("fl.roads", true), roadsLayer = null;
+function syncRoads(){
+  const want = showRoads && mapView !== "topo";
+  if(want && !roadsLayer){
+    roadsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+      { pane:"roads", maxNativeZoom:19, maxZoom:18, crossOrigin:true, updateWhenIdle:true, keepBuffer:2, opacity: mapView === "field" ? .75 : .95 });
+    roadsLayer.addTo(map);
+  } else if(!want && roadsLayer){ map.removeLayer(roadsLayer); roadsLayer = null; }
+  if(roadsLayer) roadsLayer.setOpacity(mapView === "field" ? .75 : .95);
+  const b = $("roadsToggle"); if(b){ b.setAttribute("aria-pressed", String(showRoads)); b.textContent = showRoads ? "Roads on" : "Roads off"; b.hidden = mapView === "topo"; }
+  const c = $("viewCredit"); if(c) c.textContent = [VIEWS[mapView].credit, roadsLayer ? "Roads: Esri, HERE, Garmin" : ""].filter(Boolean).join(" · ");
+}
+document.addEventListener("mapview", syncRoads);
+$("roadsToggle").onclick = () => { showRoads = !showRoads; lsSet("fl.roads", showRoads); syncRoads(); };
+syncRoads();
+
 /* ---------- update ready banner ---------- */
 let updateWaiting = false;
 function appBusy(){
